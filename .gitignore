@@ -44,3 +44,6 @@ reference/logos/*.psd
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Claude Code per-operator state (not repo metadata)
+.claude/.last-audited-sha
