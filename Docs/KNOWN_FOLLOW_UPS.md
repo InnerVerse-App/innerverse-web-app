@@ -47,3 +47,14 @@ Root cause: PR #4 (commit b1957f8) installed the review cadence system. Auditing
 Blast radius: None. The bootstrap PR contained only CLAUDE.md, audit-prompt-template.md, KNOWN_FOLLOW_UPS.md, a 22-line SessionStart hook, and a settings JSON. The hook was manually tested in three states (first-run seed, stale, current) before commit.
 Suggested fix: Treat PR #4 as pre-audited. Begin cadence from PR #5.
 Status: FIXED (2026-04-21, b1957f8)
+
+## 2026-04-21 — /simplify review of PR #10
+
+FINDING 1
+Severity: LOW
+Lens: architecture
+Location: src/lib/brand.ts, src/app/layout.tsx:24
+Root cause: The MOB palette (reference/logos/app-colors.png) defines `text: #0F172A` as an on-light token ("Color of static text and icons"), but does not define an on-dark equivalent. The dark-themed shell therefore falls back to Tailwind's `text-neutral-200` on `<body>`, bypassing the brand palette for the site's default text color.
+Blast radius: Low today — only one usage. If left, future text surfaces will either replicate `text-neutral-200` or pick ad-hoc Tailwind shades, making it harder to swap to the canonical on-dark color once design finalizes. Not a correctness or security issue.
+Suggested fix: When final design assets land (at latest before Phase 10 pre-launch gate), add an `onDark` (or equivalent) token to `BRAND` in src/lib/brand.ts, map it in tailwind.config.ts as `brand.on-dark`, and replace `text-neutral-200` with `text-brand-on-dark` everywhere.
+Status: OPEN
