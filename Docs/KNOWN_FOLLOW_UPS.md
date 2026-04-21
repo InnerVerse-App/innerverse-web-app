@@ -36,3 +36,14 @@ None yet. First audit will populate this section.
 ---
 
 <!-- Audits append below this line. Keep newest at bottom. -->
+
+## 2026-04-21 — Bootstrap exception
+
+Note: Bootstrap exception
+Severity: LOW (not a finding, process decision)
+Lens: operator
+Location: Docs/review-cadence/audit-prompt-template.md, .claude/hooks/check-audit-pending.sh
+Root cause: PR #4 (commit b1957f8) installed the review cadence system. Auditing the installer with the system it installs is circular.
+Blast radius: None. The bootstrap PR contained only CLAUDE.md, audit-prompt-template.md, KNOWN_FOLLOW_UPS.md, a 22-line SessionStart hook, and a settings JSON. The hook was manually tested in three states (first-run seed, stale, current) before commit.
+Suggested fix: Treat PR #4 as pre-audited. Begin cadence from PR #5.
+Status: FIXED (2026-04-21, b1957f8)
