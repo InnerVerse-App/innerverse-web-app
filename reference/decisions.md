@@ -69,6 +69,16 @@ Standalone backend with its own database. Not connected to the existing Bubble i
 
 **Database schema designed from day one to accommodate the full data model** — including Goals, Breakthroughs, Insights, Next Steps, Session Feedback, Account Setup, etc. — even if some are read-only or not yet exposed in the UI. This avoids painful migrations later.
 
+## Database strategy
+
+Two Supabase projects: `innerverse-dev` (Vercel Preview deploys) and `innerverse-prod` (Vercel Production). Dev never holds real user data and stays on Free tier. Prod upgrades to Pro at the ">10 testers" milestone gate, which also enables PITR and automated backups.
+
+Schema migrations via the Supabase CLI (`supabase/migrations/*.sql`, applied with `supabase db push --project-ref <ref>`). No ORM. Application code uses raw `supabase-js` with TypeScript types generated from the schema (`supabase gen types typescript`). Alternatives considered and rejected: drizzle-kit (unnecessary TS abstraction for v1), raw SQL pasted into the Supabase dashboard (unauditable, error-prone).
+
+Clerk issues the session JWT via a Supabase JWT template configured in the Clerk dashboard. Supabase RLS policies scope rows per user using the Clerk user ID claim. This gives defense-in-depth: a misused client SDK cannot read cross-user rows.
+
+Known Free-tier gap until the Pro upgrade: no automatic backups. Mitigated by (a) zero real user data until the first-tester milestone, (b) every migration checked into git as SQL with a companion rollback, (c) `pg_dump` before any destructive change. Tracked in `Docs/KNOWN_FOLLOW_UPS.md` with explicit revisit triggers.
+
 ## Tech Stack
 
 - **Frontend:** Next.js
