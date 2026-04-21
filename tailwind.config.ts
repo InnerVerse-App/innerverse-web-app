@@ -6,7 +6,16 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        brand: BRAND,
+        brand: {
+          primary: BRAND.primary,
+          "primary-contrast": BRAND.primaryContrast,
+          dark: BRAND.dark,
+          text: BRAND.text,
+          surface: BRAND.surface,
+          destructive: BRAND.destructive,
+          success: BRAND.success,
+          alert: BRAND.alert,
+        },
       },
     },
   },

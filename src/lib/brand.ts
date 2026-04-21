@@ -4,9 +4,11 @@
 
 export const BRAND = {
   primary: "#59A4C0",
+  primaryContrast: "#FFFFFF",
   dark: "#00050A",
   text: "#0F172A",
+  surface: "#FFFFFF",
+  destructive: "#B0200C",
   success: "#1E6C30",
   alert: "#DCA114",
-  destructive: "#B0200C",
 } as const;

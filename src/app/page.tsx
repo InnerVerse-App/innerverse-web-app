@@ -21,7 +21,7 @@ export default function Home() {
               </button>
             </SignInButton>
             <SignUpButton>
-              <button className="rounded-md bg-brand-primary px-4 py-2 text-sm font-medium text-brand-dark hover:bg-brand-primary/90">
+              <button className="rounded-md bg-brand-primary px-4 py-2 text-sm font-medium text-brand-primary-contrast hover:bg-brand-primary/90">
                 Sign up
               </button>
             </SignUpButton>
