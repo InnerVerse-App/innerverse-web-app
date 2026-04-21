@@ -8,14 +8,14 @@ Per `reference/decisions.md` → Database strategy:
 
 | Role | Project | Used by | Tier |
 |---|---|---|---|
-| Dev | `innerverse-dev` (ref: fill in from Supabase dashboard) | Vercel Preview deploys | Free |
+| Dev | `innerverse-dev` | Vercel Preview deploys | Free |
 | Prod | `innerverse-prod` (ref: `ypupvssqcunetzjddwoy`) | Vercel Production deploys | Free; upgrades to Pro at the ">10 testers" gate |
 
-To find a project ref: Supabase dashboard → your project → Settings → General → Reference ID.
+**Canonical source for refs:** the Supabase dashboard URL (e.g. `https://supabase.com/dashboard/project/<ref>`) and the `NEXT_PUBLIC_SUPABASE_URL` Vercel env var (the subdomain *is* the ref). To look up: Supabase dashboard → your project → Settings → General → Reference ID.
 
 ## Workflow (how schema changes ship)
 
-Every migration follows this order: dev first, audit, then prod.
+Every migration follows this order: dev first, audit, then prod. **Untested end-to-end until Chunk 4.2 lands the first real migration** — these commands are the intended path, not a verified one.
 
 ```bash
 # 1. One-time login (browser flow; token cached in ~/.supabase)
@@ -35,6 +35,8 @@ npx supabase db push
 # 5. Run the fresh-session audit (see Docs/review-cadence/audit-prompt-template.md)
 
 # 6. Only after audit passes: apply to PROD
+# ⚠ DANGER: the next two commands touch innerverse-prod (real-user data
+#    once testers land). Re-link intentionally; this is not a dry run.
 npx supabase link --project-ref ypupvssqcunetzjddwoy
 npx supabase db push
 ```
