@@ -3,7 +3,6 @@ import type { MetadataRoute } from "next";
 export default function manifest(): MetadataRoute.Manifest {
   return {
     name: "InnerVerse",
-    short_name: "InnerVerse",
     description: "Your personal Life Coach, always within reach.",
     start_url: "/",
     display: "standalone",
