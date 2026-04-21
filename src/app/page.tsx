@@ -16,12 +16,12 @@ export default function Home() {
         fallback={
           <div className="flex gap-3">
             <SignInButton>
-              <button className="rounded-md border border-neutral-300 px-4 py-2 text-sm font-medium hover:bg-neutral-100">
+              <button className="rounded-md border border-brand-primary px-4 py-2 text-sm font-medium text-brand-primary hover:bg-brand-primary/10">
                 Sign in
               </button>
             </SignInButton>
             <SignUpButton>
-              <button className="rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white hover:bg-neutral-700">
+              <button className="rounded-md bg-brand-primary px-4 py-2 text-sm font-medium text-brand-primary-contrast hover:bg-brand-primary/90">
                 Sign up
               </button>
             </SignUpButton>
