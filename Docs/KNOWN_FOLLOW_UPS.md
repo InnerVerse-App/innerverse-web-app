@@ -78,3 +78,14 @@ Root cause: Supabase Free tier caps the database at 500 MB. InnerVerse is messag
 Blast radius: None today (empty DB). Once testers are active, a handful of users at typical session length can produce tens of MB per week.
 Suggested fix: Monitor DB size weekly once testers are active. Upgrade `innerverse-prod` to Pro when DB crosses 300 MB, or at the ">10 testers" gate (whichever first) — the Pro upgrade is already planned per Finding 1. Pro raises the cap to 8 GB.
 Status: OPEN
+
+## 2026-04-22 — /simplify review of PR #15
+
+FINDING 1
+Severity: LOW
+Lens: architecture
+Location: src/app/api/healthcheck/route.ts:16-22
+Root cause: Healthcheck calls `supabaseAdmin()` (already imported from `@/lib/supabase`) only to validate env presence, then re-reads `process.env.NEXT_PUBLIC_SUPABASE_URL` and `process.env.SUPABASE_SERVICE_ROLE_KEY` directly with non-null assertions to perform a manual `fetch()` against `${url}/rest/v1/`. The env reads duplicate `supabaseAdmin()`'s internal lookup.
+Blast radius: None operationally — the healthcheck works. Cost is maintenance: any env-name change must be made in two places.
+Suggested fix: Either (a) extract a small `getSupabaseAdminEnv()` helper exported from `src/lib/supabase.ts` and consume it in both places, or (b) refactor the healthcheck to do its reachability probe through the supabase-js client (e.g., `await client.auth.admin.listUsers({ page: 1, perPage: 1 })`) and drop the manual fetch entirely. Option (b) is cleaner but changes the response shape (loses `status: 200`); decide that intentionally rather than as part of a /simplify polish. Defer to its own PR.
+Status: OPEN
