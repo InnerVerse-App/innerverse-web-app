@@ -584,3 +584,112 @@ Root cause: No transparent-background bare-symbol InnerVerse logo exists in the 
 Blast radius: Cosmetic only. The `/` landing functions correctly for unauthenticated users (Get started + Sign in routes work, the onboarding redirect for signed-in users works). Affects first impression on the marketing page, not any app behavior.
 Suggested fix: Operator supplies a properly-mastered transparent-PNG version of the bare concentric-circles mark (ideally 512×512 or larger, white-on-alpha). Drop it in as `public/innerverse-mark.png`. No code change needed; `src/app/page.tsx` already references that path. Delete the generated stopgap.
 Status: OPEN
+
+## 2026-04-22 — Fresh-session audit: Phase 6 Chunk 6.1 migration
+
+### Summary
+
+Scope: `supabase/migrations/20260422170000_coaching_session_tables.sql` —
+the session/message/breakthrough/insight/next-step/feedback/coaching-state
+schema for the Phase 6 coaching-session feature.
+
+Audit process: four parallel Explore agents (security, data-integrity,
+correctness, architecture) with the full 13-item blind-spot checklist.
+Aggregator had context from design conversation — flagged here so the
+reader knows this audit is not as cold as a separate-session run would be.
+Recommend repeating with a true fresh session at the next milestone gate
+if any CRITICAL items below turn out to need verification.
+
+Agents produced 52 raw findings. After deduplication and fact-checking:
+**5 genuine actionable findings** (1 MED, 3 LOW, 1 carry-forward cluster
+for Chunk 6.3); **many "critical" findings invalidated** on review —
+several misunderstood Postgres RLS+FK transaction semantics, one missed
+the `alter default privileges` block from migration
+`20260422151000_grant_service_role_users.sql` that auto-grants
+service_role on all new public tables, and several conflated a single
+indexed subquery with an N+1 pattern. The rejected items are
+documented below so the reasoning is preserved.
+
+Merge recommendation for 6.1: **proceed** after addressing the three
+LOW/doc findings below. The MED finding is a defensive-depth ask; take
+it or consciously defer. The Chunk 6.3 carry-forward cluster must be
+enforced when 6.3 lands — not a 6.1 merge blocker.
+
+### Genuine findings — address in 6.1
+
+FINDING 1
+Severity: MED
+Lens: data-integrity
+Location: supabase/migrations/20260422170000_coaching_session_tables.sql:187-200
+Root cause: session_feedback has no CHECK preventing a row where all three ratings AND the reflection AND additional_feedback are simultaneously NULL. The UI "Skip for now" path should produce no row (not an empty row), so an all-null row would indicate an application-layer bug, not a valid user action.
+Blast radius: Low. Currently prevented by application UX discipline. If 6.3 code accidentally inserts on the "Skip" path, the empty row is hard to distinguish from a real "user submitted but left everything blank" case that shouldn't be possible in the UI.
+Suggested fix: Add `CHECK (reflection IS NOT NULL OR supportive_rating IS NOT NULL OR helpful_rating IS NOT NULL OR aligned_rating IS NOT NULL OR additional_feedback IS NOT NULL)` to the session_feedback table. A row must carry at least one user-supplied value.
+Status: OPEN
+
+FINDING 2
+Severity: LOW
+Lens: architecture
+Location: supabase/migrations/20260422170000_coaching_session_tables.sql:13-18 (scope note on dropped Bubble fields)
+Root cause: The scope note documents that `updated_goals` is dropped for Phase 6, but doesn't enumerate the Bubble fields that were dropped from breakthroughs (`related_goal`, `percentage`, `subtext`, `note`) and insights (`percentage`, `title`). A future maintainer reading the Bubble data-type screenshots will wonder why these fields are missing and may re-add them thinking they were forgotten.
+Blast radius: Maintenance cost only. No runtime issue.
+Suggested fix: Expand the scope note to explicitly list each dropped Bubble field and cite its reason (Tier 2 feature, requires goals table, etc.). See migration comment block lines 27–35.
+Status: OPEN
+
+FINDING 3
+Severity: LOW
+Lens: architecture
+Location: supabase/migrations/20260422170000_coaching_session_tables.sql:217-229 (coaching_state columns)
+Root cause: The three style_calibration columns (directness, warmth, challenge) have no inline documentation explaining what each represents, their expected range, or how they map into prompt assembly. A reader must cross-reference the session-end prompt and the style_calibration_delta JSON to understand.
+Blast radius: Maintenance cost only.
+Suggested fix: Add a short column-level comment for each: what dimension it captures (-1 to +1 semantic scale), how deltas are applied, and where it feeds into prompt assembly. See the column-comment approach suggested by the architecture agent.
+Status: OPEN
+
+FINDING 4
+Severity: LOW
+Lens: security
+Location: supabase/migrations/20260422170000_coaching_session_tables.sql:245-269 (RLS preamble)
+Root cause: The migration assumes `auth.jwt()->>'sub'` always resolves to the Clerk user ID (the same pattern as identity_tables), but doesn't repeat the documentation of this dependency. If the Clerk JWT template is ever reconfigured to use a different claim, every RLS policy in this migration silently fails closed. The invariant is documented in `src/lib/supabase.ts` and identity_tables migration, so this is redundant documentation, but cheap.
+Blast radius: Only materializes if Clerk JWT template is changed. Currently stable.
+Suggested fix: One-line comment near the RLS preamble referencing the Clerk JWT template dependency and pointing at the identity_tables migration for details.
+Status: OPEN
+
+### Chunk 6.3 carry-forward — enforce when session-end processing lands
+
+FINDING 5 (cluster — multiple agent findings consolidated)
+Severity: HIGH (if not delivered in 6.3)
+Lens: data-integrity + correctness
+Location: deferred — Chunk 6.3 session-end processor
+Root cause: 6.1 schema is correct but contract-incomplete without 6.3's atomic-write function. Specific requirements 6.3 must satisfy:
+  (a) All session-end writes (sessions UPDATE, breakthroughs/insights/next_steps INSERTs, coaching_state UPSERT) run inside one explicit transaction. Any failure rolls back the whole set.
+  (b) sessions UPDATE uses `WHERE id = $1 AND ended_at IS NULL` so duplicate session-end calls become no-ops instead of overwriting prior analysis.
+  (c) coaching_state write uses `INSERT ... ON CONFLICT (user_id) DO UPDATE SET ...` so concurrent session-start races don't fail.
+  (d) All incoming JSON values are validated/clamped before INSERT: progress_percent clamped to 0..100, arrays validated as arrays, style_calibration_delta clamped to ±0.1, running coaching_state values clamped to ±1.0 (or whatever bound app picks).
+  (e) is_substantive is set to a non-null boolean by every session-end call. Nullable only while session is in-progress — never after session-end runs to completion.
+  (f) ai_response_id values written to messages come only from OpenAI's response payload, never from client input.
+Blast radius: If 6.3 skips any of these, silent data corruption or user-facing failures on retry. The schema cannot enforce these itself — 6.3 code review must.
+Suggested fix: 6.3 PR description must explicitly confirm each sub-requirement (a)-(f). Reviewer checklist.
+Status: OPEN (carry-forward)
+
+### Rejected / hallucinated findings — documented for posterity
+
+Several agent findings did not survive fact-check. Recording them here
+so future readers don't re-raise the same concerns:
+
+- **"Cross-session attack via guessed session UUID"** (security F2, F5). The strengthened INSERT policy at lines 316-405 uses `session_id in (SELECT id FROM sessions WHERE user_id = auth.jwt()->>'sub')` — the subquery already filters sessions to those owned by the caller, so a guessed foreign UUID cannot match. No session-id secrecy assumption is being made.
+- **"TOCTOU race between RLS check and FK commit"** (security F1, data-integrity F3, F7). Postgres runs both the RLS check and the FK validation inside the same transaction. Row-level locks and MVCC visibility rules prevent the interleaving the agents described. If a parent session is deleted mid-transaction, the FK cascade fires atomically or the FK check fails; no partial state escapes.
+- **"Missing service_role grants on new tables"** (architecture F2). Migration `20260422151000_grant_service_role_users.sql:21-25` installs `alter default privileges in schema public grant ... to service_role`, which applies to all tables created in `public` thereafter. New tables in this migration inherit service_role grants automatically.
+- **"Tier 2 scope creep via sessions index"** (architecture F13). The `(user_id, started_at desc)` index is required for Tier 1 cross-session memory ("fetch last session summary" before prompt assembly), not a Tier 2 Sessions-tab optimization.
+- **"N+1 query pattern in RLS subquery"** (architecture F6, F12). A single subquery hitting a PK-indexed + user_id-indexed table per INSERT is O(log n), not N+1. Not a scaling concern at v1 volumes.
+- **"UNIQUE(session_id) on session_feedback creates RLS/schema race"** (security F3). Postgres UNIQUE is atomic; two concurrent INSERTs deterministically produce one success and one unique_violation. Application handles via retry or user-facing "already submitted" message. Standard semantics.
+- **"smallint for progress_percent is a hidden-type-narrowing hazard"** (correctness F1). 0..100 fits in smallint with headroom. supabase-js serializes JS numbers correctly. Not a real issue.
+- **"CHECK ((ended_at IS NULL) OR (summary IS NOT NULL)) to prevent orphans"** (correctness F11). Would incorrectly reject the expected short-session path where 6.3 sets `is_substantive=false` and intentionally skips summary generation.
+- **"Schema-layer enforcement of messages.user_id = sessions.user_id invariant"** (correctness F9, architecture F14). Would require a trigger. Application responsibility is acceptable given strengthened INSERT RLS. Flag only if a bug ever surfaces.
+
+### Lens-by-lens checklist coverage
+
+All four agents ran through the 13 blind-spot items. Coverage summary:
+security (14 raw findings, 2 genuine after filter), data-integrity
+(8 raw, 1 genuine + 1 carry-forward), correctness (15 raw, 2 genuine
++ 2 carry-forward), architecture (15 raw, 3 genuine + 2 carry-forward).
+Nothing new surfaced on items 4, 9, 12, 13 beyond what was already in
+the migration design.
