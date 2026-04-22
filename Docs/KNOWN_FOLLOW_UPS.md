@@ -573,3 +573,14 @@ mismatch — webhook is `force-dynamic` Node, middleware is Edge, both
 correct). One agent flagged `updated_at` chatter (Architecture F1 in
 their report) which I dropped because the trigger function explicitly
 guards no-op updates.
+
+## 2026-04-22 — Landing-page logo doesn't match legacy screenshot
+
+FINDING 1
+Severity: LOW
+Lens: operator
+Location: src/app/page.tsx, public/innerverse-mark.png
+Root cause: No transparent-background bare-symbol InnerVerse logo exists in the repo's asset files. All candidates — `reference/logos/Innerverse_logo color.png` (wordmark + tagline baked in), `reference/logos/innerverse_logo only 300x300.jpg` (opaque black bg), `public/icon-512.png` (opaque dark-teal bg from PWA icon generation) — have backgrounds that show as a visible box around the circles when composited over the cosmic landing background. Chunk 4.3b shipped a generated transparent PNG (`public/innerverse-mark.png`, derived by mapping the JPG's luminance to alpha with a threshold) as a stopgap, but the operator confirmed it still reads wrong visually on the deployed Preview.
+Blast radius: Cosmetic only. The `/` landing functions correctly for unauthenticated users (Get started + Sign in routes work, the onboarding redirect for signed-in users works). Affects first impression on the marketing page, not any app behavior.
+Suggested fix: Operator supplies a properly-mastered transparent-PNG version of the bare concentric-circles mark (ideally 512×512 or larger, white-on-alpha). Drop it in as `public/innerverse-mark.png`. No code change needed; `src/app/page.tsx` already references that path. Delete the generated stopgap.
+Status: OPEN
