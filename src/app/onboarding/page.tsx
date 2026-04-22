@@ -14,11 +14,12 @@ import { Step6Coach } from "./Step6Coach";
 
 export const dynamic = "force-dynamic";
 
+type StepNumber = 1 | 2 | 3 | 4 | 5 | 6;
+
 // Step 4 is optional. We distinguish "not yet visited" (coach_notes IS
 // NULL) from "visited and possibly empty" (coach_notes IS NOT NULL,
-// even ""). Server actions for step 4 always write a string, so once
-// the user clicks Continue past step 4 the field is non-null.
-function nextStep(state: OnboardingState | null): 1 | 2 | 3 | 4 | 5 | 6 {
+// even ""). The Step 4 server action always writes a string.
+function nextStep(state: OnboardingState | null): StepNumber {
   if (!state || state.why_are_you_here.length === 0) return 1;
   if (state.top_goals.length === 0) return 2;
   if (state.satisfaction_ratings == null) return 3;
@@ -27,7 +28,23 @@ function nextStep(state: OnboardingState | null): 1 | 2 | 3 | 4 | 5 | 6 {
   return 6;
 }
 
-export default async function OnboardingPage() {
+// `?step=N` lets the in-app Back button navigate to a previous step
+// without losing the user's saved values. Clamped to 1..nextStep so
+// URL-hacking can't skip ahead.
+function resolveStep(
+  requested: string | undefined,
+  next: StepNumber,
+): StepNumber {
+  const n = parseInt(requested ?? "", 10);
+  if (Number.isFinite(n) && n >= 1 && n <= next) return n as StepNumber;
+  return next;
+}
+
+export default async function OnboardingPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ step?: string }>;
+}) {
   const session = await auth();
   if (!session?.userId) {
     redirect("/sign-in");
@@ -38,7 +55,7 @@ export default async function OnboardingPage() {
     redirect("/");
   }
 
-  const step = nextStep(state);
+  const step = resolveStep((await searchParams).step, nextStep(state));
 
   switch (step) {
     case 1:

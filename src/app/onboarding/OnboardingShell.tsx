@@ -41,8 +41,15 @@ export function OnboardingShell({
         setError(result.error);
         return;
       }
-      router.refresh();
+      // Drop any ?step= so the page falls back to the next-incomplete
+      // derivation and renders the right step.
+      router.push("/onboarding");
     });
+  };
+
+  const handleBack = () => {
+    if (step <= 1 || pending) return;
+    router.push(`/onboarding?step=${step - 1}`);
   };
 
   return (
@@ -87,10 +94,10 @@ export function OnboardingShell({
 
       <footer className="border-t border-white/5 px-4 py-3 sm:px-8 sm:py-4">
         <div className="mx-auto flex max-w-2xl items-center justify-between gap-3">
-          {showBack ? (
+          {showBack && step > 1 ? (
             <button
               type="button"
-              onClick={() => router.back()}
+              onClick={handleBack}
               disabled={pending}
               className="rounded-md border border-white/10 px-4 py-2 text-sm text-neutral-300 transition hover:bg-white/5 disabled:opacity-50"
             >
