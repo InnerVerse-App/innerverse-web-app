@@ -71,6 +71,11 @@ export function Step3Ratings({
             </div>
           );
         })}
+        <p className="rounded-md bg-white/5 p-3 text-xs text-neutral-300">
+          💡 <span className="font-medium">Tip:</span> These ratings help your
+          coach understand which areas to focus on during your sessions. You
+          can always update these later in your settings.
+        </p>
       </div>
     </OnboardingShell>
   );

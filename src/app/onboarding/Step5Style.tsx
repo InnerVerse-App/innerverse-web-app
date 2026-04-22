@@ -60,6 +60,11 @@ export function Step5Style({ initialStyle }: { initialStyle: string | null }) {
             </button>
           );
         })}
+        <p className="rounded-md bg-white/5 p-3 text-xs text-neutral-300">
+          💡 <span className="font-medium">Don&apos;t worry!</span> Your coach
+          will adapt it&apos;s style based on your responses and preferences.
+          You can always adjust this in your settings later.
+        </p>
       </div>
     </OnboardingShell>
   );
