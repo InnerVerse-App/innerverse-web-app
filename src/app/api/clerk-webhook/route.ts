@@ -72,21 +72,22 @@ export async function POST(req: NextRequest) {
   const svixTimestamp = req.headers.get("svix-timestamp");
   const svixSignature = req.headers.get("svix-signature");
 
-  // Tag every Sentry event from this route with the svix-id so operator
-  // can correlate a fired alert with the exact delivery in the Clerk /
-  // Svix dashboard (F4 in KNOWN_FOLLOW_UPS 2026-04-22 webhook audit).
-  Sentry.setTag("webhook", "clerk");
-  if (svixId) Sentry.setTag("svix_id", svixId);
+  // Tags embedded per-capture rather than set on the global scope: scope
+  // bleed across concurrent serverless invocations isn't guaranteed to be
+  // fully isolated across every Next runtime, so it's safer to pass tags
+  // inline. svix_id lets the operator correlate a Sentry alert with the
+  // exact delivery in the Clerk / Svix dashboard.
+  const baseTags = { webhook: "clerk", svix_id: svixId ?? "unknown" };
 
   const signingSecret = process.env.CLERK_WEBHOOK_SIGNING_SECRET;
   if (!signingSecret) {
     console.error(
       "clerk-webhook: CLERK_WEBHOOK_SIGNING_SECRET is not set; rejecting",
     );
-    Sentry.captureMessage(
-      "clerk-webhook: CLERK_WEBHOOK_SIGNING_SECRET not set",
-      "error",
-    );
+    Sentry.captureMessage("clerk-webhook: CLERK_WEBHOOK_SIGNING_SECRET not set", {
+      level: "error",
+      tags: { ...baseTags, webhook_stage: "not_configured" },
+    });
     return NextResponse.json(
       { ok: false, reason: "not_configured" },
       { status: 500 },
@@ -115,7 +116,7 @@ export async function POST(req: NextRequest) {
     // a sustained spike means the signing secret rotated and Vercel env
     // wasn't updated. Capture so Sentry's rate view surfaces the pattern.
     Sentry.captureException(err, {
-      tags: { webhook_stage: "invalid_signature" },
+      tags: { ...baseTags, webhook_stage: "invalid_signature" },
     });
     return NextResponse.json(
       { ok: false, reason: "invalid_signature" },
@@ -164,6 +165,7 @@ export async function POST(req: NextRequest) {
         });
         Sentry.captureException(error, {
           tags: {
+            ...baseTags,
             webhook_stage: "db_error",
             clerk_event_type: evt.type,
             pg_code: error.code ?? "unknown",
@@ -198,18 +200,16 @@ export async function POST(req: NextRequest) {
         });
         // 200-ack'd to Svix but operator still needs to see this — an
         // email collision blocks the user's row from updating until it's
-        // resolved manually (F2 in KNOWN_FOLLOW_UPS 2026-04-22 webhook).
-        Sentry.captureMessage(
-          "clerk-webhook: email collision",
-          {
-            level: "warning",
-            tags: {
-              webhook_stage: "email_collision",
-              clerk_event_type: evt.type,
-            },
-            extra: { userId: evt.data.id, message: error.message },
+        // resolved manually.
+        Sentry.captureMessage("clerk-webhook: email collision", {
+          level: "warning",
+          tags: {
+            ...baseTags,
+            webhook_stage: "email_collision",
+            clerk_event_type: evt.type,
           },
-        );
+          extra: { userId: evt.data.id, message: error.message },
+        });
         return NextResponse.json({ ok: true, action: "email_collision" });
       }
       console.error("clerk-webhook: upsert failed", {
@@ -220,6 +220,7 @@ export async function POST(req: NextRequest) {
       });
       Sentry.captureException(error, {
         tags: {
+          ...baseTags,
           webhook_stage: "db_error",
           clerk_event_type: evt.type,
           pg_code: error.code ?? "unknown",
@@ -240,7 +241,7 @@ export async function POST(req: NextRequest) {
         : { raw: String(err) },
     );
     Sentry.captureException(err, {
-      tags: { webhook_stage: "unexpected_error" },
+      tags: { ...baseTags, webhook_stage: "unexpected_error" },
     });
     return NextResponse.json(
       { ok: false, reason: "unexpected_error" },

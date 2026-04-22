@@ -47,3 +47,5 @@ next-env.d.ts
 
 # Claude Code per-operator state (not repo metadata)
 .claude/.last-audited-sha
+.claude/settings.local.json
+.claude/worktrees/
