@@ -52,7 +52,7 @@ export default async function OnboardingPage({
 
   const state = await getOnboardingState();
   if (isOnboardingComplete(state)) {
-    redirect("/");
+    redirect("/home");
   }
 
   const step = resolveStep((await searchParams).step, nextStep(state));

@@ -1,4 +1,5 @@
 import Image from "next/image";
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@clerk/nextjs/server";
 import { SignInButton, SignUpButton } from "@clerk/nextjs";
@@ -11,11 +12,14 @@ export const dynamic = "force-dynamic";
 
 export default async function Home() {
   const session = await auth();
+  let showContinue = false;
+
   if (session?.userId) {
     const state = await getOnboardingState();
     if (!isOnboardingComplete(state)) {
       redirect("/onboarding");
     }
+    showContinue = true;
   }
 
   return (
@@ -46,16 +50,27 @@ export default async function Home() {
         </p>
 
         <div className="mt-6 flex flex-col items-center gap-3">
-          <SignUpButton>
-            <button className="w-64 rounded-full bg-brand-primary px-6 py-3 text-sm font-semibold text-brand-primary-contrast shadow-lg transition hover:bg-brand-primary/90">
-              Get started
-            </button>
-          </SignUpButton>
-          <SignInButton>
-            <button className="text-sm font-medium text-white/90 underline-offset-4 transition hover:text-white hover:underline">
-              Already have an account? Sign in
-            </button>
-          </SignInButton>
+          {showContinue ? (
+            <Link
+              href="/home"
+              className="w-64 rounded-full bg-brand-primary px-6 py-3 text-center text-sm font-semibold text-brand-primary-contrast shadow-lg transition hover:bg-brand-primary/90"
+            >
+              Continue →
+            </Link>
+          ) : (
+            <>
+              <SignUpButton>
+                <button className="w-64 rounded-full bg-brand-primary px-6 py-3 text-sm font-semibold text-brand-primary-contrast shadow-lg transition hover:bg-brand-primary/90">
+                  Get started
+                </button>
+              </SignUpButton>
+              <SignInButton>
+                <button className="text-sm font-medium text-white/90 underline-offset-4 transition hover:text-white hover:underline">
+                  Already have an account? Sign in
+                </button>
+              </SignInButton>
+            </>
+          )}
         </div>
       </div>
     </main>
