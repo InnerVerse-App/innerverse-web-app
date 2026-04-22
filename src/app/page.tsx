@@ -1,11 +1,27 @@
+import { redirect } from "next/navigation";
+import { auth } from "@clerk/nextjs/server";
 import {
   Show,
   SignInButton,
   SignUpButton,
   UserButton,
 } from "@clerk/nextjs";
+import {
+  getOnboardingState,
+  isOnboardingComplete,
+} from "@/lib/onboarding";
 
-export default function Home() {
+export const dynamic = "force-dynamic";
+
+export default async function Home() {
+  const session = await auth();
+  if (session?.userId) {
+    const state = await getOnboardingState();
+    if (!isOnboardingComplete(state)) {
+      redirect("/onboarding");
+    }
+  }
+
   return (
     <main className="flex min-h-screen flex-col items-center justify-center gap-6 p-8">
       <h1 className="text-4xl font-semibold tracking-tight">
