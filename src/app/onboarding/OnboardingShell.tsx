@@ -41,9 +41,11 @@ export function OnboardingShell({
         setError(result.error);
         return;
       }
-      // Drop any ?step= so the page falls back to the next-incomplete
-      // derivation and renders the right step.
-      router.push("/onboarding");
+      // Always advance exactly one step. If a future step was already
+      // completed in a prior session, the user can use Continue to walk
+      // through it rather than being teleported past it. Step 6 sets
+      // completed_at, after which the page redirects to /.
+      router.push(`/onboarding?step=${step + 1}`);
     });
   };
 
