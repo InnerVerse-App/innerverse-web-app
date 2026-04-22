@@ -29,19 +29,21 @@ export default async function Home() {
         className="object-cover"
       />
 
-      <div className="relative z-10 flex flex-col items-center gap-5 px-6 text-center">
+      <div className="relative z-10 flex flex-col items-center gap-3 px-6 text-center">
+        {/* mix-blend-screen drops the JPG's black background so the white
+            concentric circles read directly on the cosmic bg. */}
         <Image
           src="/innerverse-logo.jpg"
           alt=""
           width={240}
           height={240}
           priority
-          className="h-48 w-48 sm:h-56 sm:w-56"
+          className="h-40 w-40 mix-blend-screen sm:h-48 sm:w-48"
         />
-        <h1 className="text-5xl font-bold tracking-tight text-white drop-shadow-[0_2px_8px_rgba(0,0,0,0.6)] sm:text-6xl">
+        <h1 className="text-4xl font-bold tracking-tight text-white drop-shadow-[0_2px_8px_rgba(0,0,0,0.7)] sm:text-5xl">
           InnerVerse
         </h1>
-        <p className="max-w-xs text-base text-white/90 drop-shadow-[0_1px_4px_rgba(0,0,0,0.6)] sm:text-lg">
+        <p className="max-w-xs text-sm text-white/90 drop-shadow-[0_1px_4px_rgba(0,0,0,0.7)] sm:text-base">
           Your personal Life Coach, always within reach.
         </p>
       </div>
