@@ -26,6 +26,11 @@ export function supabaseAdmin(): SupabaseClient {
  * Pairs with Supabase RLS: queries see only rows the signed-in user
  * is permitted to read. Returns null when no Clerk session is active.
  *
+ * Server-only: imports `auth()` from `@clerk/nextjs/server`, which
+ * throws opaquely if called from a client component. Use only in API
+ * route handlers, server components, and server actions. Never import
+ * this from client components or browser code.
+ *
  * Relies on the Clerk → Supabase third-party auth integration: Supabase
  * is configured to trust JWTs from the Clerk JWKS endpoint, so the
  * standard Clerk session token (no JWT template required) is enough.
