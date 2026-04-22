@@ -1,6 +1,5 @@
 import "server-only";
 
-import { auth } from "@clerk/nextjs/server";
 import { supabaseAdmin, supabaseForUser } from "@/lib/supabase";
 
 // Postgres SQLSTATE for foreign_key_violation. Hit when the user's
@@ -45,9 +44,9 @@ const ONBOARDING_COLUMNS =
 // Returns null when the user has no row yet OR when there's no Clerk
 // session — callers treat both as "onboarding not yet started."
 export async function getOnboardingState(): Promise<OnboardingState | null> {
-  const supabase = await supabaseForUser();
-  if (!supabase) return null;
-  const { data, error } = await supabase
+  const ctx = await supabaseForUser();
+  if (!ctx) return null;
+  const { data, error } = await ctx.client
     .from("onboarding_selections")
     .select(ONBOARDING_COLUMNS)
     .maybeSingle();
@@ -87,25 +86,21 @@ async function ensureUserRow(userId: string): Promise<void> {
 export async function saveOnboardingStep(
   patch: OnboardingPatch,
 ): Promise<void> {
-  const session = await auth();
-  const userId = session?.userId;
-  if (!userId) {
+  const ctx = await supabaseForUser();
+  if (!ctx) {
     throw new Error("saveOnboardingStep: no Clerk session");
   }
-  const supabase = await supabaseForUser();
-  if (!supabase) {
-    throw new Error("saveOnboardingStep: no Supabase client");
-  }
+  const { client, userId } = ctx;
   const row = { user_id: userId, ...patch };
 
-  const first = await supabase
+  const first = await client
     .from("onboarding_selections")
     .upsert(row, { onConflict: "user_id" });
   if (!first.error) return;
 
   if (first.error.code === PG_FK_VIOLATION) {
     await ensureUserRow(userId);
-    const retry = await supabase
+    const retry = await client
       .from("onboarding_selections")
       .upsert(row, { onConflict: "user_id" });
     if (!retry.error) return;

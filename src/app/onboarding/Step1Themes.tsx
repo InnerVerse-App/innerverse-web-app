@@ -25,7 +25,6 @@ export function Step1Themes({ initialSelected }: { initialSelected: string[] }) 
       title="Why are you here?"
       subtitle="Select all that resonate with you. This helps us understand your goals."
       canContinue={selected.size > 0}
-      showBack={false}
       onContinue={() => saveStep1(Array.from(selected))}
     >
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">

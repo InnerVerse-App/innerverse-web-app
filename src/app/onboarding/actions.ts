@@ -31,13 +31,16 @@ function intersectAllowed(input: unknown, allowed: Set<string>): string[] {
   );
 }
 
+// /onboarding is force-dynamic — no page cache to invalidate.
+// Only / (the home page) is cached, and only step 6 affects what /
+// should render, so revalidatePath("/") lives there alone.
+
 export async function saveStep1(themes: string[]): Promise<ActionResult> {
   const valid = intersectAllowed(themes, THEME_VALUES);
   if (valid.length === 0) {
     return { ok: false, error: "Select at least one theme to continue." };
   }
   await saveOnboardingStep({ why_are_you_here: valid });
-  revalidatePath("/onboarding");
   return { ok: true };
 }
 
@@ -54,7 +57,6 @@ export async function saveStep2(
     top_goals: valid,
     top_goals_input: trimmed.length > 0 ? trimmed : null,
   });
-  revalidatePath("/onboarding");
   return { ok: true };
 }
 
@@ -72,14 +74,12 @@ export async function saveStep3(
     }
   }
   await saveOnboardingStep({ satisfaction_ratings: sanitized });
-  revalidatePath("/onboarding");
   return { ok: true };
 }
 
 export async function saveStep4(notes: string): Promise<ActionResult> {
   const trimmed = (notes ?? "").slice(0, COACH_NOTES_MAX);
   await saveOnboardingStep({ coach_notes: trimmed });
-  revalidatePath("/onboarding");
   return { ok: true };
 }
 
@@ -88,7 +88,6 @@ export async function saveStep5(style: string): Promise<ActionResult> {
     return { ok: false, error: "Pick a coaching style to continue." };
   }
   await saveOnboardingStep({ coaching_style: style });
-  revalidatePath("/onboarding");
   return { ok: true };
 }
 
@@ -100,7 +99,6 @@ export async function saveStep6(coach: string): Promise<ActionResult> {
     coach_name: coach,
     completed_at: new Date().toISOString(),
   });
-  revalidatePath("/onboarding");
   revalidatePath("/");
   return { ok: true };
 }

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { OnboardingShell } from "./OnboardingShell";
+import { TipCallout } from "./TipCallout";
 import { saveStep3 } from "./actions";
 import {
   SATISFACTION_CATEGORIES,
@@ -71,11 +72,11 @@ export function Step3Ratings({
             </div>
           );
         })}
-        <p className="rounded-md bg-white/5 p-3 text-xs text-neutral-300">
-          💡 <span className="font-medium">Tip:</span> These ratings help your
-          coach understand which areas to focus on during your sessions. You
-          can always update these later in your settings.
-        </p>
+        <TipCallout label="Tip">
+          These ratings help your coach understand which areas to focus on
+          during your sessions. You can always update these later in your
+          settings.
+        </TipCallout>
       </div>
     </OnboardingShell>
   );

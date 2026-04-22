@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { OnboardingShell } from "./OnboardingShell";
+import { TipCallout } from "./TipCallout";
 import { saveStep6 } from "./actions";
 import { COACHES } from "./data";
 
@@ -55,11 +56,11 @@ export function Step6Coach({ initialCoach }: { initialCoach: string | null }) {
             </button>
           );
         })}
-        <p className="rounded-md bg-white/5 p-3 text-xs text-neutral-300">
-          💡 <span className="font-medium">Remember:</span> This is just a name
-          and personality style. Your coach will always adapt to your needs and
-          preferences. You can change this anytime in your settings.
-        </p>
+        <TipCallout label="Remember">
+          This is just a name and personality style. Your coach will always
+          adapt to your needs and preferences. You can change this anytime
+          in your settings.
+        </TipCallout>
       </div>
     </OnboardingShell>
   );
