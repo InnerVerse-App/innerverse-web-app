@@ -10,7 +10,7 @@ type Tab = {
 };
 
 // Only Home is wired in v1; the other tabs are visual placeholders
-// until their features land. href: null renders a non-clickable item.
+// until their features land.
 const TABS: Tab[] = [
   {
     key: "home",
@@ -92,13 +92,14 @@ export function BottomNav({ active }: { active: TabKey }) {
             );
           }
           return (
-            <div
+            <button
               key={tab.key}
+              type="button"
+              disabled
               className={className + " cursor-not-allowed opacity-60"}
-              aria-disabled
             >
               {content}
-            </div>
+            </button>
           );
         })}
       </div>
