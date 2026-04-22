@@ -1,7 +1,13 @@
 import "server-only";
 
 import { auth } from "@clerk/nextjs/server";
-import { supabaseForUser } from "@/lib/supabase";
+import { supabaseAdmin, supabaseForUser } from "@/lib/supabase";
+
+// Postgres SQLSTATE for foreign_key_violation. Hit when the user's
+// row in public.users doesn't exist yet (Clerk webhook hasn't fired,
+// or Preview env where webhook isn't wired) and we try to insert
+// onboarding_selections referencing user_id.
+const PG_FK_VIOLATION = "23503";
 
 // The 6 satisfaction-rating categories shown on onboarding step 3.
 // Pinned constants — the satisfaction_ratings jsonb column shape must
@@ -55,8 +61,29 @@ export async function getOnboardingState(): Promise<OnboardingState | null> {
   return (data as OnboardingState | null) ?? null;
 }
 
+// Idempotent self-heal for the case where a Clerk user has no
+// public.users row yet — happens in Preview (webhook not wired) and
+// occasionally in Production if the Clerk webhook is delayed past
+// the user's first onboarding write. Inserts a minimal row via
+// service_role; the webhook can fill in email/display_name later.
+async function ensureUserRow(userId: string): Promise<void> {
+  const admin = supabaseAdmin();
+  const { error } = await admin
+    .from("users")
+    .upsert({ id: userId }, { onConflict: "id", ignoreDuplicates: true });
+  if (error) {
+    console.error("ensureUserRow: upsert failed", {
+      userId,
+      code: error.code,
+      message: error.message,
+    });
+    throw error;
+  }
+}
+
 // Incremental upsert so the user can refresh or return mid-flow
-// without losing earlier answers.
+// without losing earlier answers. Self-heals a missing public.users
+// row on FK violation (see ensureUserRow).
 export async function saveOnboardingStep(
   patch: OnboardingPatch,
 ): Promise<void> {
@@ -70,17 +97,32 @@ export async function saveOnboardingStep(
     throw new Error("saveOnboardingStep: no Supabase client");
   }
   const row = { user_id: userId, ...patch };
-  const { error } = await supabase
+
+  const first = await supabase
     .from("onboarding_selections")
     .upsert(row, { onConflict: "user_id" });
-  if (error) {
-    console.error("saveOnboardingStep: upsert failed", {
+  if (!first.error) return;
+
+  if (first.error.code === PG_FK_VIOLATION) {
+    await ensureUserRow(userId);
+    const retry = await supabase
+      .from("onboarding_selections")
+      .upsert(row, { onConflict: "user_id" });
+    if (!retry.error) return;
+    console.error("saveOnboardingStep: upsert retry failed", {
       userId,
-      code: error.code,
-      message: error.message,
+      code: retry.error.code,
+      message: retry.error.message,
     });
-    throw error;
+    throw retry.error;
   }
+
+  console.error("saveOnboardingStep: upsert failed", {
+    userId,
+    code: first.error.code,
+    message: first.error.message,
+  });
+  throw first.error;
 }
 
 export function isOnboardingComplete(state: OnboardingState | null): boolean {
