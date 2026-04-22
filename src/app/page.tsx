@@ -30,15 +30,13 @@ export default async function Home() {
       />
 
       <div className="relative z-10 flex flex-col items-center gap-3 px-6 text-center">
-        {/* mix-blend-screen drops the JPG's black background so the white
-            concentric circles read directly on the cosmic bg. */}
         <Image
-          src="/innerverse-logo.jpg"
+          src="/icon-512.png"
           alt=""
           width={240}
           height={240}
           priority
-          className="h-40 w-40 mix-blend-screen sm:h-48 sm:w-48"
+          className="h-36 w-36 sm:h-44 sm:w-44"
         />
         <h1 className="text-4xl font-bold tracking-tight text-white drop-shadow-[0_2px_8px_rgba(0,0,0,0.7)] sm:text-5xl">
           InnerVerse
@@ -46,19 +44,19 @@ export default async function Home() {
         <p className="max-w-xs text-sm text-white/90 drop-shadow-[0_1px_4px_rgba(0,0,0,0.7)] sm:text-base">
           Your personal Life Coach, always within reach.
         </p>
-      </div>
 
-      <div className="absolute inset-x-0 bottom-10 z-10 flex flex-col items-center gap-3 px-6">
-        <SignUpButton>
-          <button className="w-full max-w-xs rounded-full bg-brand-primary px-6 py-3 text-sm font-semibold text-brand-primary-contrast shadow-lg transition hover:bg-brand-primary/90">
-            Get started
-          </button>
-        </SignUpButton>
-        <SignInButton>
-          <button className="text-sm font-medium text-white/90 underline-offset-4 transition hover:text-white hover:underline">
-            Already have an account? Sign in
-          </button>
-        </SignInButton>
+        <div className="mt-6 flex flex-col items-center gap-3">
+          <SignUpButton>
+            <button className="w-64 rounded-full bg-brand-primary px-6 py-3 text-sm font-semibold text-brand-primary-contrast shadow-lg transition hover:bg-brand-primary/90">
+              Get started
+            </button>
+          </SignUpButton>
+          <SignInButton>
+            <button className="text-sm font-medium text-white/90 underline-offset-4 transition hover:text-white hover:underline">
+              Already have an account? Sign in
+            </button>
+          </SignInButton>
+        </div>
       </div>
     </main>
   );
