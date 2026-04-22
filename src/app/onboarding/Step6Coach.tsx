@@ -11,7 +11,7 @@ export function Step6Coach({ initialCoach }: { initialCoach: string | null }) {
   return (
     <OnboardingShell
       step={6}
-      title="Choose your coach's name"
+      title="Choose your coach"
       subtitle="Give your coach a name that resonates with you. Each name comes with its own personality style."
       continueLabel="Complete Setup"
       canContinue={selected !== null}

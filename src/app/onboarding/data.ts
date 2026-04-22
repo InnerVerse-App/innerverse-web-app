@@ -173,7 +173,7 @@ export const COACHES: CoachOption[] = [
   { value: "edith", label: "Edith", description: "Nurturing and patient, creates a safe space for growth" },
   { value: "kelly", label: "Kelly", description: "Energetic and motivating, helps you take action" },
   { value: "lulu", label: "Lulu", description: "Creative and intuitive, brings fresh perspectives" },
-  { value: "maya", label: "Maya", description: "Calm and centered, helps you find inner peace", recommended: true },
+  { value: "maya", label: "Maya", description: "Calm and centered, helps you find inner peace" },
   { value: "orion", label: "Orion", description: "Adventurous and bold, encourages you to explore new paths" },
   { value: "pierre", label: "Pierre", description: "Sophisticated and insightful, offers elegant solutions" },
   { value: "riley", label: "Riley", description: "Playful and optimistic, makes growth feel fun" },
