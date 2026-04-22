@@ -428,7 +428,7 @@ Location: src/app/api/clerk-webhook/route.ts:96-122
 Root cause: Upsert keyed only on `id` with no event-version or svix-id idempotency check; out-of-order delivery (user.updated arriving before user.created, or after user.deleted) silently overwrites or resurrects rows.
 Blast radius: A delayed user.updated arriving after user.deleted recreates a row Clerk has deleted, leaving an orphan in users (and any future user-owned tables) that the user themselves can't see via RLS but that violates GDPR right-to-be-forgotten and inflates row counts. Today's blast: zero (no users); post-launch: per-user data drift indistinguishable from corruption.
 Suggested fix: Add a `last_event_id text` and `last_event_ts timestamptz` column to `public.users`; in the webhook, skip the upsert when the incoming `svix-id` was already processed OR when the incoming event timestamp is older than `last_event_ts`. Alternatively, store processed svix-ids in a small dedicated `webhook_events_seen` table with a TTL.
-Status: OPEN
+Status: IN PROGRESS — addressed by adding `users.last_event_at` column + `public.upsert_user_from_clerk()` race-safe SQL function in migration `20260422150000_users_event_ordering.sql`. Webhook now calls the function via `supabase.rpc()`. Stale and duplicate events become no-ops at the database level. Delete-then-resurrect path remains open by design (see Lens-by-lens notes); revisit if it becomes load-bearing.
 ```
 
 ```
@@ -439,7 +439,7 @@ Location: src/app/api/clerk-webhook/route.ts:99-110 + supabase/migrations/202604
 Root cause: `users.email` is `unique`. If user A updates their Clerk email to a value already held by user B (account merge, typo correction, deleted-then-recreated), the webhook upsert hits the UNIQUE constraint, returns 500, and Svix retries every few minutes for ~3-5 days. The webhook never recovers without operator intervention; user A's profile stays stale.
 Blast radius: User A sees their old email in the app indefinitely. The retry loop spams the DB and the operator's logs but does not data-corrupt. If Clerk rotates a user's email mid-session, the app's view of that user is stuck in the past.
 Suggested fix: Catch Postgres error `23505` (unique_violation) on the email column specifically and either (a) write the row without the email field and emit a metric, or (b) return 200 to Svix with a `reason: "email_collision"` body and surface to Sentry. Do NOT retry indefinitely for a permanent constraint violation.
-Status: OPEN
+Status: IN PROGRESS — webhook now catches `error.code === "23505"` from the upsert RPC and returns 200 with `action: "email_collision"`, breaking the Svix retry loop. Operator-facing log includes user ID + Clerk error message. Trade-off accepted: the non-email fields (display_name, last_event_at) are NOT written on collision, so the row stays slightly stale until the underlying email conflict is resolved manually. Sentry instrumentation deferred to F4.
 ```
 
 ```
@@ -450,7 +450,7 @@ Location: src/app/api/clerk-webhook/route.ts:78-86
 Root cause: After `wh.verify()` succeeds the payload is cast `as ClerkEvent` with no runtime shape validation. `extractPrimaryEmail` and `extractDisplayName` defensively handle missing fields, but `evt.data.id` is dereferenced without a null/empty/type check before being written as the primary key.
 Blast radius: A malformed-but-validly-signed payload (Clerk SDK regression, schema change, or a future Clerk event type that reuses `data` differently) can write a row with `id = ""` or trigger a 500 retry storm. Signature verification is the only trust boundary; once past it, anything goes.
 Suggested fix: After `wh.verify()`, validate the parsed event with a small schema check: `if (!evt?.type || typeof evt?.data?.id !== "string" || evt.data.id.length === 0) return 400 with reason "invalid_payload"`. Optional: use Zod for the full ClerkEvent shape so future Clerk schema drift fails loudly rather than silently.
-Status: OPEN
+Status: IN PROGRESS — added `validateUserEvent()` helper that checks `type` (non-empty string), `timestamp` (finite number, required for F1's ordering check), and `data.id` (non-empty string). Called from each user.* case branch; failure returns 400 `{ reason: "invalid_payload" }` so Svix stops retrying a permanently malformed event. The non-user `default` case still 200-acks unknown events as before — we don't reject events we don't process.
 ```
 
 ```
