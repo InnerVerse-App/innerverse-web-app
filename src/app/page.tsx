@@ -31,12 +31,12 @@ export default async function Home() {
 
       <div className="relative z-10 flex flex-col items-center gap-3 px-6 text-center">
         <Image
-          src="/icon-512.png"
+          src="/innerverse-mark.png"
           alt=""
-          width={240}
-          height={240}
+          width={300}
+          height={300}
           priority
-          className="h-36 w-36 sm:h-44 sm:w-44"
+          className="h-40 w-40 sm:h-48 sm:w-48"
         />
         <h1 className="text-4xl font-bold tracking-tight text-white drop-shadow-[0_2px_8px_rgba(0,0,0,0.7)] sm:text-5xl">
           InnerVerse
