@@ -188,13 +188,10 @@ create index if not exists next_steps_user_created_idx
 -- shouldn't assume that).
 --
 -- UNIQUE (session_id): UI Submit is one-shot, so at most one feedback
--- row per session. Enforced at the schema layer rather than relying on
--- application discipline.
---
--- CHECK feedback_has_content: a row must carry at least one user-
--- supplied value. The "Skip for now" UI path produces no row at all;
--- an all-null row would indicate an application-layer bug (e.g., 6.3
--- accidentally inserting on the Skip path).
+-- row per session.
+-- CHECK session_feedback_has_content: prevents an all-null row, which
+-- would indicate a bug (the "Skip for now" UI path skips the INSERT
+-- entirely; no empty row should ever reach the table).
 
 create table if not exists public.session_feedback (
   id uuid primary key default gen_random_uuid(),
@@ -300,20 +297,14 @@ alter table public.session_feedback force row level security;
 alter table public.coaching_state enable row level security;
 alter table public.coaching_state force row level security;
 
--- Policies — SELECT/UPDATE scope rows by user_id = auth.jwt()->>'sub'.
--- INSERT on session-scoped child tables (messages, breakthroughs,
--- insights, next_steps, session_feedback) ALSO requires the target
--- session_id to belong to the caller. Without this, a malicious
--- authenticated caller could insert rows attached to another user's
--- session by passing a valid foreign session_id — the FK check only
--- verifies the row exists, not ownership. The subquery closes that
--- gap at the correct layer (RLS write-time enforcement). Sessions PK
--- lookup keeps the cost negligible.
+-- Policies key off auth.jwt()->>'sub'. INSERT on session-scoped child
+-- tables includes a session-ownership subquery — FK constraints verify
+-- the parent row exists, not that the caller owns it.
 --
 -- No DELETE policies; deletion flows through the users cascade only.
 
--- sessions: user can create, read, update their own. Update used to
--- set ended_at + summary fields at session-end.
+-- sessions: UPDATE is used by the session-end handler to fill in
+-- ended_at + summary fields.
 drop policy if exists "sessions_select_own" on public.sessions;
 create policy "sessions_select_own"
   on public.sessions
@@ -336,7 +327,6 @@ create policy "sessions_update_own"
   using (user_id = auth.jwt()->>'sub')
   with check (user_id = auth.jwt()->>'sub');
 
--- messages: select + insert only. Never updated by users.
 drop policy if exists "messages_select_own" on public.messages;
 create policy "messages_select_own"
   on public.messages
@@ -356,7 +346,6 @@ create policy "messages_insert_own"
     )
   );
 
--- breakthroughs: select + insert. Written by session-end.
 drop policy if exists "breakthroughs_select_own" on public.breakthroughs;
 create policy "breakthroughs_select_own"
   on public.breakthroughs
@@ -376,7 +365,6 @@ create policy "breakthroughs_insert_own"
     )
   );
 
--- insights: select + insert.
 drop policy if exists "insights_select_own" on public.insights;
 create policy "insights_select_own"
   on public.insights
@@ -396,7 +384,6 @@ create policy "insights_insert_own"
     )
   );
 
--- next_steps: select + insert.
 drop policy if exists "next_steps_select_own" on public.next_steps;
 create policy "next_steps_select_own"
   on public.next_steps
@@ -416,7 +403,6 @@ create policy "next_steps_insert_own"
     )
   );
 
--- session_feedback: select + insert. No updates (Submit is one-shot).
 drop policy if exists "session_feedback_select_own" on public.session_feedback;
 create policy "session_feedback_select_own"
   on public.session_feedback
@@ -436,8 +422,7 @@ create policy "session_feedback_insert_own"
     )
   );
 
--- coaching_state: select + insert + update. Upsert on first session,
--- updates thereafter.
+-- coaching_state: lazy upsert on first session-start, updates thereafter.
 drop policy if exists "coaching_state_select_own" on public.coaching_state;
 create policy "coaching_state_select_own"
   on public.coaching_state

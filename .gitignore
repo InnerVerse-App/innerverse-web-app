@@ -49,3 +49,6 @@ next-env.d.ts
 .claude/.last-audited-sha
 .claude/settings.local.json
 .claude/worktrees/
+
+# Supabase pg_dump output — may contain real user data once testers land
+backups/
