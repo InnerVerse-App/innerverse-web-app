@@ -388,3 +388,188 @@ Status: PARTIAL FIX (2026-04-22, PR #17) — `supabase/README.md` now has a 'Hos
 - **Architecture agent** ran the full checklist; flagged 5 findings around the server-only guard, middleware matcher, and dashboard-vs-repo drift.
 
 All four agents independently flagged the missing `'server-only'` guard, the healthcheck `String(err)` leak, the missing fetch timeout, and the email-not-UNIQUE issue — high-confidence items.
+
+## Audit 2026-04-22 — scope: main..claude/phase-4-clerk-webhook
+
+### Summary
+
+13 findings total: 0 critical, 4 high, 6 med, 3 low.
+
+Branch lands Phase 4 chunks 4.1 → 4.2b: Supabase scaffold, identity tables
+migration with RLS, the `supabaseForUser()` JWT bridge, and the Clerk
+user-lifecycle webhook. The webhook is the dominant new attack surface.
+Signature verification, service-role isolation (`'server-only'`), and
+RLS layering are all sound. The `set_updated_at()` trigger already has
+an `is distinct from` no-op guard, so a hypothesized "every event bumps
+`updated_at`" finding turned out to be a false positive and was dropped.
+
+The real risks cluster on **webhook event semantics under Svix retry**:
+no idempotency key, no per-user event ordering, payload shape trusted
+post-signature, and a `unique(email)` constraint that can lock the
+webhook into a permanent retry loop on cross-user email drift. None of
+these are exploitable today (zero real users, signing secret unrotated),
+but every one becomes harder to fix once user rows exist. Closely
+related: operator has no way to distinguish "Clerk secret rotated and
+nobody updated Vercel env" from "Supabase blip" — both manifest as
+silent webhook failure with Sentry not yet wired.
+
+Recommend resolving F1, F2, F3, F5 before opening to >10 testers
+(milestone gate per CLAUDE.md § Review cadence). F4 (operator alerting)
+should be addressed when Sentry is wired (currently unwired per
+`.env.example`).
+
+### Findings
+
+```
+FINDING 1
+Severity: HIGH
+Lens: data-integrity
+Location: src/app/api/clerk-webhook/route.ts:96-122
+Root cause: Upsert keyed only on `id` with no event-version or svix-id idempotency check; out-of-order delivery (user.updated arriving before user.created, or after user.deleted) silently overwrites or resurrects rows.
+Blast radius: A delayed user.updated arriving after user.deleted recreates a row Clerk has deleted, leaving an orphan in users (and any future user-owned tables) that the user themselves can't see via RLS but that violates GDPR right-to-be-forgotten and inflates row counts. Today's blast: zero (no users); post-launch: per-user data drift indistinguishable from corruption.
+Suggested fix: Add a `last_event_id text` and `last_event_ts timestamptz` column to `public.users`; in the webhook, skip the upsert when the incoming `svix-id` was already processed OR when the incoming event timestamp is older than `last_event_ts`. Alternatively, store processed svix-ids in a small dedicated `webhook_events_seen` table with a TTL.
+Status: OPEN
+```
+
+```
+FINDING 2
+Severity: HIGH
+Lens: data-integrity
+Location: src/app/api/clerk-webhook/route.ts:99-110 + supabase/migrations/20260422062124_identity_tables.sql:53
+Root cause: `users.email` is `unique`. If user A updates their Clerk email to a value already held by user B (account merge, typo correction, deleted-then-recreated), the webhook upsert hits the UNIQUE constraint, returns 500, and Svix retries every few minutes for ~3-5 days. The webhook never recovers without operator intervention; user A's profile stays stale.
+Blast radius: User A sees their old email in the app indefinitely. The retry loop spams the DB and the operator's logs but does not data-corrupt. If Clerk rotates a user's email mid-session, the app's view of that user is stuck in the past.
+Suggested fix: Catch Postgres error `23505` (unique_violation) on the email column specifically and either (a) write the row without the email field and emit a metric, or (b) return 200 to Svix with a `reason: "email_collision"` body and surface to Sentry. Do NOT retry indefinitely for a permanent constraint violation.
+Status: OPEN
+```
+
+```
+FINDING 3
+Severity: HIGH
+Lens: security
+Location: src/app/api/clerk-webhook/route.ts:78-86
+Root cause: After `wh.verify()` succeeds the payload is cast `as ClerkEvent` with no runtime shape validation. `extractPrimaryEmail` and `extractDisplayName` defensively handle missing fields, but `evt.data.id` is dereferenced without a null/empty/type check before being written as the primary key.
+Blast radius: A malformed-but-validly-signed payload (Clerk SDK regression, schema change, or a future Clerk event type that reuses `data` differently) can write a row with `id = ""` or trigger a 500 retry storm. Signature verification is the only trust boundary; once past it, anything goes.
+Suggested fix: After `wh.verify()`, validate the parsed event with a small schema check: `if (!evt?.type || typeof evt?.data?.id !== "string" || evt.data.id.length === 0) return 400 with reason "invalid_payload"`. Optional: use Zod for the full ClerkEvent shape so future Clerk schema drift fails loudly rather than silently.
+Status: OPEN
+```
+
+```
+FINDING 4
+Severity: HIGH
+Lens: architecture
+Location: src/app/api/clerk-webhook/route.ts:54-64, 88-92, 105-117 + .env.example
+Root cause: Webhook returns generic 500 / `db_error` / `invalid_signature` responses with no Sentry hook (Sentry is unwired per CLAUDE.md). A rotated-but-not-synced `CLERK_WEBHOOK_SIGNING_SECRET`, a Clerk schema change, and a transient Supabase outage all look identical to the operator: failed webhooks in Vercel logs, no alert.
+Blast radius: New users sign up via Clerk, webhook silently fails, no `users` row exists. First onboarding write hits a foreign key violation. User reports a broken app; operator has no signal until they manually inspect Vercel logs and Clerk dashboard. Misattribution risk is high.
+Suggested fix: When Sentry is wired (Phase 6+ per CLAUDE.md), instrument the webhook with one event per failure path (`not_configured`, `invalid_signature`, `db_error`, `unexpected_error`), each with the `svix-id` as a tag. Until then, document the secret-rotation runbook in `supabase/README.md` and consider a tiny `/api/clerk-webhook-health` cron that posts a self-signed test event and pages on 4xx/5xx.
+Status: OPEN
+```
+
+```
+FINDING 5
+Severity: MED
+Lens: correctness
+Location: src/app/api/clerk-webhook/route.ts:54-64
+Root cause: Missing `CLERK_WEBHOOK_SIGNING_SECRET` is treated as transient (return 500), so Svix retries for ~3-5 days. If the operator misconfigures Vercel env beyond that window, every user.created event in that window is lost permanently and silently.
+Blast radius: Window-bounded silent data loss for new signups during a misconfiguration that isn't caught within the Svix retry budget. Today's risk: zero (pre-launch). Real risk: any future env-var change in Vercel that drops this secret.
+Suggested fix: Either (a) keep the 500 but add a deploy-time assertion (e.g., a tiny `npm run check:env` in the Vercel build that fails the deploy if the secret is missing in Production), or (b) treat missing secret as a hard 400 + page the operator immediately.
+Status: OPEN
+```
+
+```
+FINDING 6
+Severity: MED
+Lens: data-integrity
+Location: src/app/api/clerk-webhook/route.ts:35-44
+Root cause: `extractPrimaryEmail` correctly null-guards the array but the fallback `emails[0].email_address` reads a property that the type allows but runtime may omit if Clerk's payload shape changes. Returning `undefined` (vs `null`) gets serialized to JSON null in the upsert, clobbering any prior `email` value on user.updated.
+Blast radius: A future Clerk payload change (or a partial event during a Clerk degradation) silently nulls existing emails on update. Pairs with F2 (UNIQUE on email) — many concurrent nulls, then any future "set the email back" hits the UNIQUE constraint with the null-having user.
+Suggested fix: Return `emails[0].email_address ?? null` and skip the field entirely if null on `user.updated` (build the upsert object conditionally). Avoid blind null-clobber on update.
+Status: OPEN
+```
+
+```
+FINDING 7
+Severity: MED
+Lens: correctness
+Location: supabase/migrations/20260422062124_identity_tables.sql:53
+Root cause: `users.email text unique` allows multiple NULL rows (Postgres treats NULLs as distinct in UNIQUE indexes). Comment in migration says "so Clerk-Supabase drift can't produce two rows with the same email" — but two rows with no email at all is permitted.
+Blast radius: Low today (Clerk users always have an email). Becomes a real bug if a future code path (admin import, soft-delete tombstone) inserts a null-email row. The constraint as written doesn't enforce what the comment claims.
+Suggested fix: Either (a) make `email` NOT NULL (Clerk guarantees one), or (b) add `create unique index users_email_unique_notnull on public.users (email) where email is not null` and document the partial-index intent. Option (a) is simpler and matches Clerk's guarantees.
+Status: OPEN
+```
+
+```
+FINDING 8
+Severity: MED
+Lens: correctness
+Location: src/lib/supabase.ts:55-65
+Root cause: `await session.getToken()` is not wrapped in try/catch. If the Clerk SDK throws (network blip, expired key, SDK version mismatch), the rejection propagates to the caller, which by name (`supabaseForUser` returning `Promise<SupabaseClient | null>`) signals "expect null on failure".
+Blast radius: Caller sites that don't `try/catch` will surface an unhandled rejection in the route handler and return a 500 instead of degrading gracefully. No call sites exist in scope today, so the bug is latent.
+Suggested fix: Wrap `getToken()` in try/catch; log + `return null` on throw. Or: change the JSDoc to document explicitly that callers must catch.
+Status: OPEN
+```
+
+```
+FINDING 9
+Severity: MED
+Lens: data-integrity
+Location: src/app/api/clerk-webhook/route.ts:122-141 (user.deleted case)
+Root cause: Webhook calls `delete().eq("id", evt.data.id)` and trusts `ON DELETE CASCADE` on `onboarding_selections.user_id`. No verification that any rows were actually affected (cascade silent if RLS, schema drift, or a future user-owned table without CASCADE blocks it).
+Blast radius: Today minimal (only one child table, cascade is correct). When future user-owned tables land (sessions, messages, exports), if any forgets `ON DELETE CASCADE`, the parent delete fails with FK violation, the webhook retries forever, and the user is partly-deleted.
+Suggested fix: Make the convention enforceable, not just documented: add a dev-time SQL test that asserts every `user_id`-referencing FK has `ON DELETE CASCADE` (or `SET NULL`, intentionally). Or extend the Phase-4 README pre-apply checklist to include this check.
+Status: OPEN
+```
+
+```
+FINDING 10
+Severity: MED
+Lens: security
+Location: src/app/api/clerk-webhook/route.ts:73 (`req.text()`)
+Root cause: Webhook reads `await req.text()` with no body-size limit. A validly-signed but pathologically large payload (or any unsigned huge payload that exhausts memory before the verification check runs) could OOM the serverless function.
+Blast radius: Pre-signature DoS risk is mitigated by Vercel's platform-level body limit (4.5MB default for serverless functions on Hobby/Pro), so the practical blast radius is bounded. Still, a small explicit check is cheaper than relying on platform defaults.
+Suggested fix: Read `content-length` header before `req.text()`, reject if > N KB (Clerk webhook payloads are well under 100KB). Or accept platform default and document it.
+Status: OPEN
+```
+
+```
+FINDING 11
+Severity: LOW
+Lens: security
+Location: src/middleware.ts:7-13
+Root cause: Single negative-lookahead matcher excludes `/api/clerk-webhook` and `/api/healthcheck` from Clerk middleware. Next.js normalizes paths before matchers (collapses `//`, strips trailing slash, decodes `%2F`), so the documented bypass paths are theoretically blocked, but the matcher is fragile to future additions.
+Blast radius: If a future API route is added and forgotten in the matcher, it inherits Clerk middleware coverage by default (which is the safe failure mode). Reverse direction (a route that should be public accidentally falling under Clerk) is the bigger concern when this matcher grows.
+Suggested fix: Defense-in-depth — pin the matcher to known paths (positive list) instead of growing the negative lookahead, or add a unit test that asserts the expected route → middleware-coverage map.
+Status: OPEN
+```
+
+```
+FINDING 12
+Severity: LOW
+Lens: correctness
+Location: src/app/api/clerk-webhook/route.ts:144-151 (outer catch)
+Root cause: Outer `try { switch ... } catch (err)` logs `err` directly via `console.error`. If `err` is a non-Error object or has circular refs, the log may be unhelpful (`[object Object]`). Today this is fine because Supabase errors are returned via `{ error }` not thrown, but any future thrown error here is opaque.
+Blast radius: Operator debuggability only.
+Suggested fix: Normalize: `console.error("clerk-webhook: unexpected error", err instanceof Error ? { name: err.name, message: err.message, stack: err.stack } : { raw: String(err) })`.
+Status: OPEN
+```
+
+```
+FINDING 13
+Severity: LOW
+Lens: architecture
+Location: src/app/api/clerk-webhook/route.ts (whole file)
+Root cause: No top-of-file comment warns that `auth()` from `@clerk/nextjs/server` will return an empty session here (route is excluded from Clerk middleware). The header comment notes "signature verification is the auth layer" but doesn't explicitly forbid calling `auth()` from this route.
+Blast radius: A future contributor adding any "let me get the current user" logic here will silently get a non-authenticated session and could write the wrong row.
+Suggested fix: One-line addition to the header comment: "Do NOT call Clerk's `auth()` from this route — there is no Clerk session context, only an svix-signed payload."
+Status: OPEN
+```
+
+### Lens-by-lens checklist coverage
+
+All four agents responded to all 13 blind-spot items. Items not flagged
+were called out as N/A with reasons (PK-based upserts have no TOCTOU
+window, the trigger has a no-op `is distinct from` guard, no Promise.all
+in scope, no XSS surface in JSON-only handlers, no Edge/Node runtime
+mismatch — webhook is `force-dynamic` Node, middleware is Edge, both
+correct). One agent flagged `updated_at` chatter (Architecture F1 in
+their report) which I dropped because the trigger function explicitly
+guards no-op updates.
