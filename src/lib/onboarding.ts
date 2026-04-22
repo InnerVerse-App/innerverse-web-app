@@ -31,19 +31,13 @@ export type OnboardingState = {
   completed_at: string | null;
 };
 
-export type OnboardingPatch = Partial<
-  Omit<OnboardingState, "user_id" | "completed_at">
-> & {
-  // Set explicitly on the final step's save call.
-  completed_at?: string | null;
-};
+export type OnboardingPatch = Partial<Omit<OnboardingState, "user_id">>;
 
 const ONBOARDING_COLUMNS =
   "user_id, why_are_you_here, top_goals, top_goals_input, satisfaction_ratings, coach_notes, coaching_style, coach_name, completed_at";
 
-// Read the signed-in user's onboarding row, if any.
-// Returns null when the user has never started onboarding (no row),
-// or when there's no Clerk session.
+// Returns null when the user has no row yet OR when there's no Clerk
+// session — callers treat both as "onboarding not yet started."
 export async function getOnboardingState(): Promise<OnboardingState | null> {
   const supabase = await supabaseForUser();
   if (!supabase) return null;
@@ -61,9 +55,8 @@ export async function getOnboardingState(): Promise<OnboardingState | null> {
   return (data as OnboardingState | null) ?? null;
 }
 
-// Upsert a partial set of onboarding fields. Used incrementally
-// across the 6 steps so the user can refresh / come back without
-// losing earlier answers.
+// Incremental upsert so the user can refresh or return mid-flow
+// without losing earlier answers.
 export async function saveOnboardingStep(
   patch: OnboardingPatch,
 ): Promise<void> {
