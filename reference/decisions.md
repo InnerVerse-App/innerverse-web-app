@@ -110,7 +110,9 @@ When designs are ambiguous, the Figma versions take precedence over Bubble scree
 
 ## Domain
 
-TBD before deploy. Likely `app.innerverse.com` or `beta.innerverse.com`.
+Current production URL: `https://innerverse-web-app.vercel.app` — Vercel's free stable alias for the Production deploy. Public, no deployment protection. Used for internal and early-tester access.
+
+Custom domain (`app.innerverse.com` or `beta.innerverse.com`) remains the plan before opening to the wider tester pool. Revisit at the >10-tester milestone gate.
 
 ## Build Philosophy
 
