@@ -9,6 +9,7 @@ import {
 } from "react";
 import Link from "next/link";
 
+import { BackArrowIcon } from "@/app/_components/icons";
 import { formatTime } from "@/lib/format";
 import { endSession } from "../actions";
 
@@ -128,19 +129,7 @@ export function ChatView({
           aria-label="Back"
           className="rounded-md p-1 text-neutral-400 transition hover:bg-white/5 hover:text-white"
         >
-          <svg
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth={2}
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            className="h-5 w-5"
-            aria-hidden
-          >
-            <path d="M19 12H5" />
-            <path d="M12 19l-7-7 7-7" />
-          </svg>
+          <BackArrowIcon className="h-5 w-5" />
         </Link>
         <div className="flex-1">
           <h1 className="text-base font-semibold text-white">Coaching Session</h1>

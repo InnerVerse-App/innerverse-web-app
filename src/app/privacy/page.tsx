@@ -1,4 +1,5 @@
 import { LegalPageShell } from "@/app/_components/LegalPageShell";
+import { SUPPORT_EMAIL } from "@/lib/contact";
 
 export const metadata = { title: "Privacy Policy" };
 
@@ -100,10 +101,10 @@ export default function PrivacyPage() {
       <Section title="Contact">
         Privacy questions or data requests:{" "}
         <a
-          href="mailto:hello@mastersofbadassery.com"
+          href={`mailto:${SUPPORT_EMAIL}`}
           className="text-brand-primary underline"
         >
-          hello@mastersofbadassery.com
+          {SUPPORT_EMAIL}
         </a>
       </Section>
     </LegalPageShell>
