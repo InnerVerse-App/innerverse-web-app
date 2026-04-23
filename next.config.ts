@@ -2,7 +2,14 @@ import type { NextConfig } from "next";
 import { withSentryConfig } from "@sentry/nextjs";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  // The coaching-prompt module reads reference/prompt-coaching-chat.md
+  // (and later prompt-session-end-v3.md in Chunk 6.3) at runtime via
+  // fs.readFileSync. Next.js's bundler only tracks static imports, so
+  // the .md files need to be explicitly included in the serverless
+  // function bundle or production reads ENOENT.
+  outputFileTracingIncludes: {
+    "/**/*": ["./reference/prompt-*.md"],
+  },
 };
 
 // withSentryConfig injects Sentry's webpack plugin (source-map upload,
