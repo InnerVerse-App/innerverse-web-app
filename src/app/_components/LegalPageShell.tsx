@@ -1,6 +1,8 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 
+import { BackArrowIcon } from "./icons";
+
 // Header + content shell for the legal / support pages (/terms,
 // /privacy, /support). Separate from PageShell because these pages
 // don't show the bottom nav — they're navigated to from Settings
@@ -21,19 +23,7 @@ export function LegalPageShell({
             aria-label="Back"
             className="rounded-md p-1 text-neutral-400 transition hover:bg-white/5 hover:text-white"
           >
-            <svg
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth={2}
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              className="h-5 w-5"
-              aria-hidden
-            >
-              <path d="M19 12H5" />
-              <path d="M12 19l-7-7 7-7" />
-            </svg>
+            <BackArrowIcon className="h-5 w-5" />
           </Link>
           <h1 className="text-lg font-semibold text-white">{title}</h1>
         </div>
