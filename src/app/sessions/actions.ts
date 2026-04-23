@@ -48,8 +48,11 @@ export async function startSession(): Promise<void> {
   await ensureCoachingState(ctx);
 
   const input = await buildSessionStartInput({ userName });
-  const sessionRow = await createSessionRow(ctx);
 
+  // Call OpenAI BEFORE inserting any rows. If the call fails (network,
+  // auth, quota, missing env), we leave no orphan `sessions` row. Once
+  // the call succeeds we have the opening text + response_id and both
+  // inserts are cheap / effectively infallible.
   let openingText: string;
   let responseId: string;
   try {
@@ -62,15 +65,15 @@ export async function startSession(): Promise<void> {
     responseId = response.id;
   } catch (err) {
     console.error("startSession: OpenAI call failed", {
-      sessionId: sessionRow.id,
       error: err instanceof Error ? err.message : String(err),
     });
     Sentry.captureException(err, {
-      tags: { stage: "session_start_openai", session_id: sessionRow.id },
+      tags: { stage: "session_start_openai" },
     });
     throw err;
   }
 
+  const sessionRow = await createSessionRow(ctx);
   await appendMessage(ctx, {
     session_id: sessionRow.id,
     is_sent_by_ai: true,
