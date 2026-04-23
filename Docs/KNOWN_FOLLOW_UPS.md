@@ -703,3 +703,14 @@ Root cause: `npx supabase db dump --linked -f ...` shells out to a Postgres-vers
 Blast radius: Operator-on-Windows-without-Docker cannot run the documented backup. During the Phase 6 Chunk 6.1 prod apply (2026-04-22), the backup step was skipped — justified by zero prod data + purely-additive migration (DOWN block in the migration file is the rollback). Once real user data lands at the >10-tester gate, this becomes blocking: backup is required, and the documented command won't run.
 Suggested fix: Either (a) install Docker Desktop on the operator's machine and document it as a prerequisite in `supabase/README.md`, (b) switch the documented backup to a no-Docker alternative (Supabase dashboard → Database → Backups, or `pg_dump` via direct connection string with `psql` installed), or (c) defer the upgrade to Pro tier (which adds PITR + automated backups, removing the need for manual `pg_dump` for routine work). Decide before the >10-tester milestone gate.
 Status: OPEN
+
+## 2026-04-23 — Vercel Hobby cron cap blocks sub-daily abandonment sweep
+
+FINDING 1
+Severity: MED
+Lens: operator
+Location: vercel.json, src/app/api/cron/sweep-stale-sessions/route.ts
+Root cause: Vercel Hobby tier caps cron job frequency at once-per-day. Phase 6 Chunk 6.3 originally shipped with `*/15 * * * *` (every 15 minutes) in `vercel.json`, which Vercel silently rejected — the branch had no deployment created at all, only a "deployment failed" status check with no buildable log. Downgraded to daily `0 9 * * *` to get the branch deploying. Daily cron means abandoned sessions (user closes tab without clicking End on a substantive session) get analyzed within ~24 hours in steady state, up to ~48h worst case. The operator "Run now" button from the Vercel dashboard still works for on-demand sweeps during testing.
+Blast radius: At current tester scale (operator only) this is harmless — manual Run-now covers abandonment testing. Real users abandoning sessions would see stale "in-progress" state on /home for up to a day once 6.4 surfaces that state. Not data loss — just UX lag on the cross-session-memory feed.
+Suggested fix: Before opening to >10 testers, choose one: (a) upgrade Vercel project to Pro (~$20/mo) and change schedule back to `*/15 * * * *`; (b) wire an external cron service (cron-job.org, GitHub Actions, EasyCron, etc.) that posts to `/api/cron/sweep-stale-sessions` with the shared secret at 15-minute intervals; (c) accept the daily cadence as v1 behavior if UX testing shows it's tolerable. Option (b) is free and flexible.
+Status: OPEN
