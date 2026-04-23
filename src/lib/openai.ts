@@ -15,10 +15,14 @@ export const MAX_OUTPUT_TOKENS = 2000;
 // 60s covers the non-streaming session-start call.
 const CLIENT_TIMEOUT_MS = 60_000;
 
+let cachedClient: OpenAI | null = null;
+
 export function openaiClient(): OpenAI {
+  if (cachedClient) return cachedClient;
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
     throw new Error("Missing env: OPENAI_API_KEY");
   }
-  return new OpenAI({ apiKey, timeout: CLIENT_TIMEOUT_MS });
+  cachedClient = new OpenAI({ apiKey, timeout: CLIENT_TIMEOUT_MS });
+  return cachedClient;
 }

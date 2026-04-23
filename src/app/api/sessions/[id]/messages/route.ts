@@ -6,7 +6,6 @@ import { MODEL_SESSION_CHAT, openaiClient } from "@/lib/openai";
 import {
   appendMessage,
   lastAssistantResponseId,
-  loadSessionForUser,
 } from "@/lib/sessions";
 import { supabaseForUser } from "@/lib/supabase";
 
@@ -45,11 +44,20 @@ export async function POST(
     return NextResponse.json({ error: "empty_message" }, { status: 400 });
   }
 
-  const loaded = await loadSessionForUser(sessionId);
-  if (!loaded) {
+  // Minimal ownership + active-session check. Don't use
+  // loadSessionForUser here — that also fetches the full message
+  // transcript, which this handler never reads (the client already
+  // has it from the server-rendered page).
+  const { data: sessionCheck, error: sessionCheckErr } = await ctx.client
+    .from("sessions")
+    .select("ended_at")
+    .eq("id", sessionId)
+    .maybeSingle();
+  if (sessionCheckErr) throw sessionCheckErr;
+  if (!sessionCheck) {
     return NextResponse.json({ error: "session_not_found" }, { status: 404 });
   }
-  if (loaded.session.ended_at) {
+  if (sessionCheck.ended_at) {
     return NextResponse.json({ error: "session_ended" }, { status: 409 });
   }
 
