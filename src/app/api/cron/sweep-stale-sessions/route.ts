@@ -8,17 +8,25 @@ import { supabaseAdmin } from "@/lib/supabase";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-// Abandoned-session sweep. Runs on Vercel Cron every 15 minutes
-// (vercel.json) and manually via the dashboard "Run now" button.
-// Finds sessions that were never ended and whose most recent message
-// is at least STALE_IDLE_MINUTES old, closes them, and runs the
-// gpt-5 analysis for any that crossed the substantive threshold.
+// Abandoned-session sweep. Scheduled daily at 09:00 UTC by Vercel
+// Cron (vercel.json) and triggerable on demand via the dashboard
+// "Run now" button. Finds sessions that were never ended and whose
+// most recent message is at least STALE_IDLE_MINUTES old, closes
+// them, and runs gpt-5 analysis for any that crossed the
+// substantive threshold.
+//
+// Daily schedule is the Vercel Hobby cron cap. This is acceptable
+// at current tester scale because (a) operator can "Run now" from
+// the dashboard when testing, and (b) real-user abandonment is
+// rare enough that once-daily cleanup is fine for v1. Revisit
+// before the >10-tester gate — either upgrade to Pro for sub-daily
+// schedules or wire an external cron service. See Docs/KNOWN_FOLLOW_UPS.md.
 //
 // Auth: Vercel Cron adds an Authorization: Bearer <CRON_SECRET>
 // header automatically when CRON_SECRET is set in env vars. The
 // check below is both the auth for cron and the gate against
-// external abuse. Manual testing: set the header from the Vercel
-// dashboard's Run-now or curl with the secret.
+// external abuse. Manual testing: use the Run-now button from
+// the Vercel dashboard, or curl the endpoint with the secret.
 
 const STALE_IDLE_MINUTES = 30;
 const SWEEP_BATCH_LIMIT = 50;
