@@ -1,7 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { auth } from "@clerk/nextjs/server";
+import { auth, currentUser } from "@clerk/nextjs/server";
 import * as Sentry from "@sentry/nextjs";
 
 import { buildSessionStartInput } from "@/lib/coaching-prompt";
@@ -18,16 +18,34 @@ import {
 } from "@/lib/sessions";
 import { supabaseForUser } from "@/lib/supabase";
 
+// Resolve the user's first name for the coaching prompt's
+// `Client: <user_name>` field. Three-tier fallback:
+//   1. users.display_name — populated by the Clerk webhook on
+//      Production. Preferred because the webhook is the canonical
+//      lifecycle source.
+//   2. Clerk's live user object (currentUser()) — firstName. Covers
+//      Preview deploys where the Clerk webhook isn't wired and the
+//      users row was self-healed with no display_name set.
+//   3. "friend" — last-resort generic address, so the prompt never
+//      renders `Client: null` or an empty string.
 async function readUserName(): Promise<string> {
   const ctx = await supabaseForUser();
-  if (!ctx) return "friend";
-  const { data, error } = await ctx.client
-    .from("users")
-    .select("display_name")
-    .eq("id", ctx.userId)
-    .maybeSingle();
-  if (error) throw error;
-  return data?.display_name?.trim() || "friend";
+  if (ctx) {
+    const { data, error } = await ctx.client
+      .from("users")
+      .select("display_name")
+      .eq("id", ctx.userId)
+      .maybeSingle();
+    if (error) throw error;
+    const fromDb = data?.display_name?.trim();
+    if (fromDb) return fromDb;
+  }
+
+  const clerkUser = await currentUser();
+  const fromClerk = clerkUser?.firstName?.trim();
+  if (fromClerk) return fromClerk;
+
+  return "friend";
 }
 
 // Creates a new coaching session and the coach's opening message,
