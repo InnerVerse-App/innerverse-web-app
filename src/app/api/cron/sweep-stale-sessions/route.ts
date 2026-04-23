@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import * as Sentry from "@sentry/nextjs";
 
+import { captureSessionError } from "@/lib/observability";
 import { runSessionEndAnalysis } from "@/lib/session-end";
 import { SUBSTANTIVE_MESSAGE_THRESHOLD } from "@/lib/sessions";
 import { supabaseAdmin } from "@/lib/supabase";
@@ -95,7 +95,7 @@ export async function GET(req: Request): Promise<Response> {
   try {
     stale = await findStaleSessions();
   } catch (err) {
-    Sentry.captureException(err, { tags: { stage: "cron_sweep_scan" } });
+    captureSessionError(err, "cron_sweep_scan");
     throw err;
   }
 
@@ -117,9 +117,7 @@ export async function GET(req: Request): Promise<Response> {
       .is("ended_at", null);
     if (closeErr) {
       results.failed += 1;
-      Sentry.captureException(closeErr, {
-        tags: { stage: "cron_sweep_close", session_id: s.id },
-      });
+      captureSessionError(closeErr, "cron_sweep_close", s.id);
       continue;
     }
     results.closed += 1;
@@ -140,9 +138,7 @@ export async function GET(req: Request): Promise<Response> {
       results.failed += 1;
       // runSessionEndAnalysis already captures on OpenAI / RPC
       // failures; this is a secondary capture with cron context.
-      Sentry.captureException(err, {
-        tags: { stage: "cron_sweep_analyze", session_id: s.id },
-      });
+      captureSessionError(err, "cron_sweep_analyze", s.id);
     }
   }
 

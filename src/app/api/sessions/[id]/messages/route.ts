@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
-import * as Sentry from "@sentry/nextjs";
 
+import { captureSessionError } from "@/lib/observability";
 import { MODEL_SESSION_CHAT, openaiClient } from "@/lib/openai";
 import {
   appendMessage,
@@ -119,9 +119,7 @@ export async function POST(
           sessionId,
           error: err instanceof Error ? err.message : String(err),
         });
-        Sentry.captureException(err, {
-          tags: { stage: "session_chat_stream", session_id: sessionId },
-        });
+        captureSessionError(err, "session_chat_stream", sessionId);
       } finally {
         controller.close();
       }

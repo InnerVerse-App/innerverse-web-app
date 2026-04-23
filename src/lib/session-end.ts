@@ -2,8 +2,8 @@ import "server-only";
 
 import { readFileSync } from "node:fs";
 import path from "node:path";
-import * as Sentry from "@sentry/nextjs";
 
+import { captureSessionError } from "@/lib/observability";
 import {
   MAX_OUTPUT_TOKENS,
   MODEL_SESSION_END,
@@ -82,9 +82,7 @@ export async function runSessionEndAnalysis(
       sessionId,
       error: err instanceof Error ? err.message : String(err),
     });
-    Sentry.captureException(err, {
-      tags: { stage: "session_end_openai", session_id: sessionId },
-    });
+    captureSessionError(err, "session_end_openai", sessionId);
     throw err;
   }
 
@@ -98,9 +96,7 @@ export async function runSessionEndAnalysis(
       code: error.code,
       message: error.message,
     });
-    Sentry.captureException(error, {
-      tags: { stage: "session_end_rpc", session_id: sessionId },
-    });
+    captureSessionError(error, "session_end_rpc", sessionId);
     throw error;
   }
 

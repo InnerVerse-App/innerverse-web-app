@@ -1,7 +1,8 @@
 import { redirect } from "next/navigation";
 import { auth } from "@clerk/nextjs/server";
 
-import { BottomNav } from "@/app/home/BottomNav";
+import { PageShell } from "@/app/_components/PageShell";
+import { formatDateCompact } from "@/lib/format";
 import {
   getOnboardingState,
   isOnboardingComplete,
@@ -40,13 +41,6 @@ async function loadProgress(): Promise<{
   };
 }
 
-function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-  });
-}
-
 export default async function ProgressPage() {
   const session = await auth();
   if (!session?.userId) redirect("/sign-in");
@@ -57,20 +51,15 @@ export default async function ProgressPage() {
   const { breakthroughs, insights } = await loadProgress();
 
   return (
-    <div className="flex min-h-screen flex-col bg-brand-dark text-neutral-200">
-      <main className="flex-1 px-4 py-6 sm:px-8 sm:py-10">
-        <div className="mx-auto max-w-2xl">
-          <h1 className="text-3xl font-bold text-white">Your Progress</h1>
-          <p className="mt-1 text-sm text-neutral-400">
-            Track your personal growth development.
-          </p>
+    <PageShell active="progress">
+      <h1 className="text-3xl font-bold text-white">Your Progress</h1>
+      <p className="mt-1 text-sm text-neutral-400">
+        Track your personal growth development.
+      </p>
 
-          <Section title="Breakthroughs" items={breakthroughs} />
-          <Section title="Insights" items={insights} />
-        </div>
-      </main>
-      <BottomNav active="progress" />
-    </div>
+      <Section title="Breakthroughs" items={breakthroughs} />
+      <Section title="Insights" items={insights} />
+    </PageShell>
   );
 }
 
@@ -92,7 +81,7 @@ function Section({ title, items }: { title: string; items: TextRow[] }) {
             >
               <p className="text-sm text-neutral-200">{item.content}</p>
               <p className="mt-1 text-[11px] text-neutral-500">
-                {formatDate(item.created_at)}
+                {formatDateCompact(item.created_at)}
               </p>
             </li>
           ))}

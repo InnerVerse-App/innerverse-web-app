@@ -5,6 +5,7 @@ import { useState } from "react";
 import { useFormStatus } from "react-dom";
 
 import { submitSessionFeedback } from "../../actions";
+import { FEEDBACK_FIELDS } from "./fields";
 
 type Props = { sessionId: string };
 
@@ -48,7 +49,7 @@ export function FeedbackForm({ sessionId }: Props) {
             subtitle="Want to capture any insights from this session? This note is just for you."
           >
             <textarea
-              name="reflection"
+              name={FEEDBACK_FIELDS.REFLECTION}
               rows={4}
               placeholder="What stood out to you in this session? Any insights or realizations…"
               className="w-full resize-none rounded-lg border border-white/10 bg-white/5 px-3 py-2.5 text-sm text-white placeholder:text-neutral-500 focus:outline-none focus:ring-2 focus:ring-brand-primary"
@@ -60,19 +61,19 @@ export function FeedbackForm({ sessionId }: Props) {
             subtitle="Your feedback helps us improve your coaching experience"
           >
             <RatingSlider
-              name="supportive_rating"
+              name={FEEDBACK_FIELDS.SUPPORTIVE_RATING}
               question="How supportive did this session feel?"
               lowLabel="Not helpful"
               highLabel="Very supportive"
             />
             <RatingSlider
-              name="helpful_rating"
+              name={FEEDBACK_FIELDS.HELPFUL_RATING}
               question="How helpful were the questions and reflections?"
               lowLabel="Not helpful"
               highLabel="Very supportive"
             />
             <RatingSlider
-              name="aligned_rating"
+              name={FEEDBACK_FIELDS.ALIGNED_RATING}
               question="Did this session feel aligned with what you needed today?"
               lowLabel="Not helpful"
               highLabel="Very supportive"
@@ -85,7 +86,7 @@ export function FeedbackForm({ sessionId }: Props) {
               <span className="text-xs text-neutral-500">(optional)</span>
             </label>
             <textarea
-              name="additional_feedback"
+              name={FEEDBACK_FIELDS.ADDITIONAL_FEEDBACK}
               rows={3}
               placeholder="Any additional thoughts about this session? What could be improved?"
               className="w-full resize-none rounded-lg border border-white/10 bg-white/5 px-3 py-2.5 text-sm text-white placeholder:text-neutral-500 focus:outline-none focus:ring-2 focus:ring-brand-primary"

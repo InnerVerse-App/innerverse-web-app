@@ -9,6 +9,7 @@ import {
 } from "react";
 import Link from "next/link";
 
+import { formatTime } from "@/lib/format";
 import { endSession } from "../actions";
 
 type Message = {
@@ -24,15 +25,6 @@ type Props = {
   ended: boolean;
   initialMessages: Message[];
 };
-
-function formatTime(iso: string): string {
-  const d = new Date(iso);
-  return d.toLocaleTimeString([], {
-    hour: "numeric",
-    minute: "2-digit",
-    hour12: true,
-  });
-}
 
 export function ChatView({
   sessionId,

@@ -7,8 +7,9 @@ import {
 } from "@/lib/onboarding";
 import { COACHES } from "@/app/onboarding/data";
 import { startSession } from "@/app/sessions/actions";
+import { formatDateLong } from "@/lib/format";
 import { supabaseForUser } from "@/lib/supabase";
-import { BottomNav } from "./BottomNav";
+import { PageShell } from "@/app/_components/PageShell";
 import { StartSessionButton } from "./StartSessionButton";
 
 export const dynamic = "force-dynamic";
@@ -39,14 +40,6 @@ async function loadLastCompletedSession(): Promise<LastSession | null> {
   return (data as LastSession | null) ?? null;
 }
 
-function formatSessionDate(iso: string): string {
-  return new Date(iso).toLocaleDateString(undefined, {
-    month: "long",
-    day: "numeric",
-    year: "numeric",
-  });
-}
-
 export default async function HomePage() {
   const session = await auth();
   if (!session?.userId) {
@@ -62,25 +55,20 @@ export default async function HomePage() {
   const lastSession = await loadLastCompletedSession();
 
   return (
-    <div className="flex min-h-screen flex-col bg-brand-dark text-neutral-200">
-      <main className="flex-1 px-4 py-6 sm:px-8 sm:py-10">
-        <div className="mx-auto max-w-2xl">
-          <h1 className="text-3xl font-bold text-white sm:text-4xl">
-            Welcome to InnerVerse
-          </h1>
-          <p className="mt-1 text-sm text-neutral-400 sm:text-base">
-            Ready to start your growth journey?
-          </p>
+    <PageShell active="home">
+      <h1 className="text-3xl font-bold text-white sm:text-4xl">
+        Welcome to InnerVerse
+      </h1>
+      <p className="mt-1 text-sm text-neutral-400 sm:text-base">
+        Ready to start your growth journey?
+      </p>
 
-          {lastSession ? (
-            <LastSessionCard session={lastSession} />
-          ) : (
-            <FirstSessionCard coachLabelText={coach} />
-          )}
-        </div>
-      </main>
-      <BottomNav active="home" />
-    </div>
+      {lastSession ? (
+        <LastSessionCard session={lastSession} />
+      ) : (
+        <FirstSessionCard coachLabelText={coach} />
+      )}
+    </PageShell>
   );
 }
 
@@ -147,7 +135,7 @@ function LastSessionCard({ session }: { session: LastSession }) {
         </h2>
       </div>
       <p className="mt-2 text-xs text-neutral-400">
-        {formatSessionDate(session.ended_at)}
+        {formatDateLong(session.ended_at)}
       </p>
       <p className="mt-3 text-sm text-neutral-300">{summaryText}</p>
       <form action={startSession} className="mt-5">
