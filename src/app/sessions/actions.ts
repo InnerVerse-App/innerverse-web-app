@@ -16,7 +16,7 @@ import {
   endSession as endSessionWrite,
   ensureCoachingState,
 } from "@/lib/sessions";
-import { supabaseForUser } from "@/lib/supabase";
+import { supabaseForUser, type UserSupabase } from "@/lib/supabase";
 
 // Resolve the user's first name for the coaching prompt's
 // `Client: <user_name>` field. Three-tier fallback:
@@ -28,18 +28,15 @@ import { supabaseForUser } from "@/lib/supabase";
 //      users row was self-healed with no display_name set.
 //   3. "friend" — last-resort generic address, so the prompt never
 //      renders `Client: null` or an empty string.
-async function readUserName(): Promise<string> {
-  const ctx = await supabaseForUser();
-  if (ctx) {
-    const { data, error } = await ctx.client
-      .from("users")
-      .select("display_name")
-      .eq("id", ctx.userId)
-      .maybeSingle();
-    if (error) throw error;
-    const fromDb = data?.display_name?.trim();
-    if (fromDb) return fromDb;
-  }
+async function readUserName(ctx: UserSupabase): Promise<string> {
+  const { data, error } = await ctx.client
+    .from("users")
+    .select("display_name")
+    .eq("id", ctx.userId)
+    .maybeSingle();
+  if (error) throw error;
+  const fromDb = data?.display_name?.trim();
+  if (fromDb) return fromDb;
 
   const clerkUser = await currentUser();
   const fromClerk = clerkUser?.firstName?.trim();
@@ -62,8 +59,10 @@ export async function startSession(): Promise<void> {
   const ctx = await supabaseForUser();
   if (!ctx) redirect("/sign-in");
 
-  const userName = await readUserName();
-  await ensureCoachingState(ctx);
+  const [userName] = await Promise.all([
+    readUserName(ctx),
+    ensureCoachingState(ctx),
+  ]);
 
   const input = await buildSessionStartInput({ userName });
 

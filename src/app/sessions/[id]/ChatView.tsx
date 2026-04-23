@@ -49,7 +49,10 @@ export function ChatView({
   const bottomRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    // `behavior: "auto"` because this effect fires on every streamed
+    // delta during a turn — smooth-scrolling 500 times for a 500-token
+    // response causes visible jank.
+    bottomRef.current?.scrollIntoView({ behavior: "auto" });
   }, [messages]);
 
   async function send(e: FormEvent) {
