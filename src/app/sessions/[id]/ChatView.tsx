@@ -40,6 +40,10 @@ export function ChatView({
   const [error, setError] = useState<string | null>(null);
 
   const bottomRef = useRef<HTMLDivElement | null>(null);
+  // Holds the in-flight stream's AbortController so component unmount
+  // (user navigates away) cancels the fetch, which propagates through
+  // to cancel the upstream OpenAI call on the server.
+  const streamAbortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     // `behavior: "auto"` because this effect fires on every streamed
@@ -47,6 +51,12 @@ export function ChatView({
     // response causes visible jank.
     bottomRef.current?.scrollIntoView({ behavior: "auto" });
   }, [messages]);
+
+  useEffect(() => {
+    return () => {
+      streamAbortRef.current?.abort();
+    };
+  }, []);
 
   async function send(e: FormEvent) {
     e.preventDefault();
@@ -72,11 +82,15 @@ export function ChatView({
     setMessages((prev) => [...prev, userMsg, aiStub]);
     setStreaming(true);
 
+    const controller = new AbortController();
+    streamAbortRef.current = controller;
+
     try {
       const res = await fetch(`/api/sessions/${sessionId}/messages`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ content }),
+        signal: controller.signal,
       });
       if (!res.ok || !res.body) {
         throw new Error(`request failed (${res.status})`);
@@ -94,10 +108,15 @@ export function ChatView({
         );
       }
     } catch (err) {
+      // Abort on unmount is the intended cancel path — not an error.
+      if (err instanceof DOMException && err.name === "AbortError") return;
       console.error("ChatView: send failed", err);
       setError("Something went wrong. Please try again.");
       setMessages((prev) => prev.filter((m) => m.id !== aiMsgId));
     } finally {
+      if (streamAbortRef.current === controller) {
+        streamAbortRef.current = null;
+      }
       setStreaming(false);
     }
   }
