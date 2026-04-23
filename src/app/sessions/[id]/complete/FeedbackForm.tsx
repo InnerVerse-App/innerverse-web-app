@@ -13,7 +13,7 @@ export function FeedbackForm({ sessionId }: Props) {
   const submit = submitSessionFeedback.bind(null, sessionId);
 
   return (
-    <div className="flex min-h-screen flex-col bg-brand-dark text-neutral-200">
+    <div className="flex min-h-[100dvh] flex-col bg-brand-dark text-neutral-200">
       <header className="flex items-center gap-3 border-b border-white/10 px-4 py-3">
         <Link
           href="/home"

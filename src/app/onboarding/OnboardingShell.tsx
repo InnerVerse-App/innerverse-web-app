@@ -55,7 +55,7 @@ export function OnboardingShell({
   };
 
   return (
-    <div className="flex min-h-screen flex-col bg-brand-dark text-neutral-200">
+    <div className="flex min-h-[100dvh] flex-col bg-brand-dark text-neutral-200">
       <header className="border-b border-white/5 px-4 py-3 sm:px-8">
         <div className="mx-auto flex max-w-2xl items-center justify-between">
           <div className="text-base font-semibold tracking-tight text-white">

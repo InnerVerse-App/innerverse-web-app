@@ -121,7 +121,7 @@ export function ChatView({
   }
 
   return (
-    <div className="flex min-h-screen flex-col bg-brand-dark text-neutral-200">
+    <div className="flex min-h-[100dvh] flex-col bg-brand-dark text-neutral-200">
       <header className="sticky top-0 z-10 flex items-center gap-3 border-b border-white/10 bg-brand-dark px-4 py-3">
         <Link
           href="/home"
@@ -179,7 +179,7 @@ export function ChatView({
 
       <form
         onSubmit={send}
-        className="sticky bottom-0 border-t border-white/10 bg-brand-dark px-4 py-3"
+        className="sticky bottom-0 border-t border-white/10 bg-brand-dark px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]"
       >
         <div className="mx-auto flex max-w-2xl items-end gap-2">
           <textarea
