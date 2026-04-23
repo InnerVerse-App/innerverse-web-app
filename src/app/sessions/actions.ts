@@ -3,9 +3,9 @@
 import { after } from "next/server";
 import { redirect } from "next/navigation";
 import { auth, currentUser } from "@clerk/nextjs/server";
-import * as Sentry from "@sentry/nextjs";
 
 import { buildSessionStartInput } from "@/lib/coaching-prompt";
+import { captureSessionError } from "@/lib/observability";
 import {
   MAX_OUTPUT_TOKENS,
   MODEL_SESSION_START,
@@ -19,6 +19,8 @@ import {
 } from "@/lib/sessions";
 import { runSessionEndAnalysis } from "@/lib/session-end";
 import { supabaseForUser, type UserSupabase } from "@/lib/supabase";
+
+import { FEEDBACK_FIELDS } from "./[id]/complete/fields";
 
 // Postgres SQLSTATE 23505 = unique_violation. Used by the feedback
 // submit flow: a duplicate insert is a user double-click, not an
@@ -91,9 +93,7 @@ export async function startSession(): Promise<void> {
     console.error("startSession: OpenAI call failed", {
       error: err instanceof Error ? err.message : String(err),
     });
-    Sentry.captureException(err, {
-      tags: { stage: "session_start_openai" },
-    });
+    captureSessionError(err, "session_start_openai");
     throw err;
   }
 
@@ -156,11 +156,11 @@ export async function submitSessionFeedback(
   const ctx = await supabaseForUser();
   if (!ctx) redirect("/sign-in");
 
-  const reflection = trimOrNull(formData.get("reflection"));
-  const supportive = parseRating(formData.get("supportive_rating"));
-  const helpful = parseRating(formData.get("helpful_rating"));
-  const aligned = parseRating(formData.get("aligned_rating"));
-  const additional = trimOrNull(formData.get("additional_feedback"));
+  const reflection = trimOrNull(formData.get(FEEDBACK_FIELDS.REFLECTION));
+  const supportive = parseRating(formData.get(FEEDBACK_FIELDS.SUPPORTIVE_RATING));
+  const helpful = parseRating(formData.get(FEEDBACK_FIELDS.HELPFUL_RATING));
+  const aligned = parseRating(formData.get(FEEDBACK_FIELDS.ALIGNED_RATING));
+  const additional = trimOrNull(formData.get(FEEDBACK_FIELDS.ADDITIONAL_FEEDBACK));
 
   // Schema CHECK requires at least one non-null value; a fully-empty
   // submit is indistinguishable from Skip and lands on /home without
@@ -183,9 +183,7 @@ export async function submitSessionFeedback(
     additional_feedback: additional,
   });
   if (error && error.code !== PG_UNIQUE_VIOLATION) {
-    Sentry.captureException(error, {
-      tags: { stage: "session_feedback_insert", session_id: sessionId },
-    });
+    captureSessionError(error, "session_feedback_insert", sessionId);
     throw error;
   }
   redirect("/home");
