@@ -9,8 +9,8 @@ type Tab = {
   icon: JSX.Element;
 };
 
-// Only Home is wired in v1; the other tabs are visual placeholders
-// until their features land.
+// Settings is the one remaining visual-only tab per decisions.md
+// Tier 2 (account info + sign-out, later).
 const TABS: Tab[] = [
   {
     key: "home",
@@ -25,7 +25,7 @@ const TABS: Tab[] = [
   {
     key: "sessions",
     label: "Sessions",
-    href: null,
+    href: "/sessions",
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="h-6 w-6" aria-hidden>
         <path strokeLinecap="round" strokeLinejoin="round" d="M8.625 12a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0H8.25m4.125 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0H12m4.125 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 0 1-2.555-.337A5.972 5.972 0 0 1 5.41 20.97a5.969 5.969 0 0 1-.474-.065 4.48 4.48 0 0 0 .978-2.025c.09-.457-.133-.901-.467-1.226C3.93 16.178 3 14.189 3 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25Z" />
@@ -35,7 +35,7 @@ const TABS: Tab[] = [
   {
     key: "progress",
     label: "Progress",
-    href: null,
+    href: "/progress",
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="h-6 w-6" aria-hidden>
         <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 18 9 11.25l4.306 4.306a11.95 11.95 0 0 1 5.814-5.518l2.74-1.22m0 0-5.94-2.281m5.94 2.28-2.28 5.941" />
@@ -45,7 +45,7 @@ const TABS: Tab[] = [
   {
     key: "goals",
     label: "Goals",
-    href: null,
+    href: "/goals",
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="h-6 w-6" aria-hidden>
         <circle cx="12" cy="12" r="9" />
