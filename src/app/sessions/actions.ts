@@ -1,0 +1,118 @@
+"use server";
+
+import { redirect } from "next/navigation";
+import { auth, currentUser } from "@clerk/nextjs/server";
+import * as Sentry from "@sentry/nextjs";
+
+import { buildSessionStartInput } from "@/lib/coaching-prompt";
+import {
+  MAX_OUTPUT_TOKENS,
+  MODEL_SESSION_START,
+  openaiClient,
+} from "@/lib/openai";
+import {
+  appendMessage,
+  createSessionRow,
+  endSession as endSessionWrite,
+  ensureCoachingState,
+} from "@/lib/sessions";
+import { supabaseForUser } from "@/lib/supabase";
+
+// Resolve the user's first name for the coaching prompt's
+// `Client: <user_name>` field. Three-tier fallback:
+//   1. users.display_name — populated by the Clerk webhook on
+//      Production. Preferred because the webhook is the canonical
+//      lifecycle source.
+//   2. Clerk's live user object (currentUser()) — firstName. Covers
+//      Preview deploys where the Clerk webhook isn't wired and the
+//      users row was self-healed with no display_name set.
+//   3. "friend" — last-resort generic address, so the prompt never
+//      renders `Client: null` or an empty string.
+async function readUserName(): Promise<string> {
+  const ctx = await supabaseForUser();
+  if (ctx) {
+    const { data, error } = await ctx.client
+      .from("users")
+      .select("display_name")
+      .eq("id", ctx.userId)
+      .maybeSingle();
+    if (error) throw error;
+    const fromDb = data?.display_name?.trim();
+    if (fromDb) return fromDb;
+  }
+
+  const clerkUser = await currentUser();
+  const fromClerk = clerkUser?.firstName?.trim();
+  if (fromClerk) return fromClerk;
+
+  return "friend";
+}
+
+// Creates a new coaching session and the coach's opening message,
+// then redirects to the chat page. Called from the "Start session"
+// button on /home as a <form action={startSession}>.
+//
+// The OpenAI call is non-streaming — the opening response is short
+// enough that waiting ~2–5s with a form-pending state is fine UX.
+// Subsequent user turns stream (see /api/sessions/[id]/messages).
+export async function startSession(): Promise<void> {
+  const session = await auth();
+  if (!session?.userId) redirect("/sign-in");
+
+  const ctx = await supabaseForUser();
+  if (!ctx) redirect("/sign-in");
+
+  const userName = await readUserName();
+  await ensureCoachingState(ctx);
+
+  const input = await buildSessionStartInput({ userName });
+
+  // Call OpenAI BEFORE inserting any rows. If the call fails (network,
+  // auth, quota, missing env), we leave no orphan `sessions` row. Once
+  // the call succeeds we have the opening text + response_id and both
+  // inserts are cheap / effectively infallible.
+  let openingText: string;
+  let responseId: string;
+  try {
+    const response = await openaiClient().responses.create({
+      model: MODEL_SESSION_START,
+      input,
+      max_output_tokens: MAX_OUTPUT_TOKENS,
+    });
+    openingText = response.output_text;
+    responseId = response.id;
+  } catch (err) {
+    console.error("startSession: OpenAI call failed", {
+      error: err instanceof Error ? err.message : String(err),
+    });
+    Sentry.captureException(err, {
+      tags: { stage: "session_start_openai" },
+    });
+    throw err;
+  }
+
+  const sessionRow = await createSessionRow(ctx);
+  await appendMessage(ctx, {
+    session_id: sessionRow.id,
+    is_sent_by_ai: true,
+    content: openingText,
+    ai_response_id: responseId,
+  });
+
+  redirect(`/sessions/${sessionRow.id}`);
+}
+
+// Ends a session: flips ended_at + is_substantive. Called by the
+// "End" button in the chat UI. Chunk 6.3 wraps the session-end
+// analysis around this; for 6.2 the session just closes and the
+// user lands back on /home.
+export async function endSession(sessionId: string): Promise<void> {
+  const session = await auth();
+  if (!session?.userId) redirect("/sign-in");
+
+  const ctx = await supabaseForUser();
+  if (!ctx) redirect("/sign-in");
+
+  await endSessionWrite(ctx, sessionId);
+  redirect("/home");
+}

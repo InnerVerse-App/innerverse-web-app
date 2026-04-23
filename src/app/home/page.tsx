@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@clerk/nextjs/server";
 import {
@@ -6,7 +5,9 @@ import {
   isOnboardingComplete,
 } from "@/lib/onboarding";
 import { COACHES } from "@/app/onboarding/data";
+import { startSession } from "@/app/sessions/actions";
 import { BottomNav } from "./BottomNav";
+import { StartSessionButton } from "./StartSessionButton";
 
 export const dynamic = "force-dynamic";
 
@@ -66,13 +67,9 @@ export default async function HomePage() {
               Your coach is ready to help you explore your thoughts, set
               meaningful goals, and create lasting change.
             </p>
-            <Link
-              href="/sessions/new"
-              className="mt-5 flex w-full items-center justify-center gap-2 rounded-md bg-brand-primary px-6 py-3 text-sm font-semibold text-brand-primary-contrast shadow-lg transition hover:bg-brand-primary/90"
-            >
-              <span aria-hidden>⚡</span>
-              Start Your First Session
-            </Link>
+            <form action={startSession} className="mt-5">
+              <StartSessionButton />
+            </form>
           </section>
         </div>
       </main>
