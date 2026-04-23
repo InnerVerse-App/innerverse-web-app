@@ -672,18 +672,17 @@ Status: OPEN (carry-forward)
 
 ### Rejected / hallucinated findings — documented for posterity
 
-Several agent findings did not survive fact-check. Recording them here
-so future readers don't re-raise the same concerns:
+Recording so future readers don't re-raise the same concerns:
 
-- **"Cross-session attack via guessed session UUID"** (security F2, F5). The strengthened INSERT policy at lines 316-405 uses `session_id in (SELECT id FROM sessions WHERE user_id = auth.jwt()->>'sub')` — the subquery already filters sessions to those owned by the caller, so a guessed foreign UUID cannot match. No session-id secrecy assumption is being made.
-- **"TOCTOU race between RLS check and FK commit"** (security F1, data-integrity F3, F7). Postgres runs both the RLS check and the FK validation inside the same transaction. Row-level locks and MVCC visibility rules prevent the interleaving the agents described. If a parent session is deleted mid-transaction, the FK cascade fires atomically or the FK check fails; no partial state escapes.
-- **"Missing service_role grants on new tables"** (architecture F2). Migration `20260422151000_grant_service_role_users.sql:21-25` installs `alter default privileges in schema public grant ... to service_role`, which applies to all tables created in `public` thereafter. New tables in this migration inherit service_role grants automatically.
-- **"Tier 2 scope creep via sessions index"** (architecture F13). The `(user_id, started_at desc)` index is required for Tier 1 cross-session memory ("fetch last session summary" before prompt assembly), not a Tier 2 Sessions-tab optimization.
-- **"N+1 query pattern in RLS subquery"** (architecture F6, F12). A single subquery hitting a PK-indexed + user_id-indexed table per INSERT is O(log n), not N+1. Not a scaling concern at v1 volumes.
-- **"UNIQUE(session_id) on session_feedback creates RLS/schema race"** (security F3). Postgres UNIQUE is atomic; two concurrent INSERTs deterministically produce one success and one unique_violation. Application handles via retry or user-facing "already submitted" message. Standard semantics.
-- **"smallint for progress_percent is a hidden-type-narrowing hazard"** (correctness F1). 0..100 fits in smallint with headroom. supabase-js serializes JS numbers correctly. Not a real issue.
-- **"CHECK ((ended_at IS NULL) OR (summary IS NOT NULL)) to prevent orphans"** (correctness F11). Would incorrectly reject the expected short-session path where 6.3 sets `is_substantive=false` and intentionally skips summary generation.
-- **"Schema-layer enforcement of messages.user_id = sessions.user_id invariant"** (correctness F9, architecture F14). Would require a trigger. Application responsibility is acceptable given strengthened INSERT RLS. Flag only if a bug ever surfaces.
+- **"Cross-session attack via guessed UUID"** (sec F2, F5): INSERT subquery filters sessions to the caller's own — a guessed foreign UUID can't match.
+- **"TOCTOU race between RLS check and FK commit"** (sec F1, data F3, F7): both run in the same transaction; MVCC + row locks prevent the interleaving.
+- **"Missing service_role grants on new tables"** (arch F2): handled by `alter default privileges` in `20260422151000_grant_service_role_users.sql:21-25`.
+- **"Tier 2 scope creep via sessions index"** (arch F13): the index serves Tier 1 cross-session memory (fetch last session summary at prompt assembly).
+- **"N+1 query pattern in RLS subquery"** (arch F6, F12): a single PK-indexed subquery per INSERT is O(log n), not N+1.
+- **"UNIQUE(session_id) on session_feedback creates a race"** (sec F3): Postgres UNIQUE is atomic — standard insert/retry semantics.
+- **"smallint for progress_percent is a hidden type-narrowing hazard"** (corr F1): 0..100 fits with headroom.
+- **"CHECK ((ended_at IS NULL) OR (summary IS NOT NULL)) to prevent orphans"** (corr F11): would reject the expected short-session path where 6.3 sets `is_substantive=false` and skips summary.
+- **"Schema-layer enforcement of messages.user_id = sessions.user_id invariant"** (corr F9, arch F14): would require a trigger; strengthened INSERT RLS makes the application responsibility acceptable.
 
 ### Lens-by-lens checklist coverage
 
@@ -693,3 +692,14 @@ security (14 raw findings, 2 genuine after filter), data-integrity
 + 2 carry-forward), architecture (15 raw, 3 genuine + 2 carry-forward).
 Nothing new surfaced on items 4, 9, 12, 13 beyond what was already in
 the migration design.
+
+## 2026-04-22 — `supabase db dump` requires Docker on Windows
+
+FINDING 1
+Severity: LOW
+Lens: operator
+Location: supabase/README.md (Workflow → "Pre-prod backup" command)
+Root cause: `npx supabase db dump --linked -f ...` shells out to a Postgres-version-matched container image. On Windows without Docker Desktop running, the command fails with "the docker client must be run with elevated privileges to connect" before producing any output. The README workflow lists this as the pre-prod backup step but doesn't note the Docker dependency.
+Blast radius: Operator-on-Windows-without-Docker cannot run the documented backup. During the Phase 6 Chunk 6.1 prod apply (2026-04-22), the backup step was skipped — justified by zero prod data + purely-additive migration (DOWN block in the migration file is the rollback). Once real user data lands at the >10-tester gate, this becomes blocking: backup is required, and the documented command won't run.
+Suggested fix: Either (a) install Docker Desktop on the operator's machine and document it as a prerequisite in `supabase/README.md`, (b) switch the documented backup to a no-Docker alternative (Supabase dashboard → Database → Backups, or `pg_dump` via direct connection string with `psql` installed), or (c) defer the upgrade to Pro tier (which adds PITR + automated backups, removing the need for manual `pg_dump` for routine work). Decide before the >10-tester milestone gate.
+Status: OPEN
