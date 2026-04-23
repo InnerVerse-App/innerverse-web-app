@@ -69,7 +69,9 @@ const TABS: Tab[] = [
 
 export function BottomNav({ active }: { active: TabKey }) {
   return (
-    <nav className="border-t border-white/5 bg-brand-dark/80 backdrop-blur">
+    // pb-[env(safe-area-inset-bottom)] — pads past iOS home-indicator
+    // safe area so the tab row isn't obscured on notched devices.
+    <nav className="border-t border-white/5 bg-brand-dark/80 backdrop-blur pb-[env(safe-area-inset-bottom)]">
       <div className="mx-auto flex max-w-2xl items-stretch justify-between px-2 py-2">
         {TABS.map((tab) => {
           const isActive = tab.key === active;

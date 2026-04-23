@@ -23,7 +23,7 @@ export default async function Home() {
   }
 
   return (
-    <main className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden">
+    <main className="relative flex min-h-[100dvh] flex-col items-center justify-center overflow-hidden">
       <Image
         src="/landing-bg.png"
         alt=""
