@@ -3,7 +3,10 @@ import "server-only";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 
-import { captureSessionError } from "@/lib/observability";
+import {
+  captureSessionError,
+  type SessionErrorStage,
+} from "@/lib/observability";
 import {
   MAX_OUTPUT_TOKENS,
   MODEL_SESSION_END,
@@ -17,22 +20,14 @@ const SESSION_END_PROMPT = readFileSync(
   "utf8",
 ).trim();
 
-// JSON schema for OpenAI structured outputs. Strict-mode constraints:
-//   - every property listed in `required`
-//   - `additionalProperties: false` on every object (including the nested
-//     style_calibration_delta)
-//   - no `minimum` / `maximum` / `minItems` / `multipleOf` — those are
-//     forbidden under strict: true. Range enforcement lives in the prompt
-//     (±0.1 deltas, 0–100 progress_percent) and in the Postgres RPC
-//     (see supabase/migrations/20260423120000_process_session_end_defensive_parse.sql
-//     which clamps progress_percent and guards array types).
+// Strict mode forbids numeric bounds (minimum/maximum/minItems); range
+// enforcement lives in the prompt and in process_session_end's defensive
+// parse (migration 20260423120000).
 //
-// SCHEMA ↔ DB COUPLING: every field here is read by public.process_session_end
-// in that migration. Adding or renaming a field here requires a matching
-// migration that updates the RPC. Dropping a field here is only safe if the
-// RPC stops reading it (the field `updated_goals` was dropped in Phase 6.1
-// for exactly this reason — see migration 20260422170000 scope notes).
-const SESSION_END_SCHEMA = {
+// SCHEMA ↔ DB COUPLING: every field is read by public.process_session_end.
+// Adding or renaming a field requires a matching RPC migration. Dropping a
+// field is only safe once the RPC stops reading it.
+const SESSION_END_SCHEMA: Record<string, unknown> = {
   type: "object",
   additionalProperties: false,
   required: [
@@ -74,7 +69,28 @@ const SESSION_END_SCHEMA = {
       },
     },
   },
-} as const;
+};
+
+function failStage(
+  stage: SessionErrorStage,
+  sessionId: string,
+  err: unknown,
+  context?: Record<string, unknown>,
+): never {
+  const message =
+    err instanceof Error
+      ? err.message
+      : typeof err === "object" && err !== null && "message" in err
+        ? String((err as { message: unknown }).message)
+        : String(err);
+  console.error(`runSessionEndAnalysis: ${stage}`, {
+    sessionId,
+    error: message,
+    ...context,
+  });
+  captureSessionError(err, stage, sessionId);
+  throw err instanceof Error ? err : new Error(message);
+}
 
 type TranscriptRow = {
   is_sent_by_ai: boolean;
@@ -115,9 +131,9 @@ export async function runSessionEndAnalysis(
     return false;
   }
 
-  let analysis: Record<string, unknown>;
+  let response;
   try {
-    const response = await openaiClient().responses.create({
+    response = await openaiClient().responses.create({
       model: MODEL_SESSION_END,
       input: [
         { role: "developer", content: SESSION_END_PROMPT },
@@ -128,69 +144,50 @@ export async function runSessionEndAnalysis(
         format: {
           type: "json_schema",
           name: "session_end_analysis",
-          schema: SESSION_END_SCHEMA as unknown as Record<string, unknown>,
+          schema: SESSION_END_SCHEMA,
           strict: true,
         },
       },
     });
+  } catch (err) {
+    failStage("session_end_openai", sessionId, err);
+  }
 
-    // Truncation check. Long transcripts + a 13-field schema can exhaust
-    // MAX_OUTPUT_TOKENS. When that happens response.status is "incomplete"
-    // and response.output_text is partial JSON — JSON.parse would throw.
-    // Detect explicitly so the Sentry signal is "truncated" (fix: raise
-    // MAX_OUTPUT_TOKENS) rather than a generic parse error.
-    if (response.status !== "completed") {
-      const reason = response.incomplete_details?.reason ?? "unknown";
-      const err = new Error(
+  // Surface truncation as a distinct Sentry stage so the fix-path (raise
+  // MAX_OUTPUT_TOKENS) is obvious instead of a generic parse error.
+  if (response.status !== "completed") {
+    const reason = response.incomplete_details?.reason ?? "unknown";
+    failStage(
+      "session_end_truncated",
+      sessionId,
+      new Error(
         `session-end response not completed: status=${response.status}, reason=${reason}`,
-      );
-      console.error("runSessionEndAnalysis: response not completed", {
-        sessionId,
-        status: response.status,
-        reason,
-      });
-      captureSessionError(err, "session_end_truncated", sessionId);
-      throw err;
-    }
+      ),
+      { status: response.status, reason },
+    );
+  }
 
-    // Refusal check. Structured outputs can still refuse via a safety
-    // filter. output_text is empty on refusal and doesn't throw — we have
-    // to scan the output items explicitly.
-    for (const item of response.output) {
-      if (item.type !== "message") continue;
-      for (const c of item.content) {
-        if (c.type === "refusal") {
-          const err = new Error(
-            `session-end model refused: ${c.refusal}`,
-          );
-          console.error("runSessionEndAnalysis: model refused", {
-            sessionId,
-            refusal: c.refusal,
-          });
-          captureSessionError(err, "session_end_refusal", sessionId);
-          throw err;
-        }
+  // Refusals leave output_text empty without throwing; scan output items
+  // to surface them as a distinct stage.
+  for (const item of response.output) {
+    if (item.type !== "message") continue;
+    for (const c of item.content) {
+      if (c.type === "refusal") {
+        failStage(
+          "session_end_refusal",
+          sessionId,
+          new Error(`session-end model refused: ${c.refusal}`),
+          { refusal: c.refusal },
+        );
       }
     }
+  }
 
+  let analysis: Record<string, unknown>;
+  try {
     analysis = JSON.parse(response.output_text) as Record<string, unknown>;
   } catch (err) {
-    // Truncation + refusal already Sentry-captured above with specific
-    // stage tags; the throw-through path lands here. Anything else
-    // (network, rate limit, actual JSON.parse failure despite structured
-    // outputs) gets the generic session_end_openai tag.
-    if (
-      !(err instanceof Error) ||
-      (err.message.indexOf("not completed") === -1 &&
-        err.message.indexOf("refused") === -1)
-    ) {
-      console.error("runSessionEndAnalysis: OpenAI or JSON parse failed", {
-        sessionId,
-        error: err instanceof Error ? err.message : String(err),
-      });
-      captureSessionError(err, "session_end_openai", sessionId);
-    }
-    throw err;
+    failStage("session_end_openai", sessionId, err);
   }
 
   const { data, error } = await ctx.client.rpc("process_session_end", {
@@ -198,13 +195,10 @@ export async function runSessionEndAnalysis(
     p_analysis: analysis,
   });
   if (error) {
-    console.error("runSessionEndAnalysis: RPC failed", {
-      sessionId,
+    failStage("session_end_rpc", sessionId, error, {
       code: error.code,
       message: error.message,
     });
-    captureSessionError(error, "session_end_rpc", sessionId);
-    throw error;
   }
 
   // RPC returns boolean: true if this call did the work, false if a
