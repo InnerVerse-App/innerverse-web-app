@@ -843,3 +843,24 @@ Root cause: The two awaits are independent data fetches (onboarding row vs. the 
 Blast radius: One extra Supabase round-trip per home-page render (~50–200 ms depending on region). Edge case: if onboarding is incomplete we redirect, so parallelizing would waste loadHomeData's queries for that minority of visits.
 Suggested fix: `const [state, homeData] = await Promise.all([getOnboardingState(), loadHomeData()]);`. Accept the wasted query on incomplete-onboarding redirect (one-time per user).
 Status: OPEN — small, contained fix; not urgent, can be bundled with any future home-page perf pass.
+
+## 2026-04-24 — /simplify on PR #65 (/next-steps page) — deferred pattern-debt
+
+Surfaced by the PR #65 /simplify review. Out of scope for that PR but
+worth tracking so it doesn't get forgotten.
+
+FINDING 1
+Severity: LOW
+Lens: architecture
+Location: src/app/home/page.tsx, src/app/sessions/page.tsx, src/app/sessions/[id]/page.tsx, src/app/progress/page.tsx, src/app/goals/page.tsx, src/app/settings/page.tsx, src/app/next-steps/page.tsx
+Root cause: Every signed-in page repeats the identical gate:
+```tsx
+const session = await auth();
+if (!session?.userId) redirect("/sign-in");
+const onboarding = await getOnboardingState();
+if (!isOnboardingComplete(onboarding)) redirect("/onboarding");
+```
+Seven near-identical blocks. Adding an eighth page means copying the block for the eighth time; any change to the auth-gate contract (new redirect target, logged warnings, extra checks) requires seven file edits with drift risk.
+Blast radius: Maintenance-only. The realistic failure is drift across pages — one page missing a step and silently showing content the gate should have blocked.
+Suggested fix: Extract `requireOnboardedUser()` (or `{ userId, state }`) in `src/lib/auth-gate.ts`. Each page becomes a one-liner at the top. Pages that also want the raw Clerk session can still call `auth()` alongside. Consider pairing with the HomeCard / CardHeader cleanup on pages that also use those, since the top-of-file diff is already being touched.
+Status: OPEN — standalone `refactor: require-onboarded-user helper` PR when convenient.
