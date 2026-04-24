@@ -745,7 +745,7 @@ Location: src/lib/session-end.ts:44-51 (parseAnalysisJson)
 Root cause: Markdown-fence strip before `JSON.parse` tolerates `` ```json…``` `` wrappers but breaks on anything else (double fences, prose prefix, HTML). See archive § FINDING 8.
 Blast radius: Malformed LLM response throws at parse, fails closed, session sticks analyzed=null. Defer until FINDING 4 retries are exercising the path regularly.
 Suggested fix: OpenAI structured output mode (`text: { format: { type: "json_schema", schema: ... } }`) + drop the fence strip. Or Zod-validate the parsed JSON.
-Status: OPEN
+Status: FIXED (2026-04-24, via PR — switched `responses.create()` to structured outputs with a strict JSON schema (`session_end_analysis`) mirroring all 13 fields `process_session_end` reads. `parseAnalysisJson` deleted entirely; inlined `JSON.parse(response.output_text)` at the call site. Explicit truncation check (`response.status !== "completed"`) and refusal scan (`output[].content[].type === "refusal"`) added with distinct Sentry stage tags (`session_end_truncated`, `session_end_refusal`) so incomplete responses don't surface as generic parse errors. Strict-mode constraints (no `minimum`/`maximum`/`minItems` allowed) mean range enforcement stays in the prompt and the RPC defensive-parse migration; prompt trimmed to remove lines fully duplicated by the schema (JSON-only rule, snake_case rule, no-code-fences rule) and the stale `updated_goals` example field that was dropped in Phase 6.1 but still appeared in the example block.
 
 FINDING 9
 Severity: LOW
