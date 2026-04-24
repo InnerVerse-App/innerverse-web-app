@@ -52,11 +52,17 @@ export async function POST(
   // loadSessionForUser here — that also fetches the full message
   // transcript, which this handler never reads (the client already
   // has it from the server-rendered page).
-  const { data: sessionCheck, error: sessionCheckErr } = await ctx.client
-    .from("sessions")
-    .select("ended_at")
-    .eq("id", sessionId)
-    .maybeSingle();
+  const [
+    { data: sessionCheck, error: sessionCheckErr },
+    previousResponseId,
+  ] = await Promise.all([
+    ctx.client
+      .from("sessions")
+      .select("ended_at")
+      .eq("id", sessionId)
+      .maybeSingle(),
+    lastAssistantResponseId(ctx, sessionId),
+  ]);
   if (sessionCheckErr) throw sessionCheckErr;
   if (!sessionCheck) {
     return NextResponse.json({ error: "session_not_found" }, { status: 404 });
@@ -64,8 +70,6 @@ export async function POST(
   if (sessionCheck.ended_at) {
     return NextResponse.json({ error: "session_ended" }, { status: 409 });
   }
-
-  const previousResponseId = await lastAssistantResponseId(ctx, sessionId);
   if (!previousResponseId) {
     // Session exists but has no assistant opening yet — shouldn't
     // happen in the normal flow (startSession writes the opening
@@ -76,15 +80,10 @@ export async function POST(
     );
   }
 
-  // OpenAI call BEFORE persisting the user message. If the stream
-  // creation throws (auth, quota, rate limit), the user message is
-  // never written — no orphan turn in the transcript. If the stream
-  // iterator errors mid-flight, the user message still gets persisted
-  // below so the transcript reflects what the user actually sent.
-  //
-  // req.signal is piped into the SDK so a client disconnect (tab
-  // close, navigation, network drop) cancels the upstream OpenAI
-  // call and stops consuming output tokens.
+  // Create the OpenAI stream BEFORE persisting the user turn: if
+  // stream creation throws (auth, quota, rate limit), no orphan
+  // user turn is left in the transcript. req.signal is piped
+  // through so a client disconnect cancels the upstream call.
   const openaiStream = await openaiClient().responses.create(
     {
       model: MODEL_SESSION_CHAT,
