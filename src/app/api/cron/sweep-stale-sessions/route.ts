@@ -42,6 +42,8 @@ type CandidateSession = {
   message_count: number;
 };
 
+type RetrySession = { id: string; user_id: string };
+
 async function findStaleSessions(): Promise<CandidateSession[]> {
   const admin = supabaseAdmin();
   const cutoff = new Date(
@@ -96,9 +98,7 @@ async function findStaleSessions(): Promise<CandidateSession[]> {
 // invocation doesn't crash, but the session is left with
 // `(ended_at set, is_substantive true, summary null)` and no retry
 // path. This sweep picks them up and re-runs the RPC.
-async function findEndedUnanalyzedSessions(): Promise<
-  { id: string; user_id: string }[]
-> {
+async function findEndedUnanalyzedSessions(): Promise<RetrySession[]> {
   const admin = supabaseAdmin();
   const { data, error } = await admin
     .from("sessions")
@@ -119,7 +119,7 @@ export async function GET(req: Request): Promise<Response> {
   }
 
   let stale: CandidateSession[];
-  let retry: { id: string; user_id: string }[];
+  let retry: RetrySession[];
   try {
     [stale, retry] = await Promise.all([
       findStaleSessions(),
@@ -173,10 +173,7 @@ export async function GET(req: Request): Promise<Response> {
     }
   }
 
-  // Second pass: retry analysis for sessions where the user-initiated
-  // end flow already closed the session but the background analysis
-  // failed. The RPC's `WHERE summary IS NULL` guard makes this safe
-  // to re-run.
+  // Retry pass: the RPC's `WHERE summary IS NULL` guard makes re-runs safe.
   for (const s of retry) {
     try {
       await runSessionEndAnalysis({ client: admin, userId: s.user_id }, s.id);
