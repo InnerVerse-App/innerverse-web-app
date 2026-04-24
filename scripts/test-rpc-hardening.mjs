@@ -13,7 +13,9 @@ if (!url || !key) {
   console.error("Missing NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY");
   process.exit(1);
 }
-const supabase = createClient(url, key, { auth: { persistSession: false } });
+const supabase = createClient(url, key, {
+  auth: { persistSession: false, autoRefreshToken: false },
+});
 
 const TEST_USER_ID = "audit_test_user_2026_04_23";
 let sessionId = null;
