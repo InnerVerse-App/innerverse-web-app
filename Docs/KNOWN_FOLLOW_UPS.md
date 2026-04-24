@@ -754,7 +754,7 @@ Location: src/app/api/clerk-webhook/route.ts:194-213
 Root cause: Email UNIQUE collision on users.email 200-acks Svix and Sentry-captures at `level: "warning"`, but the Supabase row isn't updated. No alerting. See archive § FINDING 9.
 Blast radius: Zero today (operator-only). At >10 testers: stale Supabase email fields silently accumulate; admin queries by email drift from Clerk truth. No data loss.
 Suggested fix: (a) Sentry alert rule on `webhook_stage: email_collision` at the next milestone gate (one dashboard click), or (b) `webhook_reconciliation_queue` table for batch reconciliation.
-Status: OPEN
+Status: FIXED (2026-04-24, operator action — Sentry Issue Alert "Clerk webhook — email collision" created in the `javascript-nextjs` project. Condition: tag `webhook_stage` equals `email_collision`. Action: email notification to operator. Action interval: 24h). Option (b) — the `webhook_reconciliation_queue` table — remains deferred; reopen if stale-row volume exceeds what manual reconciliation from Sentry alerts can handle.
 
 FINDING 10
 Severity: LOW
