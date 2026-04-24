@@ -48,7 +48,7 @@ export default async function Home() {
           width={444}
           height={666}
           priority
-          className="h-auto w-64 sm:w-72"
+          className="h-auto w-80 sm:w-96"
         />
 
         <div className="mt-2 flex flex-col items-center gap-3">
