@@ -9,11 +9,15 @@ type TabKey = "home" | "sessions" | "progress" | "goals" | "settings";
 // single scroll region, constrained-width inner container, and the
 // nav pinned to the bottom. New pages drop into this wrapper rather
 // than re-scaffolding the flex column each time.
+//
+// `active` accepts null for sub-pages (e.g. /next-steps) that want
+// the nav visible for navigation but aren't one of the five main
+// tabs — nothing highlights as selected.
 export function PageShell({
   active,
   children,
 }: {
-  active: TabKey;
+  active: TabKey | null;
   children: ReactNode;
 }) {
   return (

@@ -65,7 +65,11 @@ const TABS: Tab[] = [
   },
 ];
 
-export function BottomNav({ active }: { active: TabKey }) {
+// `active` may be null for non-tab pages that still want the bottom
+// nav visible (e.g. /next-steps). A null active means no tab
+// renders as selected — the nav is still there for navigation but
+// no visual "you are here" highlight.
+export function BottomNav({ active }: { active: TabKey | null }) {
   return (
     // fixed inset-x-0 bottom-0 z-20 — pin to viewport bottom so the
     // nav stays visible while the page scrolls. PageShell's main
