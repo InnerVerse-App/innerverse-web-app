@@ -13,8 +13,6 @@ export type LastSession = {
   coach_message: string | null;
 };
 
-// Shown when the user has no completed sessions yet. Full-bleed CTA
-// styling; coach name personalizes the copy.
 export function FirstSessionCard({ coachLabelText }: { coachLabelText: string }) {
   return (
     <section className="mt-6 rounded-xl border border-white/10 bg-white/[0.02] p-5 sm:p-6">
@@ -51,10 +49,6 @@ export function FirstSessionCard({ coachLabelText }: { coachLabelText: string })
   );
 }
 
-// Shown when the user has at least one completed session. Canonical
-// design (reference/screenshots/app-ui/app-screenshot-homescreen-5.jpeg)
-// puts the "Start a New Session" button inside this card so the most-
-// recent-session summary sits directly above the CTA to resume.
 export function LastSessionCard({ session }: { session: LastSession }) {
   const summaryText =
     session.summary ??

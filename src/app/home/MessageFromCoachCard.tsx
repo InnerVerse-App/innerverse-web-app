@@ -1,19 +1,5 @@
 import Link from "next/link";
 
-// Message from your Coach card — short reflective takeaway from the
-// most recent analyzed coaching session, plus the "Continue Growth
-// Progress" CTA that opens the /next-steps checklist.
-//
-// Data source: sessions.coach_message (column added in PR #53, populated
-// by the PR #55 RPC — cap 2000 chars applied server-side). Rendered
-// only when non-null / non-empty; HomePage filters null upstream so
-// this component doesn't need to know about that case.
-//
-// CTA intent: distinct from "Start a New Session" (inside the Last
-// Session card). This button invites the user to act on what the
-// coach just surfaced — concrete next steps — not start another
-// coaching session.
-
 type Props = {
   message: string;
 };

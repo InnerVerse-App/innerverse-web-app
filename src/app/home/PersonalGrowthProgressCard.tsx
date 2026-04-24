@@ -1,22 +1,8 @@
 import Link from "next/link";
 
-// Personal Growth Progress card — one row per recent completed session
-// with progress_percent set. Each row surfaces a representative
-// breakthrough from that session (title + note) paired with the
-// session's progress %.
-//
-// Row count is capped to 3 upstream by HomePage's
-// GROWTH_PROGRESS_LIMIT; the "See more progress" footer links to the
-// Progress tab for the full history.
-//
-// Data interpretation: our schema doesn't have Bubble's "growth theme"
-// concept as a first-class field. Closest honest mapping — use the
-// first breakthrough's content as the row title and its note as the
-// subtext. Sessions without breakthroughs fall back to
-// progress_summary_short so the row is still meaningful. If that also
-// isn't set yet (analysis pending), the session is filtered out
-// upstream in HomePage's loadHomeData (WHERE progress_percent IS NOT
-// NULL).
+// Title falls back from first breakthrough's content → session's
+// progress_summary_short → "Growth session" — our schema has no
+// first-class "growth theme" field.
 
 export type RecentGrowthItem = {
   sessionId: string;
@@ -80,9 +66,6 @@ export function PersonalGrowthProgressCard({ items }: Props) {
               </li>
             ))}
           </ul>
-          {/* Only render the See-more link when the card has at least
-              one row — an empty state already invites the user to
-              start a session, no need for a second CTA. */}
           <Link
             href="/progress"
             className="mt-5 block rounded-md border border-white/10 px-4 py-2 text-center text-sm text-brand-primary transition hover:border-brand-primary/40 hover:bg-white/5"

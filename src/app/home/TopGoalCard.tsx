@@ -2,26 +2,6 @@ import Link from "next/link";
 
 import { goalLabel } from "@/lib/onboarding-labels";
 
-// Top Goal card — minimal tile pending the Goals-tab build-out.
-//
-// Canonical design (app-screenshot-homescreen-5.jpeg, app-screenshot-
-// goals-tab.PNG) shows a progress-percent bar and a per-goal rationale
-// note. Neither exists in the schema today — the coaching_session_tables
-// migration (20260422170000) explicitly defers goal-progress fields to
-// "a future phase wires the Goals tab." This Chunk 4 ships the layout
-// slot with title only so the 2-col grid matches canonical; Chunks
-// after Goals-tab work will upgrade the card in place.
-//
-// If the user has no predefined top goals and no free-text goal, we
-// render a placeholder that links to the Goals tab so the slot is
-// still informative rather than blank.
-//
-// `topGoalRaw` is the raw onboarding value (snake_case for predefined
-// options, plain text for the free-text input). goalLabel handles both
-// — mapped values become their human label; unmapped values (including
-// free-text) get humanized via sentence-case, which is a harmless
-// identity for already-human strings.
-
 type Props = {
   topGoalRaw: string | null;
 };

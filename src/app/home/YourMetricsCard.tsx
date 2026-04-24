@@ -1,15 +1,5 @@
 import { StreakBadge } from "./StreakBadge";
 
-// Your Metrics card — three scalar figures the user can see at a glance:
-// Sessions (lifetime count of completed sessions), Goals (from onboarding
-// top_goals + optional free-text), Streak (consecutive local-calendar
-// days with a session, capped by the 60-day window in HomePage's loader).
-//
-// Server-rendered for Sessions + Goals (stable for the request).
-// Streak renders inside a small client component (StreakBadge) so it
-// uses the user's browser timezone without requiring a users.timezone
-// column.
-
 type Props = {
   sessionCount: number;
   goalCount: number;
