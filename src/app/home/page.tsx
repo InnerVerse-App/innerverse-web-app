@@ -29,10 +29,9 @@ import { YourMetricsCard } from "./YourMetricsCard";
 
 export const dynamic = "force-dynamic";
 
-// Streak window. Any streak longer than this is cosmetic overflow —
-// the home card doesn't need exact counts past 60 days, and capping
-// here keeps the timestamp payload sent to StreakBadge small.
+// Keeps the timestamp payload sent to StreakBadge bounded.
 const STREAK_WINDOW_DAYS = 60;
+const STREAK_WINDOW_ROW_CAP = 500;
 
 // How many recent sessions the Personal Growth Progress card shows.
 // Canonical (homescreen-4) shows 2 items; we allow up to 3 so the
@@ -44,8 +43,6 @@ const GROWTH_PROGRESS_LIMIT = 3;
 // 2). Full history lives on the Progress tab.
 const BREAKTHROUGHS_LIMIT = 3;
 
-// Goals count: predefined top_goals plus an optional free-text goal.
-// Matches the Goals-tab rendering (src/app/goals/page.tsx).
 function goalCountFromOnboarding(state: OnboardingState | null): number {
   if (!state) return 0;
   const predefined = state.top_goals?.length ?? 0;
@@ -53,10 +50,6 @@ function goalCountFromOnboarding(state: OnboardingState | null): number {
   return predefined + freeText;
 }
 
-// Top goal surfaced on the Home card: first predefined goal, or the
-// free-text input if no predefined exists, or null. Returns null only
-// when both are empty — the TopGoalCard handles the empty case with a
-// link to /goals.
 function topGoalFromOnboarding(state: OnboardingState | null): string | null {
   if (!state) return null;
   const first = state.top_goals?.[0]?.trim();
@@ -74,8 +67,6 @@ type HomeData = {
   recentBreakthroughs: RecentBreakthrough[];
 };
 
-// Row shape for the growth-progress query. Supabase Postgrest's
-// nested select returns breakthroughs as an array of related rows.
 type GrowthRow = {
   id: string;
   ended_at: string | null;
@@ -84,14 +75,12 @@ type GrowthRow = {
   breakthroughs: Array<{ content: string | null; note: string | null }>;
 };
 
-// Build one Personal Growth Progress row per recent session. Prefer
-// the first breakthrough's content as the title (human-framed growth
-// moment); fall back to progress_summary_short if no breakthrough
-// was emitted for that session. note is the breakthrough's subtext,
-// which may be null (hidden in the card).
 function buildGrowthItems(rows: GrowthRow[]): RecentGrowthItem[] {
   return rows
-    .filter((r) => r.progress_percent !== null)
+    .filter(
+      (r): r is GrowthRow & { progress_percent: number } =>
+        r.progress_percent !== null,
+    )
     .map((r) => {
       const firstBreakthrough = r.breakthroughs[0];
       const title =
@@ -101,7 +90,7 @@ function buildGrowthItems(rows: GrowthRow[]): RecentGrowthItem[] {
       const note = firstBreakthrough?.note?.trim() || null;
       return {
         sessionId: r.id,
-        progressPercent: r.progress_percent as number,
+        progressPercent: r.progress_percent,
         title,
         note,
       };
@@ -148,7 +137,8 @@ async function loadHomeData(): Promise<HomeData> {
         .select("ended_at")
         .not("ended_at", "is", null)
         .gte("ended_at", streakWindowIso)
-        .order("ended_at", { ascending: false }),
+        .order("ended_at", { ascending: false })
+        .limit(STREAK_WINDOW_ROW_CAP),
       ctx.client
         .from("sessions")
         .select(
@@ -157,6 +147,11 @@ async function loadHomeData(): Promise<HomeData> {
         .not("ended_at", "is", null)
         .not("progress_percent", "is", null)
         .order("ended_at", { ascending: false })
+        .order("created_at", {
+          ascending: true,
+          referencedTable: "breakthroughs",
+        })
+        .limit(1, { referencedTable: "breakthroughs" })
         .limit(GROWTH_PROGRESS_LIMIT),
       ctx.client
         .from("breakthroughs")
@@ -236,10 +231,8 @@ export default async function HomePage() {
         <FirstSessionCard coachLabelText={coach} />
       )}
 
-      {/* 2-col grid: Your Metrics | Top Goal. Matches canonical
-          app-screenshot-homescreen-5.jpeg. Stays 2-col even on narrow
-          mobile per the Bubble design; cards are compact enough to
-          read at phone width. */}
+      {/* Stays 2-col on narrow mobile per the Bubble design — cards
+          are compact enough to read at phone width. */}
       <div className="mt-6 grid grid-cols-2 gap-3">
         <YourMetricsCard
           sessionCount={sessionCount}

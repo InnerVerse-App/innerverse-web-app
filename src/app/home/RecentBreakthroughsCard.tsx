@@ -1,15 +1,5 @@
 import { formatDateCompact } from "@/lib/format";
 
-// Recent Breakthroughs card — the last N breakthroughs across all
-// sessions, newest first. Matches the canonical layout from
-// homescreen-5.jpeg: content in white, then a "MMM DD • note" footer
-// in muted gray beneath. No progress bars, no percentages — just the
-// named moment + date + downstream-implication subtext.
-//
-// Row count cap lives upstream in HomePage's BREAKTHROUGHS_LIMIT;
-// this component is dumb about the slice. The Progress tab shows the
-// full history.
-
 export type RecentBreakthrough = {
   id: string;
   content: string;
