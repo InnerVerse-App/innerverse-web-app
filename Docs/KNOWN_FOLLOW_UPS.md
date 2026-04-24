@@ -829,7 +829,7 @@ Location: src/app/api/sessions/[id]/messages/route.ts:82-127, src/app/sessions/[
 Root cause: No AbortController or abort signal ties the client fetch, the server's ReadableStream controller, or the OpenAI `for await (const event of openaiStream)` loop together. A client that navigates away, closes the tab, or drops network keeps the server-side iterator running until the stream reaches `response.completed` on its own. The server-side loop also never consults `req.signal`.
 Blast radius: At current tester scale (single operator) this is invisible. At >10 testers, each abandoned stream consumes its full `max_output_tokens: 2000` of billable OpenAI output plus Vercel serverless wall-clock time. A user repeatedly rage-closing the tab on slow first-token responses could multiply billing against a pinned budget. The orphan invocation also keeps the chat stream's `ctx` supabase client alive past the request, though this is bounded by Vercel's ~60s function limit.
 Suggested fix: (a) Pass `req.signal` into the OpenAI stream create via the OpenAI SDK's `signal` option (supported on `responses.create`), and wire `AbortController.abort()` from the ReadableStream controller's `cancel()` callback — Next.js forwards client-disconnect to that callback. (b) On the client side in `ChatView.tsx`, create an `AbortController` at the start of `send()`, pass `controller.signal` to the fetch, and `abort()` in the component unmount cleanup. Together these let a disconnect propagate client → Next → OpenAI.
-Status: IN PROGRESS (2026-04-23, working tree — req.signal wired into openai.responses.create; client AbortController wired into ChatView fetch with unmount cleanup; pending commit + PR)
+Status: FIXED (2026-04-24, 9dff774 via PR #35; /simplify follow-up 43195c8 via PR #38 parallelized two DB reads in the same handler)
 
 FINDING 2
 Severity: MED
@@ -838,7 +838,7 @@ Location: src/app/api/sessions/[id]/messages/route.ts:75-80 (user-message append
 Root cause: The user's message row is inserted into `messages` BEFORE `openaiClient().responses.create(...)` is invoked. If the OpenAI call throws (timeout, rate limit, network), the stream handler runs its `catch` block and closes the ReadableStream without ever appending an assistant row. The user's message is persisted; the assistant's response never is. The next turn's `lastAssistantResponseId()` returns the PRIOR assistant's ID, so OpenAI's conversation state skips the orphan message entirely.
 Blast radius: User sees a ghost message in the transcript on reload — their text went to the DB but the coach never "heard" it (conversation state on OpenAI's side skipped it). Next assistant reply may reference a topic two turns old. User confusion, no data corruption beyond the orphan. This contrasts with `startSession` (actions.ts:82-108) which explicitly calls OpenAI first and only inserts rows after the call succeeds — the same discipline should apply here.
 Suggested fix: (a) Call `openaiClient().responses.create` first; only on success, run `appendMessage(user)` before the stream start. This inverts the ordering and loses the user message on OpenAI failure rather than orphaning it. (b) Alternatively, wrap the user-append + first-token-delivery in a single RPC so both happen or neither does. (a) is the minimal change.
-Status: IN PROGRESS (2026-04-23, working tree — OpenAI stream create moved before appendMessage(user); stream-creation failure no longer leaves an orphan user turn; pending commit + PR)
+Status: FIXED (2026-04-24, 9dff774 via PR #35)
 
 FINDING 3
 Severity: MED
@@ -847,7 +847,7 @@ Location: src/app/api/sessions/[id]/messages/route.ts:103-116
 Root cause: After the stream loop finishes, the assistant message is persisted only when `accumulated && newResponseId` are both truthy. If the OpenAI stream closes after `response.completed` but delivered zero `response.output_text.delta` events (empty response, content-filter refusal reformatted server-side, or a transient shape change in a model update), `accumulated` is the empty string (falsy) and the branch falls through to a `console.warn` — no row is written.
 Blast radius: The client still shows an empty assistant stub in the UI and the stream completes without error. On reload, the stub disappears. User sees no error, just a silent drop. Fires rarely in steady state (gpt-5.2 almost always streams text) but is a silent-data-loss shape that will be hard to debug later.
 Suggested fix: Change the guard to `if (newResponseId)` and persist an empty-content assistant row if `accumulated` is empty; alternatively, persist the empty row AND return a 500 to the client so the UI can surface the problem. The current `console.warn` with no Sentry capture is too quiet.
-Status: IN PROGRESS (2026-04-23, working tree — gate changed to `if (newResponseId)`; empty-accumulated case captures a sentinel error via captureSessionError so the anomaly is visible in Sentry; pending commit + PR)
+Status: FIXED (2026-04-24, 9dff774 via PR #35)
 
 FINDING 4
 Severity: MED
@@ -856,7 +856,7 @@ Location: src/app/sessions/actions.ts:131-139, src/app/api/cron/sweep-stale-sess
 Root cause: When `runSessionEndAnalysis` throws inside the `after()` callback (OpenAI timeout, malformed JSON, RPC validation failure), the user has already been redirected to `/complete` with `ended_at` and `is_substantive=true` set on the session row. The error is Sentry-captured (good), but nothing retries the analysis. The abandonment sweep cron (`findStaleSessions`) only queries sessions with `ended_at IS NULL`, so ended-but-unanalyzed sessions are not picked up. Result: a transient OpenAI blip leaves the session permanently in `(ended_at set, is_substantive true, summary null)`.
 Blast radius: At current scale this is invisible — operator can re-run manually. At >10 testers, every transient OpenAI 5xx or rate-limit event during the end-button flow produces one stuck session per event. User sees `/complete` and `/home` showing a session with no summary, no breakthroughs, no next-steps. Coaching continuity across sessions loses that session's signal permanently.
 Suggested fix: Broaden the abandonment sweep query to also pick up `ended_at IS NOT NULL AND is_substantive = true AND summary IS NULL`. Then the daily sweep becomes the retry mechanism for transient analysis failures. Alternatively, add a `session_analysis_status` enum column (pending/complete/failed) and drive retries off that. Small sweep change is the cheaper first step.
-Status: IN PROGRESS (2026-04-23, working tree — added findEndedUnanalyzedSessions() + second retry pass in the cron sweep route; response payload now includes a `retries` count; pending commit + PR)
+Status: FIXED (2026-04-24, 20a6b2e via PR #36; /simplify follow-ups c3a0405 via PR #39 (split `analyzed`/`retried` counters + `maxDuration = 60`) and 212e59f via PR #40 (`RetrySession` type alias))
 
 FINDING 5
 Severity: MED
@@ -874,7 +874,7 @@ Location: supabase/migrations/20260423080000_process_session_end_function.sql:48
 Root cause: `progress_percent = nullif(p_analysis ->> 'progress_percent', '')::smallint` casts the LLM-supplied string to smallint with no clamping. The table CHECK constraint (`progress_percent between 0 and 100`) catches out-of-range values, but the CHECK fires AFTER the UPDATE runs, rolling back the entire transaction — including the session UPDATE, the three child INSERTs, and the coaching_state upsert. Because the transaction rolled back, `summary` stays null, so the next invocation is not blocked by the `WHERE summary IS NULL` idempotency guard; it will re-run and hit the same rollback. The asymmetry with `style_calibration_delta` (explicitly clamped to ±0.1 in the function before the UPDATE) is glaring.
 Blast radius: If gpt-5 ever returns `"progress_percent": 150` or `"progress_percent": -1` (model drift, prompt-injected output, long-context corruption), every retry fails the same way. The session sticks in the same broken state as FINDING 4 until the raw JSON is fixed or the session is force-cleared.
 Suggested fix: Defensively clamp before the cast. Replace the expression with `greatest(0::smallint, least(100::smallint, coalesce(nullif(p_analysis ->> 'progress_percent', '')::smallint, 0)))`. This matches the explicit clamp pattern already used for style_calibration_delta (lines 95-103).
-Status: IN PROGRESS (2026-04-23, working tree — supabase/migrations/20260423120000_process_session_end_defensive_parse.sql parses via bigint intermediate and clamps to 0..100 before the smallint cast; pending apply to dev + prod + commit + PR)
+Status: FIXED (2026-04-24, 8d4bf8a via PR #37; migration applied to innerverse-dev 2026-04-23 and innerverse-prod 2026-04-24)
 
 FINDING 7
 Severity: MED
@@ -883,7 +883,7 @@ Location: supabase/migrations/20260423080000_process_session_end_function.sql:77
 Root cause: The three `insert into ... select ... from jsonb_array_elements_text(p_analysis -> 'breakthroughs')` statements assume the addressed JSON field is an array. If the LLM returns `"breakthroughs": null`, `"breakthroughs": "something"`, or an object, `jsonb_array_elements_text` raises `cannot extract elements from a scalar` / `... non-array`. The whole transaction rolls back. Same pattern for `mindset_shifts` and `recommended_next_steps`. Same pattern for the UPDATE's `language_patterns_observed` and `tool_glossary_suggestions` (those are wrapped in `coalesce(... , '{}')` but the inner `jsonb_array_elements_text` still errors if the field is a non-array non-null value).
 Blast radius: Same mode as FINDING 6 — malformed LLM JSON leaves the session permanently in the broken state. Prompt-injection from user messages could plausibly steer the model to produce `"breakthroughs": "I am a breakthrough string"`.
 Suggested fix: Gate each array extraction with a `jsonb_typeof(p_analysis -> '<field>') = 'array'` check. Example: `coalesce((select array_agg(value) from jsonb_array_elements_text(p_analysis -> 'breakthroughs') where jsonb_typeof(p_analysis -> 'breakthroughs') = 'array'), '{}')`. The inner `where` on the parent field's type is the idiomatic plpgsql way to short-circuit the iteration. Same pattern for all five array extractions.
-Status: IN PROGRESS (2026-04-23, working tree — supabase/migrations/20260423120000_process_session_end_defensive_parse.sql wraps all five array extractions in `jsonb_typeof = 'array'` guards; pending apply to dev + prod + commit + PR)
+Status: FIXED (2026-04-24, 8d4bf8a via PR #37; migration applied to innerverse-dev 2026-04-23 and innerverse-prod 2026-04-24)
 
 FINDING 8
 Severity: LOW
@@ -928,7 +928,7 @@ Location: src/app/sessions/[id]/ChatView.tsx:76-103
 Root cause: The client-side `fetch` to `/api/sessions/[id]/messages` has no `AbortController` and is not cancelled on component unmount. If the user clicks the back button mid-stream, the component unmounts but the `reader.read()` loop continues accumulating chunks and calling `setMessages` on a stale setter — React logs `"Can't perform a React state update on an unmounted component"` warnings and discards the updates.
 Blast radius: No data loss (the server-side persistence is independent of the client loop). Cosmetic: console warnings and wasted client CPU until the stream naturally ends. At current stream lengths (gpt-5.2 session-chat responses ~50-500 tokens) the waste is trivial.
 Suggested fix: In `send()`, create `const controller = new AbortController()` and pass `signal: controller.signal` to the fetch. On unmount (`useEffect` cleanup in a parent effect, or the form's existing state machinery), call `controller.abort()`. This is the client half of FINDING 1 and is worth pairing with that fix.
-Status: IN PROGRESS (2026-04-23, working tree — streamAbortRef + unmount cleanup wired into ChatView; fixed jointly with FINDING 1; pending commit + PR)
+Status: FIXED (2026-04-24, 9dff774 via PR #35)
 
 FINDING 13
 Severity: LOW
@@ -937,7 +937,7 @@ Location: src/app/api/sessions/[id]/messages/route.ts:89-109
 Root cause: The accumulated response string grows unbounded as `response.output_text.delta` events arrive. In practice the OpenAI-side `max_output_tokens` (the SDK default, no explicit pin on the session-chat call) caps this to roughly 4096 tokens (~16 KB), and the /v1/responses stream naturally terminates. But the stream handler itself has no upper-bound guard; if the model or SDK ever emits an oversized response (model misbehavior, deliberate abuse), the string grows until OOM on the serverless worker.
 Blast radius: Near-zero today. Future risk is a model upgrade that removes the implicit cap, or a prompt-injection that steers the model into a non-terminating loop. Mitigated by Vercel's serverless memory / wall-clock limits (function would timeout before OOM).
 Suggested fix: Pass an explicit `max_output_tokens` on the streaming `responses.create` call in `src/app/api/sessions/[id]/messages/route.ts:82-87` (the `startSession` and `runSessionEndAnalysis` calls already do this via `MAX_OUTPUT_TOKENS = 2000`). Also add a defensive `if (accumulated.length > MAX_STREAM_BYTES) { break; }` guard inside the `for await` loop.
-Status: PARTIALLY FIXED (2026-04-23, working tree — explicit `max_output_tokens: MAX_OUTPUT_TOKENS` added to the streaming responses.create call; server-side accumulator upper-bound guard deferred as defense-in-depth since OpenAI's max_output_tokens now caps the stream)
+Status: PARTIALLY FIXED (2026-04-24, 9dff774 via PR #35 — explicit `max_output_tokens: MAX_OUTPUT_TOKENS` on the streaming responses.create call. Server-side accumulator upper-bound guard deferred as defense-in-depth since OpenAI's `max_output_tokens` now caps the stream; reopen if that assumption breaks)
 
 FINDING 14
 Severity: LOW
