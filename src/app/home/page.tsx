@@ -75,6 +75,13 @@ type GrowthRow = {
   breakthroughs: Array<{ content: string | null; note: string | null }>;
 };
 
+type BreakthroughRow = {
+  id: string;
+  content: string;
+  note: string | null;
+  created_at: string;
+};
+
 function buildGrowthItems(rows: GrowthRow[]): RecentGrowthItem[] {
   return rows
     .filter(
@@ -170,12 +177,6 @@ async function loadHomeData(): Promise<HomeData> {
     ended_at: string | null;
   }>;
 
-  type BreakthroughRow = {
-    id: string;
-    content: string;
-    note: string | null;
-    created_at: string;
-  };
   const breakthroughRows = (breakthroughsRes.data ?? []) as BreakthroughRow[];
 
   return {

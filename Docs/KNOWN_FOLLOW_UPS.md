@@ -810,3 +810,36 @@ Lens: correctness
 Location: supabase/migrations/20260424130000_process_session_end_coach_message.sql (silent-skip on non-object breakthroughs element)
 Root cause: Per-element `jsonb_typeof(elem) = 'object'` guard silently skips non-object entries. Strict-mode schema prevents this in normal operation; the skip is defense-in-depth.
 Status: WON'T FIX (2026-04-24) — intentional defensive behavior matching the parent-array guard pattern from 20260423120000. Surfacing a loud error on schema drift is a separate architectural decision.
+
+## 2026-04-24 — /simplify on PR #57 (Top Goal card + 2-col grid)
+
+Comment-cleanup applied in-place on the PR #57 files. Two larger
+extractions surfaced but deferred — they touch 5–6 files outside this
+PR and pre-date it, so they belong in their own reviewable chunk.
+
+FINDING 1
+Severity: LOW
+Lens: architecture
+Location: src/app/home/{LastSessionCard,MessageFromCoachCard,PersonalGrowthProgressCard,RecentBreakthroughsCard,TopGoalCard,YourMetricsCard}.tsx — all share `<section className="rounded-xl border border-white/10 bg-white/[0.02] p-5">` (or `p-4` variant)
+Root cause: Six home cards duplicate the same outer-section class string. One more and we've hit the point where updating the card look requires touching six files.
+Blast radius: Maintenance-only; no correctness or security impact. Future design tweaks (e.g. changing card background opacity, border radius, default padding) require six-file edits with drift risk.
+Suggested fix: Extract a `<HomeCard>` wrapper component in `src/app/home/_components/` that accepts `children` and optional `className` to layer padding variants. Six-file mechanical refactor, no behavior change.
+Status: OPEN — deferred; worth its own small PR after the Home page is feature-complete (currently mid-build).
+
+FINDING 2
+Severity: LOW
+Lens: architecture
+Location: same six home card files — identical `<div className="flex items-center gap-3"><svg ... className="h-5 w-5 ... text-brand-primary" ... /><h2 ... /></div>` header pattern (icon size 4–7 varies, but structure is identical)
+Root cause: Five of the six cards repeat the header pattern. Companion to Finding 1.
+Blast radius: Same maintenance burden as Finding 1.
+Suggested fix: Bundle a `<CardHeader icon={...} title="...">` into the same `HomeCard` extraction. Consider as one PR with Finding 1.
+Status: OPEN — deferred; bundle with Finding 1.
+
+FINDING 3
+Severity: LOW
+Lens: correctness (efficiency)
+Location: src/app/home/page.tsx:206-218 — `getOnboardingState()` awaited sequentially before `loadHomeData()`
+Root cause: The two awaits are independent data fetches (onboarding row vs. the five Supabase reads in loadHomeData), so the home page takes the sum of both round-trips instead of the max. Pre-dates PR #57; PR #57 just added `topGoalFromOnboarding(state)` after the sequence.
+Blast radius: One extra Supabase round-trip per home-page render (~50–200 ms depending on region). Edge case: if onboarding is incomplete we redirect, so parallelizing would waste loadHomeData's queries for that minority of visits.
+Suggested fix: `const [state, homeData] = await Promise.all([getOnboardingState(), loadHomeData()]);`. Accept the wasted query on incomplete-onboarding redirect (one-time per user).
+Status: OPEN — small, contained fix; not urgent, can be bundled with any future home-page perf pass.
