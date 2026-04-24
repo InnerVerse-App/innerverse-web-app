@@ -7,6 +7,11 @@ import { supabaseAdmin } from "@/lib/supabase";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+// Worst case: up to SWEEP_BATCH_LIMIT stale + SWEEP_BATCH_LIMIT retry
+// sessions, each triggering a ~3s OpenAI call sequentially. Vercel
+// Hobby's 10s default would time out on even a handful. 60s is the
+// Hobby cap and gives headroom for ~20 analyses per run.
+export const maxDuration = 60;
 
 // Abandoned-session sweep. Scheduled daily at 09:00 UTC by Vercel
 // Cron (vercel.json) and triggerable on demand via the dashboard
@@ -126,7 +131,7 @@ export async function GET(req: Request): Promise<Response> {
   }
 
   const admin = supabaseAdmin();
-  const results = { closed: 0, analyzed: 0, failed: 0 };
+  const results = { closed: 0, analyzed: 0, retried: 0, failed: 0 };
 
   for (const s of stale) {
     const isSubstantive = s.message_count >= SUBSTANTIVE_MESSAGE_THRESHOLD;
@@ -175,7 +180,7 @@ export async function GET(req: Request): Promise<Response> {
   for (const s of retry) {
     try {
       await runSessionEndAnalysis({ client: admin, userId: s.user_id }, s.id);
-      results.analyzed += 1;
+      results.retried += 1;
     } catch (err) {
       results.failed += 1;
       captureSessionError(err, "cron_sweep_retry_analyze", s.id);
