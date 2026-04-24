@@ -772,7 +772,7 @@ Location: src/middleware.ts:6-18
 Root cause: Middleware matcher enumerates unauthenticated routes by name in a negative-lookahead regex. Adding a new public route requires editing the exclusion list; no auto-401 on miss (the earlier "silent 401" claim was wrong). See archive § FINDING 11.
 Blast radius: Maintenance only. Forgotten exclusion → Clerk session attach runs on a public route unnecessarily (~10-50ms + Clerk quota).
 Suggested fix: Path convention (`/api/public/*`) so the exclusion is one prefix. Apply before adding another public route.
-Status: OPEN
+Status: FIXED (2026-04-24, via PR — matcher now excludes `api/public` as a prefix; convention documented in src/middleware.ts comment. Three legacy routes (api/healthcheck, api/clerk-webhook, api/sentry-test) grandfathered in place to avoid breaking Clerk dashboard webhook URL and external uptime monitors; new public routes go under /api/public/* with no matcher edit needed).
 
 FINDING 13
 Severity: LOW
