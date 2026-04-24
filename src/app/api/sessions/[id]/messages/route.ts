@@ -2,7 +2,11 @@ import { NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 
 import { captureSessionError } from "@/lib/observability";
-import { MODEL_SESSION_CHAT, openaiClient } from "@/lib/openai";
+import {
+  MAX_OUTPUT_TOKENS,
+  MODEL_SESSION_CHAT,
+  openaiClient,
+} from "@/lib/openai";
 import {
   appendMessage,
   lastAssistantResponseId,
@@ -72,18 +76,31 @@ export async function POST(
     );
   }
 
+  // OpenAI call BEFORE persisting the user message. If the stream
+  // creation throws (auth, quota, rate limit), the user message is
+  // never written — no orphan turn in the transcript. If the stream
+  // iterator errors mid-flight, the user message still gets persisted
+  // below so the transcript reflects what the user actually sent.
+  //
+  // req.signal is piped into the SDK so a client disconnect (tab
+  // close, navigation, network drop) cancels the upstream OpenAI
+  // call and stops consuming output tokens.
+  const openaiStream = await openaiClient().responses.create(
+    {
+      model: MODEL_SESSION_CHAT,
+      previous_response_id: previousResponseId,
+      input: [{ role: "user", content }],
+      max_output_tokens: MAX_OUTPUT_TOKENS,
+      stream: true,
+    },
+    { signal: req.signal },
+  );
+
   await appendMessage(ctx, {
     session_id: sessionId,
     is_sent_by_ai: false,
     content,
     ai_response_id: null,
-  });
-
-  const openaiStream = await openaiClient().responses.create({
-    model: MODEL_SESSION_CHAT,
-    previous_response_id: previousResponseId,
-    input: [{ role: "user", content }],
-    stream: true,
   });
 
   let accumulated = "";
@@ -100,7 +117,19 @@ export async function POST(
             newResponseId = event.response.id;
           }
         }
-        if (accumulated && newResponseId) {
+        if (newResponseId) {
+          // Persist on responseId alone — empty `accumulated` with a
+          // completed response (e.g., content-filter refusal) still
+          // needs a row so the transcript and previous_response_id
+          // chain stay consistent. Anomaly-log the empty-content case
+          // so it's visible in Sentry.
+          if (!accumulated) {
+            captureSessionError(
+              new Error("response.completed with empty accumulated text"),
+              "session_chat_empty_response",
+              sessionId,
+            );
+          }
           await appendMessage(ctx, {
             session_id: sessionId,
             is_sent_by_ai: true,
@@ -108,18 +137,26 @@ export async function POST(
             ai_response_id: newResponseId,
           });
         } else {
-          console.warn("messages route: stream ended without usable payload", {
+          captureSessionError(
+            new Error("stream ended without response.completed event"),
+            "session_chat_no_response_id",
             sessionId,
-            accumulatedLength: accumulated.length,
-            hasResponseId: !!newResponseId,
-          });
+          );
         }
       } catch (err) {
-        console.error("messages route: stream failed", {
-          sessionId,
-          error: err instanceof Error ? err.message : String(err),
-        });
-        captureSessionError(err, "session_chat_stream", sessionId);
+        // Client disconnects abort the upstream request and throw an
+        // AbortError here. That's the intended happy path for cancel,
+        // not an error — don't Sentry-capture it.
+        const isAbort =
+          err instanceof Error &&
+          (err.name === "AbortError" || err.name === "APIUserAbortError");
+        if (!isAbort) {
+          console.error("messages route: stream failed", {
+            sessionId,
+            error: err instanceof Error ? err.message : String(err),
+          });
+          captureSessionError(err, "session_chat_stream", sessionId);
+        }
       } finally {
         controller.close();
       }
