@@ -19,6 +19,10 @@ import {
   PersonalGrowthProgressCard,
   type RecentGrowthItem,
 } from "./PersonalGrowthProgressCard";
+import {
+  RecentBreakthroughsCard,
+  type RecentBreakthrough,
+} from "./RecentBreakthroughsCard";
 import { TopGoalCard } from "./TopGoalCard";
 import { YourMetricsCard } from "./YourMetricsCard";
 
@@ -33,6 +37,11 @@ const STREAK_WINDOW_DAYS = 60;
 // Canonical (homescreen-4) shows 2 items; we allow up to 3 so the
 // card fills out once the user has enough analyzed sessions.
 const GROWTH_PROGRESS_LIMIT = 3;
+
+// Recent Breakthroughs card cap — one row per breakthrough, newest
+// first across all sessions. Matches canonical (homescreen-5 shows
+// 2). Full history lives on the Progress tab.
+const BREAKTHROUGHS_LIMIT = 3;
 
 // Goals count: predefined top_goals plus an optional free-text goal.
 // Matches the Goals-tab rendering (src/app/goals/page.tsx).
@@ -61,6 +70,7 @@ type HomeData = {
   sessionCount: number;
   endedTimestamps: string[];
   recentGrowth: RecentGrowthItem[];
+  recentBreakthroughs: RecentBreakthrough[];
 };
 
 // Row shape for the growth-progress query. Supabase Postgrest's
@@ -97,7 +107,7 @@ function buildGrowthItems(rows: GrowthRow[]): RecentGrowthItem[] {
     });
 }
 
-// Four parallel Supabase reads. All four are RLS-scoped so the
+// Five parallel Supabase reads. All are RLS-scoped so the
 // supabaseForUser context is required; an unauthenticated caller
 // short-circuits to empty counts (though HomePage's auth gate above
 // should prevent that).
@@ -109,6 +119,7 @@ async function loadHomeData(): Promise<HomeData> {
       sessionCount: 0,
       endedTimestamps: [],
       recentGrowth: [],
+      recentBreakthroughs: [],
     };
   }
 
@@ -116,43 +127,58 @@ async function loadHomeData(): Promise<HomeData> {
     Date.now() - STREAK_WINDOW_DAYS * 24 * 60 * 60 * 1000,
   ).toISOString();
 
-  const [lastRes, countRes, tsRes, growthRes] = await Promise.all([
-    ctx.client
-      .from("sessions")
-      .select("id, ended_at, summary, progress_summary_short")
-      .not("ended_at", "is", null)
-      .order("ended_at", { ascending: false })
-      .limit(1)
-      .maybeSingle(),
-    ctx.client
-      .from("sessions")
-      .select("id", { count: "exact", head: true })
-      .not("ended_at", "is", null),
-    ctx.client
-      .from("sessions")
-      .select("ended_at")
-      .not("ended_at", "is", null)
-      .gte("ended_at", streakWindowIso)
-      .order("ended_at", { ascending: false }),
-    ctx.client
-      .from("sessions")
-      .select(
-        "id, ended_at, progress_percent, progress_summary_short, breakthroughs(content, note)",
-      )
-      .not("ended_at", "is", null)
-      .not("progress_percent", "is", null)
-      .order("ended_at", { ascending: false })
-      .limit(GROWTH_PROGRESS_LIMIT),
-  ]);
+  const [lastRes, countRes, tsRes, growthRes, breakthroughsRes] =
+    await Promise.all([
+      ctx.client
+        .from("sessions")
+        .select("id, ended_at, summary, progress_summary_short")
+        .not("ended_at", "is", null)
+        .order("ended_at", { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+      ctx.client
+        .from("sessions")
+        .select("id", { count: "exact", head: true })
+        .not("ended_at", "is", null),
+      ctx.client
+        .from("sessions")
+        .select("ended_at")
+        .not("ended_at", "is", null)
+        .gte("ended_at", streakWindowIso)
+        .order("ended_at", { ascending: false }),
+      ctx.client
+        .from("sessions")
+        .select(
+          "id, ended_at, progress_percent, progress_summary_short, breakthroughs(content, note)",
+        )
+        .not("ended_at", "is", null)
+        .not("progress_percent", "is", null)
+        .order("ended_at", { ascending: false })
+        .limit(GROWTH_PROGRESS_LIMIT),
+      ctx.client
+        .from("breakthroughs")
+        .select("id, content, note, created_at")
+        .order("created_at", { ascending: false })
+        .limit(BREAKTHROUGHS_LIMIT),
+    ]);
 
   if (lastRes.error) throw lastRes.error;
   if (countRes.error) throw countRes.error;
   if (tsRes.error) throw tsRes.error;
   if (growthRes.error) throw growthRes.error;
+  if (breakthroughsRes.error) throw breakthroughsRes.error;
 
   const timestampRows = (tsRes.data ?? []) as Array<{
     ended_at: string | null;
   }>;
+
+  type BreakthroughRow = {
+    id: string;
+    content: string;
+    note: string | null;
+    created_at: string;
+  };
+  const breakthroughRows = (breakthroughsRes.data ?? []) as BreakthroughRow[];
 
   return {
     lastSession: (lastRes.data as LastSession | null) ?? null,
@@ -161,6 +187,12 @@ async function loadHomeData(): Promise<HomeData> {
       .map((r) => r.ended_at)
       .filter((x): x is string => !!x),
     recentGrowth: buildGrowthItems((growthRes.data ?? []) as GrowthRow[]),
+    recentBreakthroughs: breakthroughRows.map((b) => ({
+      id: b.id,
+      content: b.content,
+      note: b.note,
+      createdAt: b.created_at,
+    })),
   };
 }
 
@@ -176,8 +208,13 @@ export default async function HomePage() {
   }
 
   const coach = coachLabel(state?.coach_name);
-  const { lastSession, sessionCount, endedTimestamps, recentGrowth } =
-    await loadHomeData();
+  const {
+    lastSession,
+    sessionCount,
+    endedTimestamps,
+    recentGrowth,
+    recentBreakthroughs,
+  } = await loadHomeData();
   const goalCount = goalCountFromOnboarding(state);
   const topGoalTitle = topGoalFromOnboarding(state);
 
@@ -210,6 +247,7 @@ export default async function HomePage() {
       </div>
 
       <PersonalGrowthProgressCard items={recentGrowth} />
+      <RecentBreakthroughsCard items={recentBreakthroughs} />
     </PageShell>
   );
 }
