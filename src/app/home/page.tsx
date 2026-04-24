@@ -1,43 +1,98 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@clerk/nextjs/server";
+
+import { PageShell } from "@/app/_components/PageShell";
+import { COACHES } from "@/app/onboarding/data";
 import {
   getOnboardingState,
   isOnboardingComplete,
+  type OnboardingState,
 } from "@/lib/onboarding";
-import { COACHES } from "@/app/onboarding/data";
-import { startSession } from "@/app/sessions/actions";
-import { formatDateLong } from "@/lib/format";
 import { supabaseForUser } from "@/lib/supabase";
-import { PageShell } from "@/app/_components/PageShell";
-import { StartSessionButton } from "./StartSessionButton";
+
+import {
+  FirstSessionCard,
+  LastSessionCard,
+  type LastSession,
+} from "./LastSessionCard";
+import { YourMetricsCard } from "./YourMetricsCard";
 
 export const dynamic = "force-dynamic";
 
-type LastSession = {
-  id: string;
-  ended_at: string;
-  summary: string | null;
-  progress_summary_short: string | null;
-};
+// Streak window. Any streak longer than this is cosmetic overflow —
+// the home card doesn't need exact counts past 60 days, and capping
+// here keeps the timestamp payload sent to StreakBadge small.
+const STREAK_WINDOW_DAYS = 60;
 
 function coachLabel(coachValue: string | null | undefined): string {
   if (!coachValue) return "your coach";
   return COACHES.find((c) => c.value === coachValue)?.label ?? "your coach";
 }
 
-async function loadLastCompletedSession(): Promise<LastSession | null> {
+// Goals count: predefined top_goals plus an optional free-text goal.
+// Matches the Goals-tab rendering (src/app/goals/page.tsx).
+function goalCountFromOnboarding(state: OnboardingState | null): number {
+  if (!state) return 0;
+  const predefined = state.top_goals?.length ?? 0;
+  const freeText = state.top_goals_input?.trim() ? 1 : 0;
+  return predefined + freeText;
+}
+
+type HomeData = {
+  lastSession: LastSession | null;
+  sessionCount: number;
+  endedTimestamps: string[];
+};
+
+// Three parallel Supabase reads. All three are RLS-scoped so the
+// supabaseForUser context is required; an unauthenticated caller
+// short-circuits to empty counts (though HomePage's auth gate above
+// should prevent that).
+async function loadHomeData(): Promise<HomeData> {
   const ctx = await supabaseForUser();
-  if (!ctx) return null;
-  const { data, error } = await ctx.client
-    .from("sessions")
-    .select("id, ended_at, summary, progress_summary_short")
-    .not("ended_at", "is", null)
-    .order("ended_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  if (error) throw error;
-  return (data as LastSession | null) ?? null;
+  if (!ctx) {
+    return { lastSession: null, sessionCount: 0, endedTimestamps: [] };
+  }
+
+  const streakWindowIso = new Date(
+    Date.now() - STREAK_WINDOW_DAYS * 24 * 60 * 60 * 1000,
+  ).toISOString();
+
+  const [lastRes, countRes, tsRes] = await Promise.all([
+    ctx.client
+      .from("sessions")
+      .select("id, ended_at, summary, progress_summary_short")
+      .not("ended_at", "is", null)
+      .order("ended_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    ctx.client
+      .from("sessions")
+      .select("id", { count: "exact", head: true })
+      .not("ended_at", "is", null),
+    ctx.client
+      .from("sessions")
+      .select("ended_at")
+      .not("ended_at", "is", null)
+      .gte("ended_at", streakWindowIso)
+      .order("ended_at", { ascending: false }),
+  ]);
+
+  if (lastRes.error) throw lastRes.error;
+  if (countRes.error) throw countRes.error;
+  if (tsRes.error) throw tsRes.error;
+
+  const timestampRows = (tsRes.data ?? []) as Array<{
+    ended_at: string | null;
+  }>;
+
+  return {
+    lastSession: (lastRes.data as LastSession | null) ?? null,
+    sessionCount: countRes.count ?? 0,
+    endedTimestamps: timestampRows
+      .map((r) => r.ended_at)
+      .filter((x): x is string => !!x),
+  };
 }
 
 export default async function HomePage() {
@@ -52,7 +107,8 @@ export default async function HomePage() {
   }
 
   const coach = coachLabel(state?.coach_name);
-  const lastSession = await loadLastCompletedSession();
+  const { lastSession, sessionCount, endedTimestamps } = await loadHomeData();
+  const goalCount = goalCountFromOnboarding(state);
 
   return (
     <PageShell active="home">
@@ -68,85 +124,12 @@ export default async function HomePage() {
       ) : (
         <FirstSessionCard coachLabelText={coach} />
       )}
+
+      <YourMetricsCard
+        sessionCount={sessionCount}
+        goalCount={goalCount}
+        endedTimestamps={endedTimestamps}
+      />
     </PageShell>
-  );
-}
-
-function FirstSessionCard({ coachLabelText }: { coachLabelText: string }) {
-  return (
-    <section className="mt-6 rounded-xl border border-white/10 bg-white/[0.02] p-5 sm:p-6">
-      <div className="flex items-center gap-3">
-        <svg
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth={1.8}
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          className="h-7 w-7 text-brand-primary"
-          aria-hidden
-        >
-          <path d="M9.5 2A2.5 2.5 0 0 1 12 4.5v15a2.5 2.5 0 0 1-4.96.44 2.5 2.5 0 0 1-2.96-3.08 3 3 0 0 1-.34-5.58 2.5 2.5 0 0 1 1.32-4.24 2.5 2.5 0 0 1 1.98-3A2.5 2.5 0 0 1 9.5 2Z" />
-          <path d="M14.5 2A2.5 2.5 0 0 0 12 4.5v15a2.5 2.5 0 0 0 4.96.44 2.5 2.5 0 0 0 2.96-3.08 3 3 0 0 0 .34-5.58 2.5 2.5 0 0 0-1.32-4.24 2.5 2.5 0 0 0-1.98-3A2.5 2.5 0 0 0 14.5 2Z" />
-        </svg>
-        <h2 className="text-lg font-semibold text-white sm:text-xl">
-          Start Your First Session
-        </h2>
-      </div>
-      <p className="mt-3 text-sm text-neutral-300">
-        Begin your personalized coaching journey with{" "}
-        <span className="font-medium text-white">{coachLabelText}</span>.
-      </p>
-      <p className="mt-3 text-sm text-neutral-300">
-        Your coach is ready to help you explore your thoughts, set meaningful
-        goals, and create lasting change.
-      </p>
-      <form action={startSession} className="mt-5">
-        <StartSessionButton label="Start Your First Session" />
-      </form>
-    </section>
-  );
-}
-
-function LastSessionCard({ session }: { session: LastSession }) {
-  const summaryText =
-    session.summary ??
-    session.progress_summary_short ??
-    "Your previous session is still being analyzed — check back in a few minutes.";
-
-  return (
-    <section className="mt-6 rounded-xl border border-white/10 bg-white/[0.02] p-5 sm:p-6">
-      <div className="flex items-center gap-3">
-        <svg
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth={1.8}
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          className="h-6 w-6 text-brand-primary"
-          aria-hidden
-        >
-          <circle cx="12" cy="12" r="9" />
-          <circle cx="12" cy="12" r="5.25" />
-        </svg>
-        <h2 className="text-lg font-semibold text-white sm:text-xl">
-          Last Coaching Session
-        </h2>
-      </div>
-      <p className="mt-2 text-xs text-neutral-400">
-        {formatDateLong(session.ended_at)}
-      </p>
-      <p className="mt-3 text-sm text-neutral-300">{summaryText}</p>
-      <form action={startSession} className="mt-5">
-        <StartSessionButton label="Start a New Session" />
-      </form>
-      <Link
-        href={`/sessions/${session.id}`}
-        className="mt-3 block text-center text-xs text-neutral-400 transition hover:text-brand-primary"
-      >
-        View session
-      </Link>
-    </section>
   );
 }
