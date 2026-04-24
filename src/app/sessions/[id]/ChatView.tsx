@@ -233,11 +233,7 @@ function MessageBubble({ message }: { message: Message }) {
   return (
     <div className={fromAi ? "self-start" : "self-end"}>
       <div
-        className={
-          fromAi
-            ? "max-w-[80%] rounded-2xl bg-white/5 px-4 py-2.5 text-sm text-neutral-100"
-            : "max-w-[80%] rounded-2xl bg-brand-primary/15 px-4 py-2.5 text-sm text-neutral-100"
-        }
+        className={`max-w-[80%] rounded-2xl px-4 py-2.5 text-sm text-neutral-100 ${fromAi ? "bg-white/5" : "bg-brand-primary/15"}`}
       >
         {message.content}
       </div>

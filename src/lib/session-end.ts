@@ -195,10 +195,7 @@ export async function runSessionEndAnalysis(
     p_analysis: analysis,
   });
   if (error) {
-    failStage("session_end_rpc", sessionId, error, {
-      code: error.code,
-      message: error.message,
-    });
+    failStage("session_end_rpc", sessionId, error, { code: error.code });
   }
 
   // RPC returns boolean: true if this call did the work, false if a
