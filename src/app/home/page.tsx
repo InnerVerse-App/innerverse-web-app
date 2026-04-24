@@ -15,6 +15,7 @@ import {
   LastSessionCard,
   type LastSession,
 } from "./LastSessionCard";
+import { MessageFromCoachCard } from "./MessageFromCoachCard";
 import {
   PersonalGrowthProgressCard,
   type RecentGrowthItem,
@@ -131,7 +132,9 @@ async function loadHomeData(): Promise<HomeData> {
     await Promise.all([
       ctx.client
         .from("sessions")
-        .select("id, ended_at, summary, progress_summary_short")
+        .select(
+          "id, ended_at, summary, progress_summary_short, coach_message",
+        )
         .not("ended_at", "is", null)
         .order("ended_at", { ascending: false })
         .limit(1)
@@ -248,6 +251,9 @@ export default async function HomePage() {
 
       <PersonalGrowthProgressCard items={recentGrowth} />
       <RecentBreakthroughsCard items={recentBreakthroughs} />
+      {lastSession?.coach_message ? (
+        <MessageFromCoachCard message={lastSession.coach_message} />
+      ) : null}
     </PageShell>
   );
 }

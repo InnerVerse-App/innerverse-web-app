@@ -10,6 +10,7 @@ export type LastSession = {
   ended_at: string;
   summary: string | null;
   progress_summary_short: string | null;
+  coach_message: string | null;
 };
 
 // Shown when the user has no completed sessions yet. Full-bleed CTA
