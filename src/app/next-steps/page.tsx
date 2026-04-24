@@ -17,7 +17,6 @@ type NextStepDbRow = {
   id: string;
   content: string;
   status: "pending" | "done";
-  created_at: string;
 };
 
 async function loadNextSteps(): Promise<NextStepDbRow[]> {
@@ -25,7 +24,7 @@ async function loadNextSteps(): Promise<NextStepDbRow[]> {
   if (!ctx) return [];
   const { data, error } = await ctx.client
     .from("next_steps")
-    .select("id, content, status, created_at")
+    .select("id, content, status")
     .order("created_at", { ascending: false });
   if (error) throw error;
   return (data as NextStepDbRow[] | null) ?? [];

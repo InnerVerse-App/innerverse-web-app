@@ -22,7 +22,7 @@ export function NextStepRow({ id, content, status }: Props) {
 
   const handleToggle = () => {
     startTransition(async () => {
-      await toggleNextStep(id);
+      await toggleNextStep(id, status);
     });
   };
 
