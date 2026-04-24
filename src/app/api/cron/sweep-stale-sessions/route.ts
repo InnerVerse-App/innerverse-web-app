@@ -84,6 +84,28 @@ async function findStaleSessions(): Promise<CandidateSession[]> {
   return out;
 }
 
+// Sessions that were ended (either by the user clicking End or by a
+// prior sweep) but whose analysis never completed. Happens when
+// runSessionEndAnalysis throws inside after() — the `catch` in
+// src/app/sessions/actions.ts swallows the error so the serverless
+// invocation doesn't crash, but the session is left with
+// `(ended_at set, is_substantive true, summary null)` and no retry
+// path. This sweep picks them up and re-runs the RPC.
+async function findEndedUnanalyzedSessions(): Promise<
+  { id: string; user_id: string }[]
+> {
+  const admin = supabaseAdmin();
+  const { data, error } = await admin
+    .from("sessions")
+    .select("id, user_id")
+    .not("ended_at", "is", null)
+    .is("summary", null)
+    .eq("is_substantive", true)
+    .limit(SWEEP_BATCH_LIMIT);
+  if (error) throw error;
+  return data ?? [];
+}
+
 export async function GET(req: Request): Promise<Response> {
   const auth = req.headers.get("authorization");
   const expected = `Bearer ${process.env.CRON_SECRET ?? ""}`;
@@ -92,8 +114,12 @@ export async function GET(req: Request): Promise<Response> {
   }
 
   let stale: CandidateSession[];
+  let retry: { id: string; user_id: string }[];
   try {
-    stale = await findStaleSessions();
+    [stale, retry] = await Promise.all([
+      findStaleSessions(),
+      findEndedUnanalyzedSessions(),
+    ]);
   } catch (err) {
     captureSessionError(err, "cron_sweep_scan");
     throw err;
@@ -142,5 +168,24 @@ export async function GET(req: Request): Promise<Response> {
     }
   }
 
-  return NextResponse.json({ ok: true, candidates: stale.length, ...results });
+  // Second pass: retry analysis for sessions where the user-initiated
+  // end flow already closed the session but the background analysis
+  // failed. The RPC's `WHERE summary IS NULL` guard makes this safe
+  // to re-run.
+  for (const s of retry) {
+    try {
+      await runSessionEndAnalysis({ client: admin, userId: s.user_id }, s.id);
+      results.analyzed += 1;
+    } catch (err) {
+      results.failed += 1;
+      captureSessionError(err, "cron_sweep_retry_analyze", s.id);
+    }
+  }
+
+  return NextResponse.json({
+    ok: true,
+    candidates: stale.length,
+    retries: retry.length,
+    ...results,
+  });
 }
