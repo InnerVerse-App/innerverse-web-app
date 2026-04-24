@@ -22,7 +22,7 @@ export function YourMetricsCard({
   endedTimestamps,
 }: Props) {
   return (
-    <section className="mt-6 rounded-xl border border-white/10 bg-white/[0.02] p-5">
+    <section className="rounded-xl border border-white/10 bg-white/[0.02] p-5">
       <div className="flex items-center gap-3">
         <svg
           viewBox="0 0 24 24"
