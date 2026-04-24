@@ -48,7 +48,7 @@
 --                                         we render.
 --
 -- Idempotency: ADD COLUMN IF NOT EXISTS on every column so partial
--- failure recovery and re-application are safe (Audit F11).
+-- failure recovery and re-application are safe.
 --
 -- RLS: one new policy. Column-level RLS isn't used on this project;
 -- existing *_select_own / *_insert_own policies on breakthroughs,
@@ -58,7 +58,7 @@
 -- only INSERTs. The Home-tab /next-steps checklist needs to toggle
 -- status client-side, which requires UPDATE. Adding
 -- next_steps_update_own here so the policy lands atomically with the
--- column it gates (flagged by the 2026-04-24 fresh-session audit).
+-- column it gates.
 
 alter table public.breakthroughs
   add column if not exists note text;
