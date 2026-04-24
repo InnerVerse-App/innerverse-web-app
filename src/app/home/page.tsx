@@ -15,6 +15,7 @@ import {
   LastSessionCard,
   type LastSession,
 } from "./LastSessionCard";
+import { TopGoalCard } from "./TopGoalCard";
 import { YourMetricsCard } from "./YourMetricsCard";
 
 export const dynamic = "force-dynamic";
@@ -36,6 +37,19 @@ function goalCountFromOnboarding(state: OnboardingState | null): number {
   const predefined = state.top_goals?.length ?? 0;
   const freeText = state.top_goals_input?.trim() ? 1 : 0;
   return predefined + freeText;
+}
+
+// Top goal surfaced on the Home card: first predefined goal, or the
+// free-text input if no predefined exists, or null. Returns null only
+// when both are empty — the TopGoalCard handles the empty case with a
+// link to /goals.
+function topGoalFromOnboarding(state: OnboardingState | null): string | null {
+  if (!state) return null;
+  const first = state.top_goals?.[0]?.trim();
+  if (first) return first;
+  const freeText = state.top_goals_input?.trim();
+  if (freeText) return freeText;
+  return null;
 }
 
 type HomeData = {
@@ -109,6 +123,7 @@ export default async function HomePage() {
   const coach = coachLabel(state?.coach_name);
   const { lastSession, sessionCount, endedTimestamps } = await loadHomeData();
   const goalCount = goalCountFromOnboarding(state);
+  const topGoalTitle = topGoalFromOnboarding(state);
 
   return (
     <PageShell active="home">
@@ -125,11 +140,18 @@ export default async function HomePage() {
         <FirstSessionCard coachLabelText={coach} />
       )}
 
-      <YourMetricsCard
-        sessionCount={sessionCount}
-        goalCount={goalCount}
-        endedTimestamps={endedTimestamps}
-      />
+      {/* 2-col grid: Your Metrics | Top Goal. Matches canonical
+          app-screenshot-homescreen-5.jpeg. Stays 2-col even on narrow
+          mobile per the Bubble design; cards are compact enough to
+          read at phone width. */}
+      <div className="mt-6 grid grid-cols-2 gap-3">
+        <YourMetricsCard
+          sessionCount={sessionCount}
+          goalCount={goalCount}
+          endedTimestamps={endedTimestamps}
+        />
+        <TopGoalCard topGoalTitle={topGoalTitle} />
+      </div>
     </PageShell>
   );
 }
