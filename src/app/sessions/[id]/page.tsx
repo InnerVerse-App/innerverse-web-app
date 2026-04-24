@@ -2,17 +2,12 @@ import { notFound, redirect } from "next/navigation";
 import { auth } from "@clerk/nextjs/server";
 
 import { getOnboardingState } from "@/lib/onboarding";
+import { coachLabel } from "@/lib/onboarding-labels";
 import { loadSessionForUser } from "@/lib/sessions";
-import { COACHES } from "@/app/onboarding/data";
 
 import { ChatView } from "./ChatView";
 
 export const dynamic = "force-dynamic";
-
-function coachLabel(coachValue: string | null | undefined): string {
-  if (!coachValue) return "your coach";
-  return COACHES.find((c) => c.value === coachValue)?.label ?? coachValue;
-}
 
 export default async function SessionPage({
   params,

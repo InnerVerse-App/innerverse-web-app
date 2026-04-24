@@ -34,22 +34,24 @@ export default async function Home() {
       />
 
       <div className="relative z-10 flex flex-col items-center gap-3 px-6 text-center">
+        {/*
+         * Full composition is baked into the PNG (mark + "InnerVerse"
+         * wordmark + tagline), so no sibling <h1> / <p> needed — the
+         * image carries the hierarchy. PNG is RGBA so the nebula
+         * background shows through cleanly. Aspect is 2:3 (4440x6660);
+         * width props set the intrinsic; className scales for mobile
+         * vs sm+.
+         */}
         <Image
-          src="/innerverse-mark.png"
-          alt=""
-          width={300}
-          height={300}
+          src="/innerverse-logo-color.png"
+          alt="InnerVerse — Your personal Life Coach, always within reach."
+          width={444}
+          height={666}
           priority
-          className="h-40 w-40 sm:h-48 sm:w-48"
+          className="h-auto w-64 sm:w-72"
         />
-        <h1 className="text-4xl font-bold tracking-tight text-white drop-shadow-[0_2px_8px_rgba(0,0,0,0.7)] sm:text-5xl">
-          InnerVerse
-        </h1>
-        <p className="max-w-xs text-sm text-white/90 drop-shadow-[0_1px_4px_rgba(0,0,0,0.7)] sm:text-base">
-          Your personal Life Coach, always within reach.
-        </p>
 
-        <div className="mt-6 flex flex-col items-center gap-3">
+        <div className="mt-2 flex flex-col items-center gap-3">
           {showContinue ? (
             <Link
               href="/home"

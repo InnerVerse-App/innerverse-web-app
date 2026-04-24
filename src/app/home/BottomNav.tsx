@@ -67,9 +67,16 @@ const TABS: Tab[] = [
 
 export function BottomNav({ active }: { active: TabKey }) {
   return (
+    // fixed inset-x-0 bottom-0 z-20 — pin to viewport bottom so the
+    // nav stays visible while the page scrolls. PageShell's main
+    // element adds pb-24 so content isn't hidden underneath. Session
+    // detail pages (src/app/sessions/[id]/page.tsx) render ChatView
+    // instead of PageShell, so the nav is automatically hidden during
+    // an active coaching session per the product requirement.
+    //
     // pb-[env(safe-area-inset-bottom)] — pads past iOS home-indicator
     // safe area so the tab row isn't obscured on notched devices.
-    <nav className="border-t border-white/5 bg-brand-dark/80 backdrop-blur pb-[env(safe-area-inset-bottom)]">
+    <nav className="fixed inset-x-0 bottom-0 z-20 border-t border-white/5 bg-brand-dark/90 backdrop-blur pb-[env(safe-area-inset-bottom)]">
       <div className="mx-auto flex max-w-2xl items-stretch justify-between px-2 py-2">
         {TABS.map((tab) => {
           const isActive = tab.key === active;

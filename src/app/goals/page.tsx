@@ -6,6 +6,7 @@ import {
   getOnboardingState,
   isOnboardingComplete,
 } from "@/lib/onboarding";
+import { goalLabel } from "@/lib/onboarding-labels";
 import { supabaseForUser } from "@/lib/supabase";
 
 export const dynamic = "force-dynamic";
@@ -59,7 +60,7 @@ export default async function GoalsPage() {
                 key={goal}
                 className="rounded-lg border border-white/10 bg-white/[0.02] px-4 py-3 text-sm text-neutral-200"
               >
-                {goal}
+                {goalLabel(goal)}
               </li>
             ))}
             {extraGoal ? (

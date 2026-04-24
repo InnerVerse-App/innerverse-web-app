@@ -2,12 +2,12 @@ import { redirect } from "next/navigation";
 import { auth } from "@clerk/nextjs/server";
 
 import { PageShell } from "@/app/_components/PageShell";
-import { COACHES } from "@/app/onboarding/data";
 import {
   getOnboardingState,
   isOnboardingComplete,
   type OnboardingState,
 } from "@/lib/onboarding";
+import { coachLabel } from "@/lib/onboarding-labels";
 import { supabaseForUser } from "@/lib/supabase";
 
 import {
@@ -24,11 +24,6 @@ export const dynamic = "force-dynamic";
 // the home card doesn't need exact counts past 60 days, and capping
 // here keeps the timestamp payload sent to StreakBadge small.
 const STREAK_WINDOW_DAYS = 60;
-
-function coachLabel(coachValue: string | null | undefined): string {
-  if (!coachValue) return "your coach";
-  return COACHES.find((c) => c.value === coachValue)?.label ?? "your coach";
-}
 
 // Goals count: predefined top_goals plus an optional free-text goal.
 // Matches the Goals-tab rendering (src/app/goals/page.tsx).
@@ -150,7 +145,7 @@ export default async function HomePage() {
           goalCount={goalCount}
           endedTimestamps={endedTimestamps}
         />
-        <TopGoalCard topGoalTitle={topGoalTitle} />
+        <TopGoalCard topGoalRaw={topGoalTitle} />
       </div>
     </PageShell>
   );
