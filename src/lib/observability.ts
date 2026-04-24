@@ -13,6 +13,8 @@ export type SessionErrorStage =
   | "session_chat_empty_response"
   | "session_chat_no_response_id"
   | "session_end_openai"
+  | "session_end_truncated"
+  | "session_end_refusal"
   | "session_end_rpc"
   | "session_feedback_insert"
   | "cron_sweep_scan"
