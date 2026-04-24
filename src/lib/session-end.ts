@@ -33,6 +33,7 @@ const SESSION_END_SCHEMA: Record<string, unknown> = {
   required: [
     "session_summary",
     "progress_summary_short",
+    "coach_message",
     "progress_percent",
     "breakthroughs",
     "mindset_shifts",
@@ -48,8 +49,20 @@ const SESSION_END_SCHEMA: Record<string, unknown> = {
   properties: {
     session_summary: { type: "string" },
     progress_summary_short: { type: "string" },
+    coach_message: { type: "string" },
     progress_percent: { type: "integer" },
-    breakthroughs: { type: "array", items: { type: "string" } },
+    breakthroughs: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["content", "note"],
+        properties: {
+          content: { type: "string" },
+          note: { type: "string" },
+        },
+      },
+    },
     mindset_shifts: { type: "array", items: { type: "string" } },
     recommended_next_steps: { type: "array", items: { type: "string" } },
     language_patterns_observed: { type: "array", items: { type: "string" } },

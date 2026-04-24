@@ -6,14 +6,23 @@ Rules:
 - If a field is not applicable, output an empty string, empty array, or false.
 - Clamp style_calibration_delta values within ±0.1.
 - progress_percent must be an integer 0–100.
+- coach_message is a short reflective takeaway (1–3 sentences) drawn from the session's clearest growth moment. Concise, affirming, forward-looking. Distinct from session_summary (longer, neutral) and progress_summary_short (progress-framed).
+- breakthroughs[].note is a one-line subtext that frames the downstream implication of the breakthrough (e.g. "Sharper focus on validation through actual users"). Empty string when no subtext applies.
 
 <example_response>
 {
   "session_summary": "The session focused on time management, goal setting, and stress reduction techniques. The client and coach reviewed practical strategies, created specific action items, and aligned on clear goals for the upcoming week. Feedback from both sides indicated noticeable progress and growing commitment.",
   "progress_summary_short": "Client is showing steady progress with improved commitment to goals and stress management practices.",
+  "coach_message": "Clear commitment to structured time use; increased awareness of small, consistent practices as the real lever for change.",
   "breakthroughs": [
-    "Recognized the importance of structuring daily schedules for better time use",
-    "Identified achievable goals to build momentum and confidence"
+    {
+      "content": "Recognized the importance of structuring daily schedules for better time use",
+      "note": "Routine reframed as a foundation, not a constraint"
+    },
+    {
+      "content": "Identified achievable goals to build momentum and confidence",
+      "note": "Momentum prioritized over ambition"
+    }
   ],
   "mindset_shifts": [
     "Shifted from reactive time use to proactive daily planning",
