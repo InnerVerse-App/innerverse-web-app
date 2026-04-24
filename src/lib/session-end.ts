@@ -16,17 +16,20 @@ import type { UserSupabase } from "@/lib/supabase";
 
 // Bundled at build time via next.config.ts outputFileTracingIncludes.
 const SESSION_END_PROMPT = readFileSync(
-  path.join(process.cwd(), "reference", "prompt-session-end-v3.md"),
+  path.join(process.cwd(), "reference", "prompt-session-end-v4.md"),
   "utf8",
 ).trim();
 
 // Strict mode forbids numeric bounds (minimum/maximum/minItems); range
 // enforcement lives in the prompt and in process_session_end's defensive
-// parse (migration 20260423120000).
+// parse (the RPC body under supabase/migrations/).
 //
-// SCHEMA ↔ DB COUPLING: every field is read by public.process_session_end.
-// Adding or renaming a field requires a matching RPC migration. Dropping a
-// field is only safe once the RPC stops reading it.
+// SCHEMA ↔ DB COUPLING: every top-level field is read by
+// public.process_session_end. Some fields (e.g. breakthroughs,
+// style_calibration_delta) carry nested object structure — changes to
+// their shape require matching updates in both this TS schema AND the
+// RPC's jsonb extraction path. Dropping a field is only safe once the
+// RPC stops reading it.
 const SESSION_END_SCHEMA: Record<string, unknown> = {
   type: "object",
   additionalProperties: false,

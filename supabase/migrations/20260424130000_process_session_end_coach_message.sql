@@ -1,15 +1,16 @@
 -- Session-end RPC update — populate sessions.coach_message and
 -- breakthroughs.note from the LLM JSON.
 --
--- Depends on: 20260424120000_home_extras_columns.sql. The coach_message
--- and note columns must exist before this RPC runs; timestamp ordering
--- guarantees supabase db push serializes correctly when both are
--- unapplied. Split-deploy hazard documented in the 20260424120000
--- header.
+-- DEPLOYMENT ORDERING: this migration MUST land after
+-- 20260424120000_home_extras_columns.sql on every environment. The
+-- coach_message and note columns must exist before this RPC runs.
+-- Timestamp ordering guarantees supabase db push serializes correctly
+-- when both are unapplied; split-deploy hazard documented in the
+-- 20260424120000 header.
 --
 -- Breaking JSON-shape change: breakthroughs is now an array of
 -- {content, note} objects, not bare strings. The paired prompt
--- (reference/prompt-session-end-v3.md) and TypeScript JSON schema
+-- (reference/prompt-session-end-v4.md) and TypeScript JSON schema
 -- (src/lib/session-end.ts SESSION_END_SCHEMA) ship together — all
 -- three land atomically in PR #55. OpenAI structured outputs
 -- enforce the schema, so old-format (bare-string) responses cannot
@@ -17,6 +18,19 @@
 -- jsonb_typeof(elem) = 'object' guard below catches them anyway and
 -- silently skips, mirroring the parent-array jsonb_typeof guard
 -- added in 20260423120000.
+--
+-- Length cap on coach_message: the prompt says "1–3 sentences" but
+-- defense-in-depth for LLM drift — the field is capped to 2000
+-- characters at write time (`left(..., 2000)`). Far larger than any
+-- legitimate 1–3 sentence output, small enough to prevent an
+-- accidental full-summary dump from bloating the row. No cap on
+-- breakthroughs content/note today (future cleanup).
+--
+-- Trust boundary: SECURITY INVOKER enforces RLS on caller credentials.
+-- The grant to service_role (for the abandonment cron) bypasses RLS
+-- by design — the cron's own session-selection query is the sole gate
+-- on which sessions it analyzes. Same posture as 20260423080000 and
+-- 20260423120000; no new trust surface here.
 --
 -- Everything else — SECURITY INVOKER, search_path pin, idempotency
 -- via summary-is-null guard, ±0.1 delta clamp, ±1.0 running-sum
@@ -55,7 +69,7 @@ begin
   set summary = p_analysis ->> 'session_summary',
       progress_summary_short = p_analysis ->> 'progress_summary_short',
       progress_percent = v_progress,
-      coach_message = nullif(p_analysis ->> 'coach_message', ''),
+      coach_message = nullif(left(p_analysis ->> 'coach_message', 2000), ''),
       language_patterns_observed = case
         when jsonb_typeof(p_analysis -> 'language_patterns_observed') = 'array' then
           coalesce(
@@ -154,5 +168,16 @@ grant execute on function public.process_session_end(uuid, jsonb) to service_rol
 -- ---------------------------------------------------------------
 -- DOWN (rollback)
 -- ---------------------------------------------------------------
--- Re-apply 20260423120000_process_session_end_defensive_parse.sql's
--- `create or replace function ...` block to revert.
+-- Supabase CLI doesn't run down migrations automatically. To roll
+-- back this RPC body (leaving the coach_message and note columns
+-- in place — they're harmless when unused), copy the full
+-- `create or replace function public.process_session_end ...` block
+-- from 20260423120000_process_session_end_defensive_parse.sql and
+-- apply via the Supabase dashboard SQL editor or `supabase db execute`.
+-- That restores the pre-coach_message, pre-object-breakthroughs
+-- function body atomically (CREATE OR REPLACE replaces in place).
+--
+-- If the columns themselves must also be dropped, apply the DOWN
+-- block from 20260424120000_home_extras_columns.sql AFTER reverting
+-- the function — doing it before would leave the prior function
+-- referencing coach_message via the pre-revert state.
