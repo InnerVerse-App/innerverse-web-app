@@ -236,7 +236,7 @@ function MessageBubble({ message }: { message: Message }) {
         className={
           fromAi
             ? "max-w-[80%] rounded-2xl bg-white/5 px-4 py-2.5 text-sm text-neutral-100"
-            : "max-w-[80%] rounded-2xl bg-transparent px-4 py-2.5 text-sm text-neutral-200"
+            : "max-w-[80%] rounded-2xl bg-brand-primary/15 px-4 py-2.5 text-sm text-neutral-100"
         }
       >
         {message.content}
