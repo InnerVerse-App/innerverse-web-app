@@ -604,3 +604,110 @@ Root cause: Clerk JWT is captured at client creation and baked in for the reques
 Blast radius: Theoretical today. A longer prompt + slower model could push `runSessionEndAnalysis` past 60s between `loadTranscriptText` and the final `rpc(...)`. The observed error is a misleading RLS rejection.
 Suggested fix: Document the expected max duration on `src/lib/supabase.ts:44`. For long-running actions, re-create the client before the tail write, or switch to `supabaseAdmin()` with explicit `user_id` filters.
 Status: OPEN
+
+## 2026-04-24 — Audit (scope: main..feat/home-extras-schema) — PR #53
+
+### Summary
+
+12 findings total: 3 HIGH, 5 MED, 4 LOW. Two HIGH and one MED addressed inline in PR #53 (`next_steps_update_own` policy added, deployment-ordering note added to migration header, premature "Phase 7 Chunk 1" reference dropped). One HIGH and two MED WON'T FIX — the "partial-failure constraint idempotency" scenario surfaced by three lenses is not reachable because the `pg_constraint` lookup re-evaluates on re-run and re-attempts `ADD CONSTRAINT` if absent. Remaining LOW / architectural findings are intentional or informational.
+
+Scope was tight (one migration file, +45 lines). Four parallel Explore agents ran the four lenses per `Docs/review-cadence/audit-prompt-template.md`.
+
+### Findings
+
+FINDING 1
+Severity: HIGH
+Lens: data-integrity
+Location: supabase/migrations/20260422170000_coaching_session_tables.sql:387-404 (next_steps RLS)
+Root cause: `next_steps` shipped in Phase 6 with SELECT + INSERT policies only. The `/next-steps` checklist (Chunk 8) toggles `status` client-side, which requires UPDATE. Without an UPDATE policy, RLS silently rejects every toggle and the UI appears to hang.
+Blast radius: Chunk 8 feature completely non-functional in production. Silent failure mode — no client-side error surface since RLS rejection returns zero affected rows, not an error.
+Suggested fix: Add `next_steps_update_own` policy in this same migration so the policy lands atomically with the `status` column it gates.
+Status: FIXED (2026-04-24, 6001178) — policy added to `supabase/migrations/20260424120000_home_extras_columns.sql`.
+
+FINDING 2
+Severity: HIGH
+Lens: correctness
+Location: Cross-file coupling between migration (20260424120000) and RPC (20260423120000)
+Root cause: The follow-up RPC update (Chunk 2) writes to `sessions.coach_message` and `breakthroughs.note`. If that RPC lands on prod before this schema migration, `process_session_end` fails with "column does not exist", rolling back the entire session-end transaction and leaving sessions permanently stuck with `summary IS NULL`. Timestamp ordering makes `supabase db push` serialize correctly when both are unapplied on the same env, but split-deploys (e.g., hotfix cherry-pick) break the order.
+Blast radius: One session-end call per affected user permanently stuck. Same failure mode that already produced 20260423120000_process_session_end_defensive_parse.sql.
+Suggested fix: Explicit deployment-ordering note in migration header + PR body.
+Status: FIXED (2026-04-24, 6001178) — header comment in `20260424120000_home_extras_columns.sql` now declares the ordering requirement in a dedicated "Deployment ordering" block, and PR #53 body flags it.
+
+FINDING 3
+Severity: HIGH
+Lens: security
+Location: supabase/migrations/20260424120000_home_extras_columns.sql:60-72 (CHECK constraint idempotency guard)
+Root cause: Agent claimed that on partial migration failure (columns added but `ADD CONSTRAINT` fails mid-run), a re-run's `pg_constraint` lookup would return "constraint exists" and skip re-adding it, leaving an unguarded column. Same concern was raised by correctness lens (FINDING 6) and data-integrity lens (FINDING 5).
+Blast radius: Described scenario.
+Suggested fix: Split into two migrations, or wrap in EXCEPTION handler, or rely on CONSTRAINT ... NOT VALID + VALIDATE.
+Status: WON'T FIX (2026-04-24) — the premise is wrong. If `ADD CONSTRAINT` fails, the DO block raises and the transaction rolls back; if the failure is outside a transaction, the constraint simply isn't there, and the next run's `pg_constraint` lookup returns false (the constraint IS absent) and re-attempts the `ADD CONSTRAINT`. The alleged "sees constraint exists, skips" state is not reachable. Logged here for the trail.
+
+FINDING 4
+Severity: MED
+Lens: data-integrity
+Location: supabase/migrations/20260424120000_home_extras_columns.sql:60-72
+Root cause: Duplicate of FINDING 3.
+Status: WON'T FIX (2026-04-24) — see FINDING 3.
+
+FINDING 5
+Severity: MED
+Lens: correctness
+Location: supabase/migrations/20260424120000_home_extras_columns.sql:60-72
+Root cause: Duplicate of FINDING 3.
+Status: WON'T FIX (2026-04-24) — see FINDING 3.
+
+FINDING 6
+Severity: LOW
+Lens: correctness
+Location: supabase/migrations/20260424120000_home_extras_columns.sql:55 (NOT NULL DEFAULT 'pending' bulk-fills existing rows)
+Root cause: `NOT NULL DEFAULT 'pending'` applied to an existing column means all pre-migration rows receive `status = 'pending'` on disk, bypassing any hypothetical trigger logic (e.g., a future `updated_at` trigger would produce a backwards `created_at < updated_at` ordering).
+Blast radius: None today — `next_steps` has no `updated_at` trigger. Hypothetical future risk.
+Suggested fix: Document intent in the migration comment.
+Status: WON'T FIX (2026-04-24) — intent documented in existing header. If `next_steps` gains an `updated_at` trigger later, that migration should set `updated_at = created_at` for retrofitted rows as part of its own forward step.
+
+FINDING 7
+Severity: MED
+Lens: architecture
+Location: supabase/migrations/20260424120000_home_extras_columns.sql:1-2 (premature "Phase 7 Chunk 1" label)
+Root cause: Header referenced "Phase 7 Chunk 1" but no Phase 7 scope is documented in `reference/decisions.md`. Introduces a phase numbering scheme without a published definition.
+Blast radius: Documentation clarity only.
+Suggested fix: Drop the phase reference or predefine Phase 7.
+Status: FIXED (2026-04-24, 6001178) — header reworded to drop the premature Phase 7 reference.
+
+FINDING 8
+Severity: MED
+Lens: architecture
+Location: supabase/migrations/20260424120000_home_extras_columns.sql:55, 69-70 (`status` hardcoded enum)
+Root cause: `CHECK (status IN ('pending', 'done'))` locks the state machine at two values; adding a third (e.g., 'archived') requires a new migration to `ALTER CHECK`.
+Blast radius: Future migration overhead if/when a third state is justified.
+Suggested fix: Document that the two-state design is intentional and locked.
+Status: WON'T FIX (2026-04-24) — intentional. Matches the `text + CHECK` pattern used elsewhere in the repo. If a third state is ever justified, a separate migration `ALTER TABLE ... DROP CONSTRAINT / ADD CONSTRAINT` is the right shape.
+
+FINDING 9
+Severity: MED
+Lens: architecture
+Location: supabase/migrations/20260424120000_home_extras_columns.sql (implicit layer contract with follow-up RPC)
+Root cause: Agent worried that the follow-up RPC must always supply `status='pending'` on INSERT, or the NOT NULL CHECK fires.
+Blast radius: Agent's worry case doesn't hold — the column has `DEFAULT 'pending'`, so any INSERT without explicit `status` is valid (Postgres applies the default pre-CHECK).
+Status: WON'T FIX (2026-04-24) — premise is wrong; the DEFAULT handles it. Logged here for the trail.
+
+FINDING 10
+Severity: LOW
+Lens: architecture
+Location: supabase/migrations/20260424120000_home_extras_columns.sql (three columns grouped in one file)
+Root cause: Three unrelated columns (breakthroughs, sessions, next_steps) live in one migration. Defensible under the "Home-tab extras" theme but worth watching.
+Status: WON'T FIX (2026-04-24) — intentional. All three ship atomically for the same user-facing feature; separation by table would fragment a single logical change.
+
+FINDING 11
+Severity: LOW
+Lens: architecture
+Location: supabase/migrations/20260424120000_home_extras_columns.sql (DOWN block as comment)
+Root cause: DOWN block is a comment (not auto-executed). Matches the existing repo convention.
+Status: FIXED (2026-04-24, 6001178) — no code change needed; pattern matches `20260422062124_identity_tables.sql` etc.
+
+FINDING 12
+Severity: LOW
+Lens: architecture
+Location: supabase/migrations/20260424120000_home_extras_columns.sql:63-64 (`breakthroughs.note` naming)
+Root cause: Naming mirrors Bubble's legacy field; unique in current schema.
+Status: FIXED (2026-04-24, 6001178) — no code change needed; confirmed no naming collision.
