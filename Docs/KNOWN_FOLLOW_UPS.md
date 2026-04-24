@@ -711,3 +711,102 @@ Lens: architecture
 Location: supabase/migrations/20260424120000_home_extras_columns.sql:63-64 (`breakthroughs.note` naming)
 Root cause: Naming mirrors Bubble's legacy field; unique in current schema.
 Status: FIXED (2026-04-24, 6001178) — no code change needed; confirmed no naming collision.
+
+## 2026-04-24 — Audit (scope: main..feat/session-end-coach-message) — PR #55
+
+### Summary
+
+11 findings total: 0 CRITICAL, 1 HIGH, 5 MED, 5 LOW. The HIGH and four MED addressed inline in PR #55 (prompt renamed v3→v4, SCHEMA↔DB coupling comment updated to mention nested structure, defensive `left(..., 2000)` cap on coach_message, expanded DOWN block, service_role trust-boundary cross-reference, explicit ordering note in RPC header). Remaining LOW findings are pre-existing duplicates, render-surface concerns for Chunk 7, or deliberately deferred defense-in-depth that the atomic strict-mode schema + RPC guards already cover.
+
+Scope: three coupled files — LLM prompt, TS JSON schema, Postgres function. Four parallel Explore agents ran the four lenses. Auth-sensitive surface (RPC writes to user-owned tables) per supabase/README.md pre-apply checklist.
+
+### Findings
+
+FINDING 1
+Severity: HIGH
+Lens: architecture
+Location: reference/prompt-session-end-v3.md (filename) + src/lib/session-end.ts:19 (import path)
+Root cause: The prompt file was edited in-place rather than bumped to v4, despite a breaking JSON-shape change (breakthroughs: string[] → {content, note}[]). Filename "v3" now names two incompatible contracts depending on when it was read.
+Blast radius: Operational confusion across git history and audit trails; `git log -- reference/prompt-session-end-v3.md` spans two shapes.
+Suggested fix: Rename to prompt-session-end-v4.md; update the readFileSync path.
+Status: FIXED (2026-04-24, d0e78ce) — renamed to prompt-session-end-v4.md, path updated in session-end.ts and next.config.ts comment. Glob pattern `prompt-*.md` in next.config.ts covers both so no bundling change.
+
+FINDING 2
+Severity: MED
+Lens: architecture
+Location: src/lib/session-end.ts:27-29 (SCHEMA ↔ DB COUPLING comment)
+Root cause: Comment said "every field is read by public.process_session_end" — inaccurate after this PR because breakthroughs and style_calibration_delta are now nested structures, not flat strings/scalars. Future maintainers might miss the nested-extraction obligation.
+Suggested fix: Update comment to call out nested fields and the dual-layer update obligation.
+Status: FIXED (2026-04-24, d0e78ce) — comment rewritten to mention nested structure explicitly.
+
+FINDING 3
+Severity: MED
+Lens: architecture
+Location: supabase/migrations/20260424130000_process_session_end_coach_message.sql:58 (coach_message column write)
+Root cause: No length cap on coach_message. Prompt says "1–3 sentences" but defense-in-depth is absent — a drifted LLM could write a 10KB coach_message into a `text` column with no constraint.
+Blast radius: Cosmetic (bloated row, weird rendering) if the LLM ever drifts. Not a data-integrity issue.
+Suggested fix: Cap via `left(..., 2000)` in the RPC before writing. Generous headroom for 1–3 sentences; rejects full-summary dumps.
+Status: FIXED (2026-04-24, d0e78ce) — `nullif(left(p_analysis ->> 'coach_message', 2000), '')`.
+
+FINDING 4
+Severity: MED
+Lens: architecture
+Location: supabase/migrations/20260424130000_process_session_end_coach_message.sql (DOWN block)
+Root cause: DOWN block only said "re-apply 20260423120000" without spelling out the operational steps or the subtlety that columns must not be dropped before the function is reverted.
+Suggested fix: Expand the DOWN block with explicit revert procedure.
+Status: FIXED (2026-04-24, d0e78ce) — DOWN block now lists the dashboard SQL-editor path and the column/function ordering requirement for a full rollback.
+
+FINDING 5
+Severity: MED
+Lens: security
+Location: supabase/migrations/20260424130000_process_session_end_coach_message.sql (function grant to service_role)
+Root cause: service_role bypasses RLS; the cron's session-selection query is the sole gate on which sessions get analyzed. Pre-existing posture across every process_session_end version but not cross-referenced in the new migration's header.
+Blast radius: Re-stated for the trail; no new trust surface introduced.
+Suggested fix: Add a one-paragraph trust-boundary note to the new migration header so a cold reader doesn't need to go back to 20260423080000.
+Status: FIXED (2026-04-24, d0e78ce) — header now includes the trust-boundary paragraph.
+
+FINDING 6
+Severity: LOW
+Lens: architecture
+Location: supabase/migrations/20260424130000_process_session_end_coach_message.sql (header ordering clause)
+Root cause: Header said "timestamp ordering serializes correctly" but lacked an explicit "MUST land after 20260424120000" sentence.
+Status: FIXED (2026-04-24, d0e78ce) — header now opens with an explicit DEPLOYMENT ORDERING block.
+
+FINDING 7
+Severity: LOW
+Lens: correctness
+Location: src/lib/session-end.ts (JSON.parse output cast to Record<string, unknown>)
+Root cause: No TS-level runtime assertion that `breakthroughs` is `{content, note}[]` after parsing. Relies on OpenAI strict-mode schema + the RPC's `jsonb_typeof(elem) = 'object'` guard as defense-in-depth.
+Suggested fix: Add a runtime validator (e.g. zod) OR explicitly document the strict-mode + RPC-guard defense-in-depth reliance.
+Status: WON'T FIX (2026-04-24) — atomic strict-mode schema on OpenAI's side + RPC jsonb_typeof guard provide defense-in-depth. Introducing a runtime validator is an architectural decision (schema library adoption) larger than this PR. Revisit if we ever observe a schema-drift bug in the wild.
+
+FINDING 8
+Severity: LOW
+Lens: security
+Location: reference/prompt-session-end-v4.md (coach_message + breakthroughs.note as user-facing LLM-generated fields)
+Root cause: Prompt injection via adversarial session transcripts could steer the LLM to emit phishing links or misleading content in these user-facing fields.
+Blast radius: React default rendering auto-escapes HTML so classic XSS is gated. Markdown or link-preview rendering would amplify.
+Suggested fix: Owned by the Home card renderer (Chunk 7) — URL allowlist or markdown-off policy.
+Status: DEFERRED TO CHUNK 7 (2026-04-24) — not this PR's surface.
+
+FINDING 9
+Severity: LOW
+Lens: security
+Location: src/lib/session-end.ts (Sentry error payload)
+Root cause: `failStage` passes `error.code` into `captureSessionError`. If Sentry config ever serializes full error objects, schema details could leak into Sentry issues.
+Suggested fix: Verify Sentry beforeSend hook strips sensitive fields.
+Status: OUT OF SCOPE — pre-existing behavior unchanged by this PR.
+
+FINDING 10
+Severity: LOW
+Lens: data-integrity + security (3 lenses)
+Location: supabase/migrations/20260424120000_home_extras_columns.sql (deployment ordering)
+Root cause: Three lenses independently flagged the RPC-ahead-of-columns split-deploy hazard. Already documented in PR #53's header.
+Status: WON'T FIX (2026-04-24) — duplicate of PR #53 FINDING 2. Same documentation-plus-timestamp-ordering mitigation applies; nothing new actionable.
+
+FINDING 11
+Severity: LOW
+Lens: correctness
+Location: supabase/migrations/20260424130000_process_session_end_coach_message.sql (silent-skip on non-object breakthroughs element)
+Root cause: Per-element `jsonb_typeof(elem) = 'object'` guard silently skips non-object entries. Strict-mode schema prevents this in normal operation; the skip is defense-in-depth.
+Status: WON'T FIX (2026-04-24) — intentional defensive behavior matching the parent-array guard pattern from 20260423120000. Surfacing a loud error on schema drift is a separate architectural decision.

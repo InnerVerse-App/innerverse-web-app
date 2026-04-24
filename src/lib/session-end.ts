@@ -16,23 +16,27 @@ import type { UserSupabase } from "@/lib/supabase";
 
 // Bundled at build time via next.config.ts outputFileTracingIncludes.
 const SESSION_END_PROMPT = readFileSync(
-  path.join(process.cwd(), "reference", "prompt-session-end-v3.md"),
+  path.join(process.cwd(), "reference", "prompt-session-end-v4.md"),
   "utf8",
 ).trim();
 
 // Strict mode forbids numeric bounds (minimum/maximum/minItems); range
 // enforcement lives in the prompt and in process_session_end's defensive
-// parse (migration 20260423120000).
+// parse (the RPC body under supabase/migrations/).
 //
-// SCHEMA ↔ DB COUPLING: every field is read by public.process_session_end.
-// Adding or renaming a field requires a matching RPC migration. Dropping a
-// field is only safe once the RPC stops reading it.
+// SCHEMA ↔ DB COUPLING: every top-level field is read by
+// public.process_session_end. Some fields (e.g. breakthroughs,
+// style_calibration_delta) carry nested object structure — changes to
+// their shape require matching updates in both this TS schema AND the
+// RPC's jsonb extraction path. Dropping a field is only safe once the
+// RPC stops reading it.
 const SESSION_END_SCHEMA: Record<string, unknown> = {
   type: "object",
   additionalProperties: false,
   required: [
     "session_summary",
     "progress_summary_short",
+    "coach_message",
     "progress_percent",
     "breakthroughs",
     "mindset_shifts",
@@ -48,8 +52,20 @@ const SESSION_END_SCHEMA: Record<string, unknown> = {
   properties: {
     session_summary: { type: "string" },
     progress_summary_short: { type: "string" },
+    coach_message: { type: "string" },
     progress_percent: { type: "integer" },
-    breakthroughs: { type: "array", items: { type: "string" } },
+    breakthroughs: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["content", "note"],
+        properties: {
+          content: { type: "string" },
+          note: { type: "string" },
+        },
+      },
+    },
     mindset_shifts: { type: "array", items: { type: "string" } },
     recommended_next_steps: { type: "array", items: { type: "string" } },
     language_patterns_observed: { type: "array", items: { type: "string" } },
