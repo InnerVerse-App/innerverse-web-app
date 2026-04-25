@@ -13,13 +13,6 @@ import { EditGoalForm } from "./EditGoalForm";
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Edit goal" };
 
-type GoalRow = {
-  id: string;
-  title: string;
-  description: string | null;
-  is_predefined: boolean;
-};
-
 export default async function EditGoalPage({
   params,
 }: {
@@ -43,9 +36,7 @@ export default async function EditGoalPage({
     .maybeSingle();
   if (error) throw error;
   if (!data) redirect("/goals");
-
-  const goal = data as GoalRow;
-  if (goal.is_predefined) redirect("/goals");
+  if (data.is_predefined) redirect("/goals");
 
   return (
     <PageShell active={null}>
@@ -55,9 +46,9 @@ export default async function EditGoalPage({
         the Goals tab.
       </p>
       <EditGoalForm
-        id={goal.id}
-        initialTitle={goal.title}
-        initialDescription={goal.description ?? ""}
+        id={data.id}
+        initialTitle={data.title}
+        initialDescription={data.description ?? ""}
       />
     </PageShell>
   );

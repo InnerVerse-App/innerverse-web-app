@@ -1,6 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { revalidatePath } from "next/cache";
 import { auth } from "@clerk/nextjs/server";
 
 import {
@@ -51,10 +52,9 @@ export async function updateGoal(
     };
   }
 
-  // Defense in depth — UI never renders the edit link for predefined
-  // goals, but the action is independently callable. Editing a
-  // predefined goal's title would silently orphan the GOAL_CATEGORIES
-  // catalog match (loadGoalCatalogState joins by title).
+  // Renaming a predefined goal would orphan its catalog match
+  // (joined by title). UI hides the edit link for these, but the
+  // action is independently callable, so re-check here.
   const goalRes = await ctx.client
     .from("goals")
     .select("is_predefined")
@@ -77,5 +77,8 @@ export async function updateGoal(
     throw updateRes.error;
   }
 
+  revalidatePath("/goals");
+  revalidatePath("/goals/new");
+  revalidatePath("/home");
   redirect("/goals");
 }
