@@ -2,22 +2,7 @@ import Link from "next/link";
 
 import { formatDateCompact } from "@/lib/format";
 
-// Single goal card matching the canonical app-screenshot-goals-tab-full
-// layout. G.3 ships the read-only shape:
-//   - title
-//   - optional status pill (omitted for not_started so freshly-seeded
-//     goals don't lead with a label)
-//   - optional progress bar + percent (hidden when progress_percent
-//     is null — i.e., goal hasn't been touched by a session yet)
-//   - optional rationale paragraph
-//   - optional "Last session: MMM DD" + View Session link
-//   - optional Suggested Next Step row (most recent next_step tied
-//     to this goal). Done items render struck through per the
-//     2026-04-25 product call.
-//
-// Edit + Archive icon buttons are intentionally NOT in this PR —
-// they land with G.5's flows. Per the plan-level review's M4
-// (read-only cards in G.3, icons in G.5).
+import { archiveGoal } from "./actions";
 
 export type GoalCardData = {
   id: string;
@@ -57,16 +42,41 @@ export function GoalCard({ goal }: Props) {
         <h2 className="break-words text-lg font-semibold text-white">
           {goal.title}
         </h2>
-        {statusLabel ? (
-          <span
-            className={
-              "shrink-0 rounded-full border px-3 py-1 text-xs font-medium " +
-              STATUS_PILL_CLASSES[goal.status]
-            }
-          >
-            {statusLabel}
-          </span>
-        ) : null}
+        <div className="flex shrink-0 items-center gap-2">
+          {statusLabel ? (
+            <span
+              className={
+                "rounded-full border px-3 py-1 text-xs font-medium " +
+                STATUS_PILL_CLASSES[goal.status]
+              }
+            >
+              {statusLabel}
+            </span>
+          ) : null}
+          <form action={archiveGoal}>
+            <input type="hidden" name="id" value={goal.id} />
+            <button
+              type="submit"
+              aria-label={`Archive ${goal.title}`}
+              className="flex h-8 w-8 items-center justify-center rounded-md border border-white/10 text-neutral-400 transition hover:border-amber-400/40 hover:text-amber-300"
+            >
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth={1.8}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="h-4 w-4"
+                aria-hidden
+              >
+                <rect x="3" y="3" width="18" height="5" rx="1" />
+                <path d="M5 8v11a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8" />
+                <line x1="10" y1="13" x2="14" y2="13" />
+              </svg>
+            </button>
+          </form>
+        </div>
       </div>
 
       {goal.progress_percent !== null ? (
