@@ -2,10 +2,10 @@ import { redirect } from "next/navigation";
 import { auth } from "@clerk/nextjs/server";
 
 import { PageShell } from "@/app/_components/PageShell";
+import { type ActiveGoal, loadActiveGoalsWithLazySeed } from "@/lib/goals";
 import {
   getOnboardingState,
   isOnboardingComplete,
-  type OnboardingState,
 } from "@/lib/onboarding";
 import { coachLabel } from "@/lib/onboarding-labels";
 import { supabaseForUser } from "@/lib/supabase";
@@ -43,28 +43,13 @@ const GROWTH_PROGRESS_LIMIT = 3;
 // 2). Full history lives on the Progress tab.
 const BREAKTHROUGHS_LIMIT = 3;
 
-function goalCountFromOnboarding(state: OnboardingState | null): number {
-  if (!state) return 0;
-  const predefined = state.top_goals?.length ?? 0;
-  const freeText = state.top_goals_input?.trim() ? 1 : 0;
-  return predefined + freeText;
-}
-
-function topGoalFromOnboarding(state: OnboardingState | null): string | null {
-  if (!state) return null;
-  const first = state.top_goals?.[0]?.trim();
-  if (first) return first;
-  const freeText = state.top_goals_input?.trim();
-  if (freeText) return freeText;
-  return null;
-}
-
 type HomeData = {
   lastSession: LastSession | null;
   sessionCount: number;
   endedTimestamps: string[];
   recentGrowth: RecentGrowthItem[];
   recentBreakthroughs: RecentBreakthrough[];
+  activeGoals: ActiveGoal[];
 };
 
 type GrowthRow = {
@@ -104,10 +89,13 @@ function buildGrowthItems(rows: GrowthRow[]): RecentGrowthItem[] {
     });
 }
 
-// Five parallel Supabase reads. All are RLS-scoped so the
+// Six parallel Supabase reads. All are RLS-scoped so the
 // supabaseForUser context is required; an unauthenticated caller
 // short-circuits to empty counts (though HomePage's auth gate above
-// should prevent that).
+// should prevent that). loadActiveGoalsWithLazySeed handles the
+// onboarding → public.goals seed lazily on first call (idempotent
+// across surfaces — same helper is also called from /goals and the
+// session-start prompt assembly).
 async function loadHomeData(): Promise<HomeData> {
   const ctx = await supabaseForUser();
   if (!ctx) {
@@ -117,6 +105,7 @@ async function loadHomeData(): Promise<HomeData> {
       endedTimestamps: [],
       recentGrowth: [],
       recentBreakthroughs: [],
+      activeGoals: [],
     };
   }
 
@@ -124,7 +113,7 @@ async function loadHomeData(): Promise<HomeData> {
     Date.now() - STREAK_WINDOW_DAYS * 24 * 60 * 60 * 1000,
   ).toISOString();
 
-  const [lastRes, countRes, tsRes, growthRes, breakthroughsRes] =
+  const [lastRes, countRes, tsRes, growthRes, breakthroughsRes, activeGoals] =
     await Promise.all([
       ctx.client
         .from("sessions")
@@ -165,6 +154,7 @@ async function loadHomeData(): Promise<HomeData> {
         .select("id, content, note, created_at")
         .order("created_at", { ascending: false })
         .limit(BREAKTHROUGHS_LIMIT),
+      loadActiveGoalsWithLazySeed(ctx),
     ]);
 
   if (lastRes.error) throw lastRes.error;
@@ -192,6 +182,7 @@ async function loadHomeData(): Promise<HomeData> {
       note: b.note,
       createdAt: b.created_at,
     })),
+    activeGoals,
   };
 }
 
@@ -213,9 +204,19 @@ export default async function HomePage() {
     endedTimestamps,
     recentGrowth,
     recentBreakthroughs,
+    activeGoals,
   } = await loadHomeData();
-  const goalCount = goalCountFromOnboarding(state);
-  const topGoalTitle = topGoalFromOnboarding(state);
+  const goalCount = activeGoals.length;
+  // Top Goal: first active goal (ordered by created_at desc by
+  // loadActiveGoalsWithLazySeed). v1 picks "newest" as Top; a future
+  // chunk may add an explicit Top flag if user feedback warrants.
+  const topGoalCardData = activeGoals[0]
+    ? {
+        title: activeGoals[0].title,
+        progress_percent: activeGoals[0].progress_percent,
+        progress_rationale: activeGoals[0].progress_rationale,
+      }
+    : null;
 
   return (
     <PageShell active="home">
@@ -240,7 +241,7 @@ export default async function HomePage() {
           goalCount={goalCount}
           endedTimestamps={endedTimestamps}
         />
-        <TopGoalCard topGoalRaw={topGoalTitle} />
+        <TopGoalCard topGoal={topGoalCardData} />
       </div>
 
       <PersonalGrowthProgressCard items={recentGrowth} />
