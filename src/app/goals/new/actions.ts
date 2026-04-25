@@ -16,21 +16,11 @@ export type CreateGoalState = {
   error: string | null;
 };
 
-// createGoal server action — invoked from the /goals/new form.
-//
-// Inserts a goal with is_predefined=false, status='not_started', plus
-// a starter next_steps row scoped to this goal (goal_id=new goal,
-// session_id=NULL — system-generated starter, permitted by the
-// next_steps_insert_own RLS as of PR #71). The starter content uses
-// CUSTOM_GOAL_GENERIC_STARTER from src/lib/goals.ts; predefined goal
-// starters use their per-goal text from GOAL_CATEGORIES, which the
-// lazy seed handles separately.
-//
-// Race tolerance: the unique partial index on
-// (user_id, title) WHERE archived_at IS NULL prevents two active
-// goals from sharing a title. A duplicate-title submission produces
-// SQLSTATE 23505 — surfaced to the user as an inline error so they
-// can pick a different title.
+// Inserts a goal + a starter next_step. The starter has session_id=NULL
+// (system-generated, not session-scoped — RLS on next_steps permits
+// this for the row owner). Duplicate active titles surface as 23505
+// from the (user_id, title) WHERE archived_at IS NULL partial index;
+// caught and rendered inline so the user can pick a different title.
 export async function createGoal(
   _prev: CreateGoalState,
   formData: FormData,
@@ -38,10 +28,8 @@ export async function createGoal(
   const session = await auth();
   if (!session?.userId) redirect("/sign-in");
 
-  // Onboarding gate — page.tsx already redirects unfinished users to
-  // /onboarding, but server actions are independently callable (direct
-  // POST / replay), so re-enforce here. Flagged by the 2026-04-25 audit
-  // as correctness HIGH + architecture HIGH.
+  // Server actions are independently callable (direct POST / replay),
+  // so re-enforce the onboarding gate that page.tsx already runs.
   const onboarding = await getOnboardingState();
   if (!isOnboardingComplete(onboarding)) redirect("/onboarding");
 
@@ -72,7 +60,7 @@ export async function createGoal(
     .insert({
       user_id: ctx.userId,
       title,
-      description: description.length > 0 ? description : null,
+      description: description || null,
       is_predefined: false,
     })
     .select("id")
@@ -87,11 +75,8 @@ export async function createGoal(
     throw insertGoalRes.error;
   }
 
-  // Insert the starter next_step. Failure here would leave the goal
-  // without an action item; we still return success and let the user
-  // see the goal — the LLM will write a real next_step on the next
-  // session. Logging via console.error is sufficient for v1; once
-  // Sentry is wired (Phase 10) this would emit a tagged event.
+  // Starter failure is non-fatal — the goal lands and the LLM will
+  // write a real next_step on the next session-end.
   const starterRes = await ctx.client.from("next_steps").insert({
     user_id: ctx.userId,
     goal_id: insertGoalRes.data.id,
