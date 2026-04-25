@@ -19,9 +19,12 @@
 --
 -- is_predefined boolean distinguishes seeded goals (from
 -- onboarding_selections.top_goals values) from user-added goals
--- (created via /goals/new in chunk G.4). Used by the lazy seed in
--- chunk G.3 to detect already-seeded users via the unique partial
--- index on (user_id, title) WHERE is_predefined = true.
+-- (created via /goals/new in chunk G.4). Informational only —
+-- does NOT participate in the unique-title constraint, so a user
+-- can flip the column without affecting integrity invariants. The
+-- 2026-04-25 G.1 audit flagged an earlier design where the unique
+-- index keyed off is_predefined; resolved by keying off
+-- archived_at instead (see goals_user_active_title_uniq below).
 --
 -- Seed: NO SQL backfill in this migration. The goalLabel mapping
 -- lives in TypeScript (src/lib/onboarding-labels.ts) and embedding
@@ -89,13 +92,17 @@ end $$;
 --     and Home Top Goal card both run.
 --   - goals_user_created_idx: full index covering archived + active
 --     for the future Archived view.
---   - goals_user_predefined_title_uniq: prevents the lazy seed from
---     creating duplicate predefined goals on a re-run; also blocks
---     a user from manually adding a goal whose title collides with
---     a seeded one (defensive against a race between concurrent
---     /goals/new and lazy-seed). The partial WHERE clause limits
---     the constraint to predefined seeds, so user-added goals can
---     freely collide with each other or with predefined titles.
+--   - goals_user_active_title_uniq: prevents two ACTIVE goals from
+--     sharing a title within a single user's set. Lazy seed (G.3)
+--     uses INSERT ... ON CONFLICT (user_id, title) DO NOTHING
+--     against this index for idempotency. Keyed on archived_at IS
+--     NULL (not is_predefined) so:
+--       * predefined seed + user-added goal with same title cannot
+--         coexist as both active (the second one is rejected);
+--       * a user can re-add a previously-archived title without
+--         collision (archived row is outside the partial WHERE).
+--     Resolves the 2026-04-25 G.1 audit data-integrity HIGH finding
+--     about predefined+custom title collision.
 
 create index if not exists goals_user_active_idx
   on public.goals (user_id, created_at desc)
@@ -104,9 +111,9 @@ create index if not exists goals_user_active_idx
 create index if not exists goals_user_created_idx
   on public.goals (user_id, created_at desc);
 
-create unique index if not exists goals_user_predefined_title_uniq
+create unique index if not exists goals_user_active_title_uniq
   on public.goals (user_id, title)
-  where is_predefined = true;
+  where archived_at is null;
 
 -- updated_at trigger — reuses public.set_updated_at() from
 -- identity_tables.sql.
@@ -191,7 +198,7 @@ create policy "goals_update_own"
 -- drop policy if exists "goals_insert_own" on public.goals;
 -- drop policy if exists "goals_select_own" on public.goals;
 -- drop trigger if exists goals_set_updated_at on public.goals;
--- drop index if exists public.goals_user_predefined_title_uniq;
+-- drop index if exists public.goals_user_active_title_uniq;
 -- drop index if exists public.goals_user_created_idx;
 -- drop index if exists public.goals_user_active_idx;
 -- drop table if exists public.goals;
