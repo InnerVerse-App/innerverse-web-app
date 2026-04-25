@@ -12,15 +12,6 @@ import { NewGoalForm } from "./NewGoalForm";
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Add a goal" };
 
-// /goals/new — minimal Add-goal flow. Server-renders the shell; the
-// form is a client component with useFormState for inline error
-// display. Server action createGoal handles the INSERT + starter
-// next_step + redirect on success.
-//
-// active={null} on the PageShell so no tab highlights — this is a
-// sub-page reached from /goals's "+ Add" button, same pattern as
-// /next-steps.
-
 export default async function NewGoalPage() {
   const session = await auth();
   if (!session?.userId) redirect("/sign-in");
