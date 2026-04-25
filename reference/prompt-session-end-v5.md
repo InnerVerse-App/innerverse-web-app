@@ -8,6 +8,8 @@ Rules:
 - progress_percent must be an integer 0–100.
 - coach_message is a short reflective takeaway (1–3 sentences) drawn from the session's clearest growth moment. Concise, affirming, forward-looking. Distinct from session_summary (longer, neutral) and progress_summary_short (progress-framed).
 - breakthroughs[].note is a one-line subtext that frames the downstream implication of the breakthrough (e.g. "Sharper focus on validation through actual users"). Empty string when no subtext applies.
+- updated_goals: emit one entry for each goal you observed in the session, and only those — do not fabricate updates for goals that were not discussed. The goal_id MUST come from the "Active goals at session start" list at the top of the transcript; do not invent IDs. status is one of: not_started, on_track, at_risk. progress_percent is your read of where the client is on this goal after the session (an integer 0–100; emit the prior value when there is no real change). progress_rationale is one sentence explaining the read. suggested_next_step is a concrete, low-friction action that directly progresses THAT goal — empty string when no specific action is appropriate this session.
+- recommended_next_steps: session-level actions that are not tied to a specific goal (e.g., a general life habit). Per-goal actions belong in updated_goals[].suggested_next_step instead.
 
 <example_response>
 {
@@ -29,9 +31,23 @@ Rules:
     "Acknowledged the role of small, consistent practices in stress reduction"
   ],
   "recommended_next_steps": [
-    "Implement the daily schedule and track adherence",
-    "Define and pursue three achievable goals this week",
     "Practice deep breathing for 5 minutes daily"
+  ],
+  "updated_goals": [
+    {
+      "goal_id": "a3f7c4b2-1d2e-4f5a-8b9c-0d1e2f3a4b5c",
+      "status": "on_track",
+      "progress_percent": 30,
+      "progress_rationale": "Client moved from reactive time use to proactive daily planning, and committed to tracking adherence.",
+      "suggested_next_step": "Implement the daily schedule and track adherence for one week, then bring observations to the next session."
+    },
+    {
+      "goal_id": "b2c1f5d4-3e4a-5b6c-7d8e-9f0a1b2c3d4e",
+      "status": "on_track",
+      "progress_percent": 45,
+      "progress_rationale": "Client identified three achievable goals and chose momentum over ambition.",
+      "suggested_next_step": "Define and pursue three achievable goals this week, no more."
+    }
   ],
   "progress_percent": 30,
   "language_patterns_observed": [

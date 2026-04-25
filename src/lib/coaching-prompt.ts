@@ -3,6 +3,11 @@ import "server-only";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 
+import {
+  type ActiveGoal,
+  formatGoalsForPrompt,
+  loadActiveGoalsWithLazySeed,
+} from "@/lib/goals";
 import { supabaseForUser } from "@/lib/supabase";
 
 // How many of each cross-session signal to pull into the prompt.
@@ -40,7 +45,7 @@ type ProfileSource = {
   style_calibration: CoachingState;
   recent_breakthroughs: string[];
   last_session_summary: string | null;
-  goals: string[];
+  goals: ActiveGoal[];
 };
 
 // Render arrays as "\n\t- item1\n\t- item2" to match the example
@@ -62,7 +67,7 @@ function formatClientProfile(src: ProfileSource): string {
     `Persona: ${src.ai_persona}`,
     `Style calibration (JSON): ${styleJson}`,
     `Recent style feedback: ${src.style_calibration.recent_style_feedback ?? ""}`,
-    `Active goals: ${bulletList(src.goals)}`,
+    `Active goals: ${formatGoalsForPrompt(src.goals)}`,
     `Recent breakthroughs/milestones: ${bulletList(src.recent_breakthroughs)}`,
     `Continuity note (last session summary): ${src.last_session_summary ?? ""}`,
   ].join("\n");
@@ -81,11 +86,16 @@ export async function buildSessionStartInput(args: {
 
   const { client, userId } = ctx;
 
-  const [onboardingRes, stateRes, breakthroughsRes, lastSessionRes] =
+  // loadActiveGoalsWithLazySeed runs alongside the other reads. It
+  // converts onboarding.top_goals into goals rows on first call (and
+  // backfills missing predefined-goal starter next_steps) so a user
+  // who hasn't visited /goals yet still sees their goal context in
+  // the prompt. Idempotent and safe to call from multiple surfaces.
+  const [onboardingRes, stateRes, breakthroughsRes, lastSessionRes, goals] =
     await Promise.all([
       client
         .from("onboarding_selections")
-        .select("coaching_style, coach_name, top_goals, completed_at")
+        .select("coaching_style, coach_name, completed_at")
         .maybeSingle(),
       client
         .from("coaching_state")
@@ -104,6 +114,7 @@ export async function buildSessionStartInput(args: {
         .order("ended_at", { ascending: false })
         .limit(1)
         .maybeSingle(),
+      loadActiveGoalsWithLazySeed(ctx),
     ]);
 
   if (onboardingRes.error) throw onboardingRes.error;
@@ -132,7 +143,7 @@ export async function buildSessionStartInput(args: {
     style_calibration: state,
     recent_breakthroughs: (breakthroughsRes.data ?? []).map((r) => r.content),
     last_session_summary: lastSessionRes.data?.summary ?? null,
-    goals: onboarding.top_goals ?? [],
+    goals,
   });
 
   return [

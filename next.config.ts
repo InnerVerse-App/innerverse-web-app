@@ -3,7 +3,7 @@ import { withSentryConfig } from "@sentry/nextjs";
 
 const nextConfig: NextConfig = {
   // The coaching-prompt module reads reference/prompt-coaching-chat.md
-  // and prompt-session-end-v4.md at runtime via fs.readFileSync. Next.js's
+  // and prompt-session-end-v5.md at runtime via fs.readFileSync. Next.js's
   // bundler only tracks static imports, so the .md files need to be
   // explicitly included in the serverless function bundle or production
   // reads ENOENT. The glob covers all prompt-*.md variants so future
