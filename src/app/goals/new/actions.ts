@@ -3,22 +3,19 @@
 import { redirect } from "next/navigation";
 import { auth } from "@clerk/nextjs/server";
 
-import { GOAL_CATEGORIES } from "@/app/onboarding/data";
 import {
   CUSTOM_GOAL_GENERIC_STARTER,
+  PG_UNIQUE_VIOLATION,
   starterActionForGoalTitle,
 } from "@/lib/goals";
 import {
   getOnboardingState,
   isOnboardingComplete,
 } from "@/lib/onboarding";
+import { GOAL_LABEL_BY_VALUE } from "@/lib/onboarding-labels";
 import { supabaseForUser } from "@/lib/supabase";
 
 import { DESCRIPTION_MAX, TITLE_MAX } from "./limits";
-
-const PREDEFINED_LABEL_BY_VALUE = new Map<string, string>(
-  GOAL_CATEGORIES.flatMap((c) => c.goals).map((g) => [g.value, g.label]),
-);
 
 export type CreateGoalState = {
   error: string | null;
@@ -75,7 +72,7 @@ export async function createGoal(
     .single();
 
   if (insertGoalRes.error) {
-    if (insertGoalRes.error.code === "23505") {
+    if (insertGoalRes.error.code === PG_UNIQUE_VIOLATION) {
       return {
         error: "You already have an active goal with that title.",
       };
@@ -103,10 +100,9 @@ export async function createGoal(
   redirect("/goals");
 }
 
-// Adds a predefined goal by value. If an archived row with the same
-// title exists, restores it (UPDATE archived_at = NULL) so progress
-// and last_session_id continuity carry over. Otherwise inserts fresh
-// with the canonical label + starter from GOAL_CATEGORIES.
+// If an archived row with the same title exists, restores it
+// (UPDATE archived_at = NULL) so progress and last_session_id
+// continuity carry over. Otherwise inserts fresh.
 export async function addPredefinedGoal(formData: FormData): Promise<void> {
   const session = await auth();
   if (!session?.userId) redirect("/sign-in");
@@ -119,7 +115,7 @@ export async function addPredefinedGoal(formData: FormData): Promise<void> {
 
   const valueRaw = formData.get("value");
   const value = typeof valueRaw === "string" ? valueRaw : "";
-  const title = PREDEFINED_LABEL_BY_VALUE.get(value);
+  const title = GOAL_LABEL_BY_VALUE.get(value);
   if (!title) redirect("/goals/new");
 
   const archivedRes = await ctx.client
@@ -153,7 +149,7 @@ export async function addPredefinedGoal(formData: FormData): Promise<void> {
     .single();
   if (insertRes.error) {
     // Concurrent tab beat us — the goal is now active either way.
-    if (insertRes.error.code === "23505") redirect("/goals");
+    if (insertRes.error.code === PG_UNIQUE_VIOLATION) redirect("/goals");
     throw insertRes.error;
   }
 

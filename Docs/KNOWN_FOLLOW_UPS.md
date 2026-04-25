@@ -852,7 +852,7 @@ worth tracking so it doesn't get forgotten.
 FINDING 1
 Severity: LOW
 Lens: architecture
-Location: src/app/home/page.tsx, src/app/sessions/page.tsx, src/app/sessions/[id]/page.tsx, src/app/progress/page.tsx, src/app/goals/page.tsx, src/app/settings/page.tsx, src/app/next-steps/page.tsx
+Location: src/app/home/page.tsx, src/app/sessions/page.tsx, src/app/sessions/[id]/page.tsx, src/app/progress/page.tsx, src/app/goals/page.tsx, src/app/goals/new/page.tsx, src/app/settings/page.tsx, src/app/next-steps/page.tsx, src/app/goals/new/actions.ts (createGoal + addPredefinedGoal)
 Root cause: Every signed-in page repeats the identical gate:
 ```tsx
 const session = await auth();
@@ -860,9 +860,9 @@ if (!session?.userId) redirect("/sign-in");
 const onboarding = await getOnboardingState();
 if (!isOnboardingComplete(onboarding)) redirect("/onboarding");
 ```
-Seven near-identical blocks. Adding an eighth page means copying the block for the eighth time; any change to the auth-gate contract (new redirect target, logged warnings, extra checks) requires seven file edits with drift risk.
+Nine near-identical blocks (seven pages + two server actions). Adding a tenth surface means copying the block again; any change to the auth-gate contract (new redirect target, logged warnings, extra checks) requires nine file edits with drift risk.
 Blast radius: Maintenance-only. The realistic failure is drift across pages — one page missing a step and silently showing content the gate should have blocked.
-Suggested fix: Extract `requireOnboardedUser()` (or `{ userId, state }`) in `src/lib/auth-gate.ts`. Each page becomes a one-liner at the top. Pages that also want the raw Clerk session can still call `auth()` alongside. Consider pairing with the HomeCard / CardHeader cleanup on pages that also use those, since the top-of-file diff is already being touched.
+Suggested fix: Extract `requireOnboardedUser()` (or `{ userId, state }`) in `src/lib/auth-gate.ts`. Each page/action becomes a one-liner at the top. Pages that also want the raw Clerk session can still call `auth()` alongside. Consider pairing with the HomeCard / CardHeader cleanup on pages that also use those, since the top-of-file diff is already being touched.
 Status: OPEN — standalone `refactor: require-onboarded-user helper` PR when convenient.
 
 ## 2026-04-25 — Audit (scope: main..feat/goals-schema) — PR #70
