@@ -106,6 +106,17 @@ export async function loadActiveGoalsWithLazySeed(
 ): Promise<ActiveGoal[]> {
   const { client, userId } = ctx;
 
+  // Defensive guard. UserSupabase types `userId: string` — TypeScript
+  // catches null/undefined at compile time. The runtime check exists
+  // for service_role / cron paths where ctx is constructed manually
+  // (e.g., from sessions.user_id rather than auth.jwt()->>'sub'); a
+  // future refactor that accidentally passes an empty string would
+  // produce FK violations on goals.user_id without this guard.
+  // Per the 2026-04-25 G.2 audit security F3.
+  if (!userId) {
+    throw new Error("loadActiveGoalsWithLazySeed: ctx.userId is required");
+  }
+
   const [onboardingRes, existingRes] = await Promise.all([
     client
       .from("onboarding_selections")

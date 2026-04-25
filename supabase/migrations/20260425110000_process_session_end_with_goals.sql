@@ -171,10 +171,13 @@ begin
       from jsonb_array_elements(p_analysis -> 'updated_goals') as t(value)
       where jsonb_typeof(value) = 'object'
     loop
-      -- Validate goal_id is a real UUID.
+      -- Validate goal_id is a real UUID. Narrow exception class so
+      -- only UUID-cast failures are caught — anything else (network
+      -- error, deadlock) bubbles up to the outer transaction. Per
+      -- the 2026-04-25 G.2 audit security F1.
       begin
         v_goal_id := (v_goal_elem ->> 'goal_id')::uuid;
-      exception when others then
+      exception when invalid_text_representation then
         v_goal_id := null;
       end;
       if v_goal_id is null then
