@@ -85,6 +85,7 @@ async function buildCardData(
         : null,
       current_next_step_content: step?.content ?? null,
       current_next_step_done: step?.status === "done",
+      is_predefined: g.is_predefined,
     };
   });
 }
