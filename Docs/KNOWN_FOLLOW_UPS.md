@@ -969,3 +969,91 @@ Lens: architecture
 Location: supabase/migrations/20260425090000_goals_table.sql (dual indexing — partial active + full chronological)
 Root cause: `goals_user_active_idx` partial + `goals_user_created_idx` full overlap on the active subset.
 Status: WON'T FIX (2026-04-25) — intentional. Partial optimizes the common Goals tab list query; full serves the future Archived view. Drop the full one in a follow-up if profiling later shows it unused.
+
+## 2026-04-25 — Plan-level review (Goals phase G.1-G.5) — 3 HIGH issues, all addressed
+
+A fresh-session reviewer pressure-tested the entire Goals phase plan (not just G.1's diff) and surfaced three HIGH issues the per-PR audits had missed:
+
+PLAN-FINDING 1 (HIGH)
+Lens: data-integrity
+Root cause: G.3's lazy seed and G.4's createGoal both planned to INSERT a "starter" next_step at goal-creation time. But `next_steps.session_id` was declared NOT NULL in 20260422170000, AND the RLS WITH CHECK required session_id IN (caller's sessions). Both would have failed at runtime since starter inserts have no session in scope.
+Status: FIXED via PR #71 (G.1.5) — `ALTER COLUMN session_id DROP NOT NULL` + `next_steps_insert_own` updated to permit `session_id IS NULL` rows scoped by user_id.
+
+PLAN-FINDING 2 (HIGH)
+Lens: correctness
+Root cause: Lazy seed was planned to run only on `/goals` visit. A user who completes onboarding and starts a coaching session before opening the Goals tab would have hit empty goals in the session-start prompt — a regression vs the current behavior of reading from `onboarding.top_goals`. The session-end LLM would then emit `updated_goals[]` with goal_ids that don't exist, and the RPC silently drops them — first session is wasted from a goals-tracking perspective.
+Status: TO FIX in G.2 — call `loadActiveGoalsWithLazySeed(userId)` from `startSession` in `src/app/sessions/actions.ts` before `buildSessionStartInput`. Idempotent (`INSERT ... ON CONFLICT DO NOTHING` against the unique partial index from PR #70), so calling from /goals + Home + startSession is safe.
+
+PLAN-FINDING 3 (HIGH)
+Lens: security
+Root cause: Restated PR #70 audit FINDING 5 with concrete language. G.2's RPC will be invoked under both `authenticated` (RLS-gated) and `service_role` (RLS bypass) per the existing grant pattern. Under service_role, `auth.jwt()->>'sub'` is NULL, so any goal UPDATE that relies on RLS for cross-user isolation can be defeated.
+Status: TO FIX in G.2 — RPC body must derive `v_user_id := (SELECT user_id FROM sessions WHERE id = p_session_id)`, then `UPDATE goals ... WHERE id = ANY(...) AND user_id = v_user_id AND archived_at IS NULL`. Same defensive shape as the existing breakthroughs path. The G.2 PR's audit prompt will explicitly verify this WHERE clause.
+
+Plus four MED items captured forward:
+
+PLAN-FINDING 4 (MED) — Cross-session goal-state staleness. Goals not discussed in N sessions stay frozen. Status: WON'T FIX for v1 (defer to post-launch observation; possible mitigations: `last_evaluated_at`, gray-out cards after N days, or pass age into prompt).
+
+PLAN-FINDING 5 (MED) — G.2 partial-rollback hazard. Five-layer coupled change (prompt-coaching-chat / session-start assembly / prompt-session-end-v5 / TS schema / RPC migration). Mitigation: prompt-session-end becomes v5.md (file rename forces matched read), TS schema bump lands in same PR as RPC migration, deploy ordering documented in migration header. Same lesson as PR #55.
+
+PLAN-FINDING 6 (MED) — G.3 ships +Add / Edit / Archive icons before G.4 / G.5 implement them. Status: ADJUSTED PLAN — G.3 ships read-only cards; edit/archive icons land in G.5's PR. Cleaner than feature flags.
+
+PLAN-FINDING 7 (MED) — GDPR/right-to-be-forgotten on archived goals. `progress_rationale` and free-text fields can contain PII. Today's only deletion path is full-account-delete via Clerk webhook. Status: OPEN, defer to >10-tester gate alongside the existing 2026-04-22 PR #53 FINDING 4 (deletion-webhook E2E verification).
+
+## 2026-04-25 — Audit (scope: main..feat/next-steps-nullable-session) — PR #71
+
+### Summary
+
+Three parallel lens audits (security, data-integrity, correctness+architecture combined). Zero actionable findings on the migration itself. One forward note for G.3's lazy-seed code (add inline comment documenting the NULL session_id contract). Several agent findings rejected as based on incorrect premises (no auto-generated TS types in this repo; DOWN-block convention is documented; "CRITICAL" rating on documented manual-verify pattern was overblown).
+
+Scope: one migration (`supabase/migrations/20260425100000_next_steps_nullable_session.sql`) — `ALTER COLUMN next_steps.session_id DROP NOT NULL` + replace `next_steps_insert_own` RLS to permit `session_id IS NULL` rows. PR fixes the HIGH issue surfaced by the 2026-04-25 plan-level review.
+
+### Findings
+
+FINDING 1
+Severity: LOW
+Lens: security
+Location: header comment
+Root cause: Agent suggested a one-sentence clarification that "session_id is still enforced NOT NULL in the FK constraint." That's factually wrong — Postgres FK constraints don't have NOT NULL semantics; nullable FKs are standard.
+Status: WON'T FIX (2026-04-25) — agent's premise is incorrect; existing comment already explains the semantic clearly.
+
+FINDING 2
+Severity: MED
+Lens: data-integrity (forward note for G.3 code)
+Location: future src/lib/goals.ts (lazy seed) and src/app/goals/new/actions.ts (createGoal)
+Root cause: New RLS policy permits NULL session_id without verifying session ownership for that row (intentional — NULL means "system-generated starter"). Future starter-insert code paths must enforce the contract that NULL session_id is only used for system-generated starters, not as a way to bypass session-ownership checks.
+Status: OPEN — carry forward to G.3 / G.4 PRs. Inline code comment will document the contract at the insertion sites.
+
+FINDING 3
+Severity: MED (rejected)
+Lens: data-integrity / cross-runtime consistency
+Location: TypeScript Supabase types
+Root cause: Agent worried that auto-generated Supabase types might declare session_id as non-nullable UUID, rejecting NULL inserts at the type layer.
+Status: WON'T FIX (2026-04-25) — this repo doesn't use auto-generated Supabase types (verified via grep on `Database`, `generated`, `schema.types`). Untyped Supabase client in use; nullable-column changes are TS-safe.
+
+FINDING 4
+Severity: MED
+Lens: data-integrity (semantic drift)
+Location: future code that writes next_steps
+Root cause: Future bulk UPDATE that assigns session_id to previously-NULL rows would break the "NULL = system-generated starter" contract.
+Status: OPEN — enforce by code review going forward. The starter-vs-session-derived distinction is part of the next_steps semantic contract.
+
+FINDING 5
+Severity: CRITICAL (rejected — agent miscategorized)
+Lens: data-integrity
+Location: DOWN block manual-verify step
+Root cause: Agent rated "CRITICAL" because the DOWN block requires manual SELECT verification before re-adding NOT NULL.
+Status: WON'T FIX (2026-04-25) — Supabase CLI doesn't run DOWN blocks automatically; manual-verify is the documented project convention. The DOWN block IS already comment-blocked and includes the SELECT step. "CRITICAL" rating is overblown for a documented manual operator path.
+
+FINDING 6
+Severity: LOW
+Lens: correctness
+Location: RLS WHERE clause comment
+Root cause: Agent suggested expanding the comment to explicitly mention Postgres three-valued logic (NULL IN (...) = UNKNOWN, falsy; IS NULL short-circuits to TRUE).
+Status: WON'T FIX (2026-04-25) — accepted. The IS NULL is correct; future maintainers reading the policy can refer to Postgres docs. Minor doc-polish, not worth the churn.
+
+FINDING 7
+Severity: LOW
+Lens: data-integrity (TOCTOU)
+Location: ALTER COLUMN takes ACCESS EXCLUSIVE lock
+Root cause: DDL serialization with concurrent INSERTs.
+Status: WON'T FIX (2026-04-25) — sub-second lock on dev/prod, accepted by the agent itself.
