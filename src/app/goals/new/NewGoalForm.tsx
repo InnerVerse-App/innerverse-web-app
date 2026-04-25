@@ -4,14 +4,9 @@ import Link from "next/link";
 import { useFormState, useFormStatus } from "react-dom";
 
 import { createGoal, type CreateGoalState } from "./actions";
+import { DESCRIPTION_MAX, TITLE_MAX } from "./limits";
 
 const INITIAL_STATE: CreateGoalState = { error: null };
-
-// Soft caps mirroring src/app/goals/new/actions.ts. Kept in the
-// client component so the input attributes match the server-side
-// validation; both should fail in the same way at the same length.
-const TITLE_MAX = 200;
-const DESCRIPTION_MAX = 1000;
 
 function SubmitButton() {
   const { pending } = useFormStatus();

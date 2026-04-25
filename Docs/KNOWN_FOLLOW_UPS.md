@@ -1131,3 +1131,99 @@ Various code-style / observability suggestions (RAISE NOTICE on skip, sanitize p
 ### Cron path verification (security F12)
 
 Agent flagged that the abandonment-cron context construction wasn't visible. Confirmed: `src/app/api/cron/sweep-stale-sessions/route.ts:164` and `:179` both pass `{ client: admin, userId: s.user_id }` where `s.user_id` is read from the sessions row (line 58 SELECT). Service-role bypasses RLS but `v_user_id` derivation in the new RPC is from `sessions.user_id` (the function's own SELECT), not from the JWT. Both paths agree on the user. New runtime guard in `loadActiveGoalsWithLazySeed` catches any future regression.
+
+## 2026-04-25 — Audit (scope: main..feat/goals-add-flow) — PR #74
+
+### Summary
+
+Four parallel Explore agents per `Docs/review-cadence/audit-prompt-template.md`, scope: three new files in `src/app/goals/new/` (no schema, no RLS change). Cross-lens consolidation:
+
+- **2 fixes addressed inline in PR #74** before merge: server-action onboarding gate (was bypassable via direct POST) and TITLE_MAX/DESCRIPTION_MAX dedup (was duplicated in client + server).
+- **Several deferred-acceptable patterns** (non-atomic two-table write, missing Sentry tagging, prompt-injection on own session, no createGoal rate limit) — already documented in code or earlier audits, no v1 fix.
+- **Two findings pushed back on inflated severity** (Security CRITICAL #13 expired-token scenario, actually LOW; Security HIGH #2 rate limit pre-launch, practical LOW).
+
+### Findings
+
+FINDING 1
+Severity: HIGH
+Lens: correctness + architecture (both lenses raised independently)
+Location: src/app/goals/new/actions.ts:38-43 (pre-fix)
+Root cause: createGoal server action checks auth() but not isOnboardingComplete(). The page (page.tsx:28-29) checks both. Server actions are independently callable via direct POST or replay, so a partially-onboarded user could bypass the page guard and create a goal before onboarding completes.
+Blast radius: User in mid-onboarding can populate goals before coaching context (onboarding_selections) is fully persisted. Not a security issue, but violates the gating contract and could leave the LLM seeing goals without the onboarding signals it expects.
+Suggested fix: Mirror the page guard — call getOnboardingState() + isOnboardingComplete() before Supabase access in the action.
+Status: FIXED (2026-04-25, pending commit on feat/goals-add-flow) — onboarding gate added immediately after the auth check in createGoal.
+
+FINDING 2
+Severity: MED
+Lens: correctness + architecture
+Location: src/app/goals/new/actions.ts:13-14 + src/app/goals/new/NewGoalForm.tsx:13-14 (pre-fix)
+Root cause: TITLE_MAX = 200 and DESCRIPTION_MAX = 1000 defined in two files. Drift between client maxLength and server validation would surface as a confusing UX (client allows input the server rejects, or vice versa).
+Blast radius: Maintenance hazard. No production bug today.
+Suggested fix: Extract to a single source of truth. src/lib/goals.ts is server-only and can't be imported by the client form, so a new module without "use server" / "use client" is the cleanest fit.
+Status: FIXED (2026-04-25, pending commit on feat/goals-add-flow) — extracted to src/app/goals/new/limits.ts; both files now import from there.
+
+FINDING 3
+Severity: HIGH (data-integrity lens) / MED (security + correctness lenses)
+Lens: data-integrity
+Location: src/app/goals/new/actions.ts:89-108
+Root cause: Goal INSERT and starter next_step INSERT are non-atomic. Goal succeeds, starter can fail; on failure the action logs to console.error and still redirects to /goals, leaving the goal without a starter action.
+Blast radius: User sees their newly-created goal in /goals but the Suggested Next Steps list is empty for it until the next session-end LLM write. UX degraded, not data loss.
+Suggested fix: Wrap both inserts in a Postgres function (pattern: process_session_end) so they commit/abort atomically. Or, until that lands, raise on starterRes.error and let the user retry — but that path produces orphan-goal-on-retry duplication which the unique partial index would surface as a 23505. Trade-off priced into v1 per the inline comment on actions.ts:90-94.
+Status: WON'T FIX (2026-04-25) — accepted v1 trade-off; reschedule to a future Goals phase that introduces a create_goal_with_starter RPC. Logged here so the trail is auditable.
+
+FINDING 4
+Severity: HIGH (security agent) reduced to LOW (operator triage)
+Lens: security
+Location: src/app/goals/new/actions.ts (server action, no rate limit)
+Root cause: No per-user cap on createGoal. A user could spam-create thousands of goals.
+Blast radius: Pre-launch + auth-required + self-only-blast = practical LOW. The Goals tab + session-start prompt assembly would degrade for that user; no cross-user impact, no leak. Severity reduced from HIGH to LOW on operator triage.
+Suggested fix: Add a soft per-user goal cap (e.g., 100 active goals) checked before INSERT. Defer to post-launch when usage telemetry is available.
+Status: OPEN (deferred to post-launch).
+
+FINDING 5
+Severity: CRITICAL (security agent) reduced to LOW (operator triage)
+Lens: security
+Location: src/app/goals/new/actions.ts:42-43, src/lib/supabase.ts (Clerk-Supabase token bridge)
+Root cause: Agent claimed an expired-but-truthy Clerk JWT could pass supabaseForUser() and produce a Postgres permission error on INSERT, which isn't caught by the 23505 handler and bubbles as an unhandled exception leading to a 500.
+Blast radius: Bad UX (500), not a security boundary failure. RLS still fails closed; nothing leaks. Severity reduced from CRITICAL to LOW.
+Suggested fix: Once Sentry is wired (Phase 10), tag any non-23505 Supabase error in createGoal so token-validity issues surface in alerts.
+Status: OPEN (deferred to Phase 10 Sentry wiring).
+
+FINDING 6
+Severity: MED
+Lens: data-integrity
+Location: src/app/goals/new/actions.ts:75-88 (archive-vs-active title race)
+Root cause: Unique partial index (user_id, title) WHERE archived_at IS NULL permits re-creating an archived goal title. Concurrent submits — one new, one re-add — can produce a brief friendly "already exists" error to the re-add even though the row they are re-adding is archived.
+Blast radius: UX papercut. No data corruption (Postgres serializes via the index).
+Status: WON'T FIX (2026-04-25) — by design, documented in actions.ts:30-34 (Race tolerance comment).
+
+FINDING 7
+Severity: LOW
+Lens: security
+Location: src/app/goals/new/actions.ts:81-87 (raw Supabase error leaks if non-23505)
+Root cause: Non-23505 Supabase errors are thrown unhandled; if the error message ever surfaces to the client (depends on Next.js error-boundary behavior), Postgres internals could leak.
+Blast radius: Information disclosure to a sophisticated attacker mining error patterns. Defensive-only.
+Suggested fix: Wrap in try/catch at the action boundary; map all unhandled errors to a generic user-facing string.
+Status: OPEN (defense-in-depth, defer until Sentry wiring lands).
+
+FINDING 8
+Severity: MED
+Lens: security
+Location: src/app/goals/new/actions.ts (goal title flows into LLM prompt via formatGoalsForPrompt)
+Root cause: Goal title and description are inserted verbatim into the session-start prompt. A user crafting an injection-style title can attempt to steer their own coach.
+Blast radius: Self-injection only — no cross-user attack. If goals ever become shared (team coaching, manager-assigned, shared templates), this becomes HIGH.
+Status: OPEN (DUPLICATE of 2026-04-23 audit FINDING 10 — same prompt-injection pattern, same defer rationale).
+
+FINDING 9
+Severity: LOW
+Lens: architecture
+Location: src/lib/goals.ts:74 (re-exports CUSTOM_GOAL_GENERIC_STARTER from @/app/onboarding/data)
+Root cause: Constant lives in the UI layer (onboarding/data.ts) but is consumed by server domain logic. Direction-of-dependency smell; if onboarding/data.ts is refactored, lib/goals.ts breaks.
+Blast radius: None operationally.
+Status: OPEN (low priority; address if onboarding/data.ts is restructured).
+
+FINDING 10
+Severity: LOW
+Lens: misc — multiple smaller items not worth individual entries
+Root cause: Various code-style / observability suggestions across all four lenses — auth-check duplication between page.tsx and actions.ts (defense-in-depth, intentional), CreateGoalState return type unreachable on happy path (redirect throws), Clerk null-result tagging gap (Sentry-deferred), client-side maxLength matches but no client-side error message on overflow, etc. None blocking.
+Status: OPEN (acknowledged; case-by-case if any becomes a real issue).

@@ -4,14 +4,13 @@ import { redirect } from "next/navigation";
 import { auth } from "@clerk/nextjs/server";
 
 import { CUSTOM_GOAL_GENERIC_STARTER } from "@/lib/goals";
+import {
+  getOnboardingState,
+  isOnboardingComplete,
+} from "@/lib/onboarding";
 import { supabaseForUser } from "@/lib/supabase";
 
-// Soft caps on user-supplied form input. Schema doesn't enforce these
-// (text columns are unbounded by design — see PR #70 audit ledger
-// FINDING 12); the server action enforces them at write time so the
-// LLM prompt budget and the Goals card layout stay sane.
-const TITLE_MAX = 200;
-const DESCRIPTION_MAX = 1000;
+import { DESCRIPTION_MAX, TITLE_MAX } from "./limits";
 
 export type CreateGoalState = {
   error: string | null;
@@ -38,6 +37,13 @@ export async function createGoal(
 ): Promise<CreateGoalState> {
   const session = await auth();
   if (!session?.userId) redirect("/sign-in");
+
+  // Onboarding gate — page.tsx already redirects unfinished users to
+  // /onboarding, but server actions are independently callable (direct
+  // POST / replay), so re-enforce here. Flagged by the 2026-04-25 audit
+  // as correctness HIGH + architecture HIGH.
+  const onboarding = await getOnboardingState();
+  if (!isOnboardingComplete(onboarding)) redirect("/onboarding");
 
   const ctx = await supabaseForUser();
   if (!ctx) redirect("/sign-in");
