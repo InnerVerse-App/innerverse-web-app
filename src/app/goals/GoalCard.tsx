@@ -15,6 +15,7 @@ export type GoalCardData = {
   last_session_ended_at: string | null;
   current_next_step_content: string | null;
   current_next_step_done: boolean;
+  is_predefined: boolean;
 };
 
 type Props = {
@@ -53,6 +54,27 @@ export function GoalCard({ goal }: Props) {
               {statusLabel}
             </span>
           ) : null}
+          {goal.is_predefined ? null : (
+            <Link
+              href={`/goals/${goal.id}/edit`}
+              aria-label={`Edit ${goal.title}`}
+              className="flex h-8 w-8 items-center justify-center rounded-md border border-white/10 text-neutral-400 transition hover:border-brand-primary/40 hover:text-brand-primary"
+            >
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth={1.8}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="h-4 w-4"
+                aria-hidden
+              >
+                <path d="M12 20h9" />
+                <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z" />
+              </svg>
+            </Link>
+          )}
           <ArchiveButton id={goal.id} title={goal.title} />
         </div>
       </div>
