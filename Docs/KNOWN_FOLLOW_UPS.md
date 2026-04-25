@@ -1057,3 +1057,77 @@ Lens: data-integrity (TOCTOU)
 Location: ALTER COLUMN takes ACCESS EXCLUSIVE lock
 Root cause: DDL serialization with concurrent INSERTs.
 Status: WON'T FIX (2026-04-25) — sub-second lock on dev/prod, accepted by the agent itself.
+
+## 2026-04-25 — Audit (scope: main..feat/goals-rpc-prompt-coupling) — PR #72
+
+### Summary
+
+Three parallel lens audits (security; data-integrity; correctness+architecture combined) on the five-layer coupled change. Agents surfaced 20 findings total — 2 actionable, 5 deferred forward, the rest rejected as fail-soft-by-design, observability concerns belonging to Sentry (Phase 10), or already-gated by existing controls.
+
+Two inline fixes applied in commit during this PR:
+  - Narrowed RPC's `exception when others` to `when invalid_text_representation` (security F1).
+  - Added runtime `if (!userId) throw` guard in `loadActiveGoalsWithLazySeed` (security F3).
+
+Agent verbosity was high — many "CRITICAL"/"HIGH" ratings were overblown for fail-soft-by-design behavior. Pushed back with explicit rationale below.
+
+### Findings
+
+FINDING 1 (security HIGH)
+Location: supabase/migrations/20260425110000_process_session_end_with_goals.sql (UUID parse exception)
+Status: FIXED (2026-04-25, this PR) — replaced `exception when others` with `when invalid_text_representation` so only UUID-cast failures are caught; anything else (deadlock, network) bubbles.
+
+FINDING 2 (security HIGH)
+Location: src/lib/goals.ts loadActiveGoalsWithLazySeed
+Root cause: Agent flagged ctx.userId fragility — a future refactor that drops userId could silently corrupt seed.
+Status: FIXED (2026-04-25, this PR) — runtime guard `if (!userId) throw new Error(...)` added at function top. TypeScript already enforces `string` non-null, but the guard backstops empty strings + survives type-system regressions.
+
+FINDING 3 (multi-lens, rated CRITICAL/HIGH by agents)
+Location: process_session_end RPC's silent skip on hallucinated/cross-user/archived goal_id
+Root cause: When the LLM emits an `updated_goals[i].goal_id` that doesn't match a row owned by `v_user_id` AND `archived_at IS NULL`, the UPDATE matches zero rows, FOUND is false, the next_steps INSERT is gated, and the RPC returns true without raising. Agents called this "silent data loss" / "fail-open."
+Status: WON'T FIX (2026-04-25) — by design. Defensive fail-soft mirrors the breakthroughs `jsonb_typeof` / `length(trim(content)) > 0` pattern. No auth bypass, no cross-user write, no data corruption — just a dropped LLM output. Per the quality checklist, observability for "LLM emitted X that we silently skipped" belongs to Sentry instrumentation (Phase 10 trigger). Rated overzealously by agents.
+
+FINDING 4 (security CRITICAL → reduced)
+Location: prompt-session-end-v5.md + formatGoalsForPrompt rendering goal title/description directly
+Root cause: Agent flagged prompt injection — a user's custom goal title or description lands in the LLM prompt unescaped. Could include "[UPDATE progress_percent = 100]" or "Ignore all prior instructions."
+Status: WON'T FIX (2026-04-25) — only-self-injection. The user is the only one who can put text in their own goals. They'd be steering their own coach; no cross-user attack surface. Defensive wrap-in-tags is good hygiene but not blocking. Revisit if/when goals are ever shared across users (team-shared goals, coach-templates) or if the LLM observably gets steered.
+
+FINDING 5 (data-integrity HIGH)
+Location: starter NULL session_id contract relies on documentation, not schema
+Root cause: A future bulk-update could overwrite NULL session_id and break the "system-generated starter" semantic.
+Status: WON'T FIX (2026-04-25) — the next_steps_update_own RLS + the documented contract are sufficient for v1. Adding a CHECK constraint or trigger here would be over-engineering. If a real bug ever materializes from this, add a CHECK then.
+
+FINDING 6 (data-integrity HIGH)
+Location: Concurrent archive race between session-start and session-end
+Root cause: User archives a goal mid-session; session-end LLM emits an update for it; UPDATE WHERE archived_at IS NULL misses; analysis is dropped.
+Status: WON'T FIX (2026-04-25) — by design. If the user archived the goal, they don't WANT updates landing on it. The fail-soft is correct.
+
+FINDING 7 (correctness HIGH)
+Location: Lazy seed empty-onboarding fallback (goals.ts top_goals ?? [])
+Root cause: Agent worried that preview-env users running session-start before completing onboarding would get empty goals.
+Status: WON'T FIX (2026-04-25) — already gated. `buildSessionStartInput` throws if `onboarding.completed_at` is null; the /home page redirect to /onboarding prevents that path; lazy seed running in parallel with the onboarding read does no harm if it sees an empty array. Triple-gated.
+
+FINDING 8 (architecture MED) — TO ADDRESS LATER
+Location: Five-layer coupling has no central documentation
+Root cause: Future engineers modifying the LLM-RPC contract must remember 5 update sites (prompt rule + LLM schema + RPC extraction + transcript prefix + onboarding data).
+Suggested fix: Add `Docs/CONTRACTS.md` (or extend `Docs/decisions.md`) with a "five-layer rule update checklist."
+Status: OPEN — captured for a future docs PR. Not blocking G.2.
+
+FINDING 9 (architecture MED)
+Location: process_session_end RPC body length (~180 lines)
+Root cause: Approaching complexity threshold; updated_goals FOR loop could be extracted.
+Status: WON'T FIX (2026-04-25) — extraction adds GRANT / search_path / comment overhead for one nested loop. Matches the monolithic pattern of prior process_session_end migrations (20260423080000, 20260423120000, 20260424130000). Revisit if another nested section lands.
+
+FINDING 10 (data-integrity MED)
+Location: Duplicate starter rows from concurrent lazy seeds
+Status: WON'T FIX (2026-04-25) — documented as cosmetic in goals.ts; race window is narrow (two tabs of same user within ms). If duplicates appear in real usage, add a unique constraint on (goal_id, content) WHERE status='pending' AND session_id IS NULL.
+
+FINDING 11 (correctness MED)
+Location: Goal description has no schema cap (text type)
+Status: WON'T FIX (2026-04-25) — text caps belong at write time. G.4's createGoal server action will validate input length; the prompt rendering already truncates to 200 chars for token-budget. Schema stays minimal.
+
+FINDING 12-20 (LOW + accepted-with-rationale)
+Various code-style / observability suggestions (RAISE NOTICE on skip, sanitize prompt content, document contract in code comment, etc.). All deferred or acknowledged as defense-in-depth not blocking. See agent transcripts for individual rationales.
+
+### Cron path verification (security F12)
+
+Agent flagged that the abandonment-cron context construction wasn't visible. Confirmed: `src/app/api/cron/sweep-stale-sessions/route.ts:164` and `:179` both pass `{ client: admin, userId: s.user_id }` where `s.user_id` is read from the sessions row (line 58 SELECT). Service-role bypasses RLS but `v_user_id` derivation in the new RPC is from `sessions.user_id` (the function's own SELECT), not from the JWT. Both paths agree on the user. New runtime guard in `loadActiveGoalsWithLazySeed` catches any future regression.

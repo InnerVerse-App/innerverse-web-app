@@ -3,6 +3,7 @@ import "server-only";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 
+import { formatGoalsForPrompt, loadActiveGoalsWithLazySeed } from "@/lib/goals";
 import {
   captureSessionError,
   type SessionErrorStage,
@@ -16,7 +17,7 @@ import type { UserSupabase } from "@/lib/supabase";
 
 // Bundled at build time via next.config.ts outputFileTracingIncludes.
 const SESSION_END_PROMPT = readFileSync(
-  path.join(process.cwd(), "reference", "prompt-session-end-v4.md"),
+  path.join(process.cwd(), "reference", "prompt-session-end-v5.md"),
   "utf8",
 ).trim();
 
@@ -26,10 +27,10 @@ const SESSION_END_PROMPT = readFileSync(
 //
 // SCHEMA ↔ DB COUPLING: every top-level field is read by
 // public.process_session_end. Some fields (e.g. breakthroughs,
-// style_calibration_delta) carry nested object structure — changes to
-// their shape require matching updates in both this TS schema AND the
-// RPC's jsonb extraction path. Dropping a field is only safe once the
-// RPC stops reading it.
+// updated_goals, style_calibration_delta) carry nested object
+// structure — changes to their shape require matching updates in both
+// this TS schema AND the RPC's jsonb extraction path. Dropping a field
+// is only safe once the RPC stops reading it.
 const SESSION_END_SCHEMA: Record<string, unknown> = {
   type: "object",
   additionalProperties: false,
@@ -41,6 +42,7 @@ const SESSION_END_SCHEMA: Record<string, unknown> = {
     "breakthroughs",
     "mindset_shifts",
     "recommended_next_steps",
+    "updated_goals",
     "language_patterns_observed",
     "nervous_system_markers",
     "trauma_protocol_triggered",
@@ -68,6 +70,38 @@ const SESSION_END_SCHEMA: Record<string, unknown> = {
     },
     mindset_shifts: { type: "array", items: { type: "string" } },
     recommended_next_steps: { type: "array", items: { type: "string" } },
+    // updated_goals: emitted by the LLM for goals it observed in the
+    // session. goal_id MUST come from the "Active goals at session
+    // start" list prepended to the transcript (see loadTranscriptText).
+    // status enum mirrors the goals.status CHECK constraint added in
+    // PR #70. progress_percent is required (strict mode) but the LLM
+    // emits the prior value when there's no real change. suggested_-
+    // next_step is empty string when no specific action applies; the
+    // RPC skips the next_steps INSERT in that case.
+    updated_goals: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: [
+          "goal_id",
+          "status",
+          "progress_percent",
+          "progress_rationale",
+          "suggested_next_step",
+        ],
+        properties: {
+          goal_id: { type: "string" },
+          status: {
+            type: "string",
+            enum: ["not_started", "on_track", "at_risk"],
+          },
+          progress_percent: { type: "integer" },
+          progress_rationale: { type: "string" },
+          suggested_next_step: { type: "string" },
+        },
+      },
+    },
     language_patterns_observed: { type: "array", items: { type: "string" } },
     nervous_system_markers: { type: "string" },
     trauma_protocol_triggered: { type: "boolean" },
@@ -114,20 +148,43 @@ type TranscriptRow = {
   created_at: string;
 };
 
+// Build the user-content payload for the session-end LLM. The
+// session-end call is a fresh /v1/responses (NOT chained from the
+// session conversation), so the LLM doesn't see the session-start
+// system prompt. We prepend the active-goals snapshot so the LLM
+// can reference goal_ids from `updated_goals[]` reliably — without
+// it, the LLM has to invent IDs from the transcript, which it can't
+// do faithfully. Plan-level review 2026-04-25, PLAN-FINDING from the
+// reviewer.
+//
+// loadActiveGoalsWithLazySeed is called even though the session-start
+// path already invoked it — idempotent ON CONFLICT DO NOTHING is
+// cheap, and this keeps the session-end function self-contained for
+// the abandonment-cron path (service_role) where the user never
+// touched session-start in this process.
 async function loadTranscriptText(
   ctx: UserSupabase,
   sessionId: string,
 ): Promise<string> {
-  const { data, error } = await ctx.client
-    .from("messages")
-    .select("is_sent_by_ai, content, created_at")
-    .eq("session_id", sessionId)
-    .order("created_at", { ascending: true });
-  if (error) throw error;
-  const rows = (data ?? []) as TranscriptRow[];
-  return rows
+  const [messagesRes, goals] = await Promise.all([
+    ctx.client
+      .from("messages")
+      .select("is_sent_by_ai, content, created_at")
+      .eq("session_id", sessionId)
+      .order("created_at", { ascending: true }),
+    loadActiveGoalsWithLazySeed(ctx),
+  ]);
+  if (messagesRes.error) throw messagesRes.error;
+  const rows = (messagesRes.data ?? []) as TranscriptRow[];
+  const conversation = rows
     .map((m) => `${m.is_sent_by_ai ? "Coach" : "Client"}: ${m.content}`)
     .join("\n\n");
+
+  // Prepend the active-goals snapshot when goals exist. Empty
+  // goals: skip the header so the transcript reads cleanly.
+  if (goals.length === 0) return conversation;
+  const goalsBlock = `Active goals at session start:${formatGoalsForPrompt(goals)}\n\nConversation:\n`;
+  return `${goalsBlock}${conversation}`;
 }
 
 // Runs the gpt-5 session-end prompt with structured outputs, parses the
