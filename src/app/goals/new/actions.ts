@@ -3,7 +3,11 @@
 import { redirect } from "next/navigation";
 import { auth } from "@clerk/nextjs/server";
 
-import { CUSTOM_GOAL_GENERIC_STARTER } from "@/lib/goals";
+import { GOAL_CATEGORIES } from "@/app/onboarding/data";
+import {
+  CUSTOM_GOAL_GENERIC_STARTER,
+  starterActionForGoalTitle,
+} from "@/lib/goals";
 import {
   getOnboardingState,
   isOnboardingComplete,
@@ -11,6 +15,10 @@ import {
 import { supabaseForUser } from "@/lib/supabase";
 
 import { DESCRIPTION_MAX, TITLE_MAX } from "./limits";
+
+const PREDEFINED_LABEL_BY_VALUE = new Map<string, string>(
+  GOAL_CATEGORIES.flatMap((c) => c.goals).map((g) => [g.value, g.label]),
+);
 
 export type CreateGoalState = {
   error: string | null;
@@ -90,6 +98,81 @@ export async function createGoal(
       code: starterRes.error.code,
       message: starterRes.error.message,
     });
+  }
+
+  redirect("/goals");
+}
+
+// Adds a predefined goal by value. If an archived row with the same
+// title exists, restores it (UPDATE archived_at = NULL) so progress
+// and last_session_id continuity carry over. Otherwise inserts fresh
+// with the canonical label + starter from GOAL_CATEGORIES.
+export async function addPredefinedGoal(formData: FormData): Promise<void> {
+  const session = await auth();
+  if (!session?.userId) redirect("/sign-in");
+
+  const onboarding = await getOnboardingState();
+  if (!isOnboardingComplete(onboarding)) redirect("/onboarding");
+
+  const ctx = await supabaseForUser();
+  if (!ctx) redirect("/sign-in");
+
+  const valueRaw = formData.get("value");
+  const value = typeof valueRaw === "string" ? valueRaw : "";
+  const title = PREDEFINED_LABEL_BY_VALUE.get(value);
+  if (!title) redirect("/goals/new");
+
+  const archivedRes = await ctx.client
+    .from("goals")
+    .select("id")
+    .eq("user_id", ctx.userId)
+    .eq("title", title)
+    .not("archived_at", "is", null)
+    .order("archived_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (archivedRes.error) throw archivedRes.error;
+
+  if (archivedRes.data) {
+    const updateRes = await ctx.client
+      .from("goals")
+      .update({ archived_at: null })
+      .eq("id", archivedRes.data.id);
+    if (updateRes.error) throw updateRes.error;
+    redirect("/goals");
+  }
+
+  const insertRes = await ctx.client
+    .from("goals")
+    .insert({
+      user_id: ctx.userId,
+      title,
+      is_predefined: true,
+    })
+    .select("id")
+    .single();
+  if (insertRes.error) {
+    // Concurrent tab beat us — the goal is now active either way.
+    if (insertRes.error.code === "23505") redirect("/goals");
+    throw insertRes.error;
+  }
+
+  const starter = starterActionForGoalTitle(title);
+  if (starter) {
+    const starterRes = await ctx.client.from("next_steps").insert({
+      user_id: ctx.userId,
+      goal_id: insertRes.data.id,
+      content: starter,
+      status: "pending",
+      session_id: null,
+    });
+    if (starterRes.error) {
+      console.error("addPredefinedGoal: starter next_step insert failed", {
+        goalId: insertRes.data.id,
+        code: starterRes.error.code,
+        message: starterRes.error.message,
+      });
+    }
   }
 
   redirect("/goals");
