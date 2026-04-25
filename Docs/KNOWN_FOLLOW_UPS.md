@@ -864,3 +864,108 @@ Seven near-identical blocks. Adding an eighth page means copying the block for t
 Blast radius: Maintenance-only. The realistic failure is drift across pages — one page missing a step and silently showing content the gate should have blocked.
 Suggested fix: Extract `requireOnboardedUser()` (or `{ userId, state }`) in `src/lib/auth-gate.ts`. Each page becomes a one-liner at the top. Pages that also want the raw Clerk session can still call `auth()` alongside. Consider pairing with the HomeCard / CardHeader cleanup on pages that also use those, since the top-of-file diff is already being touched.
 Status: OPEN — standalone `refactor: require-onboarded-user helper` PR when convenient.
+
+## 2026-04-25 — Audit (scope: main..feat/goals-schema) — PR #70
+
+### Summary
+
+13 findings total: 0 CRITICAL, 3 HIGH, 5 MED, 5 LOW. The two HIGH items collapse into one root fix (the unique-title partial index keyed off archived_at instead of is_predefined); applied inline in commit 7a3be4b. Remaining HIGH (cross-component next_steps semantics) is not actionable — confirmed feature behavior, documented in this PR's commit message. Remaining MED / LOW findings either pushed back as false positives, deferred to G.2/G.3 audits, or accepted by design with rationale captured.
+
+Scope: one schema migration (`supabase/migrations/20260425090000_goals_table.sql`) — adds `public.goals` table, three RLS policies, four indexes (one a unique partial), CHECK constraint, updated_at trigger, plus `next_steps.goal_id` nullable FK. Four parallel Explore agents ran the four lenses per `Docs/review-cadence/audit-prompt-template.md`.
+
+### Findings
+
+FINDING 1
+Severity: HIGH
+Lens: data-integrity
+Location: supabase/migrations/20260425090000_goals_table.sql (unique partial index, original WHERE is_predefined = true)
+Root cause: Original index `goals_user_predefined_title_uniq` keyed off `is_predefined`. A user-added goal with `is_predefined=false` could share a title with a seeded goal (`is_predefined=true`) because the partial WHERE excluded user-added rows from uniqueness — producing duplicates when /goals/new raced the lazy seed.
+Suggested fix: Re-key the index on `archived_at IS NULL`. Two active goals can't share a title regardless of origin; archived goals can be re-titled freely.
+Status: FIXED (2026-04-25, 7a3be4b) — index renamed to `goals_user_active_title_uniq`.
+
+FINDING 2
+Severity: HIGH
+Lens: correctness
+Location: supabase/migrations/20260425090000_goals_table.sql (is_predefined column, no UPDATE restriction)
+Root cause: `is_predefined` is mutable via the `goals_update_own` policy. With the original partial-index design, a user could flip the column to break the lazy-seed idempotency invariant.
+Status: FIXED (2026-04-25, 7a3be4b) — collapsed into FINDING 1's fix. Index no longer depends on `is_predefined`, so mutability is informational only.
+
+FINDING 3
+Severity: HIGH
+Lens: architecture
+Location: supabase/migrations/20260425090000_goals_table.sql (next_steps dual semantics — session_id NOT NULL + goal_id nullable)
+Root cause: Goal cards query `WHERE goal_id = X` returns next_steps rows from any session that touched that goal — cross-session "current next-step" surface. Agent flagged this as a query-contract gap.
+Blast radius: Behaved-as-intended.
+Suggested fix: Document the contract.
+Status: WON'T FIX (2026-04-25) — feature, not bug. Goal cards intentionally show the most-recent next_step across all sessions for that goal (history preserved on /next-steps page). Documented in this PR's commit message; G.2's RPC PR will add a code comment alongside the INSERT.
+
+FINDING 4
+Severity: MED
+Lens: security
+Location: supabase/migrations/20260425090000_goals_table.sql (unique partial index timing side-channel)
+Root cause: Agent posited that a malicious authenticated user could probe whether (user_id, title) exists for another user via INSERT-timing on the unique partial index.
+Blast radius: None reachable.
+Status: WON'T FIX (2026-04-25) — false positive. The `goals_insert_own` RLS policy uses `WITH CHECK user_id = auth.jwt()->>'sub'`, so a malicious user can't even attempt to insert a row with another user's `user_id`. The partial index only fires on the attacker's own rows; no cross-user signal exists.
+
+FINDING 5
+Severity: MED
+Lens: security
+Location: supabase/migrations/20260425090000_goals_table.sql (G.2 forward concern — service_role bypasses RLS)
+Root cause: `process_session_end` is granted to both `authenticated` and `service_role`. service_role bypasses RLS by design (cron sweep). When G.2 extends the RPC to UPDATE goals, the body must be careful to scope writes to the owning user — RLS won't enforce it under service_role.
+Status: OPEN — deferred to G.2 implementation. The G.2 RPC migration MUST include a cross-user-isolation guard (`UPDATE ... WHERE user_id = v_user_id` derived from the session, not relying on RLS), and the G.2 audit prompt will explicitly verify this.
+
+FINDING 6
+Severity: MED
+Lens: data-integrity
+Location: supabase/migrations/20260425090000_goals_table.sql (status enum, no auto-archive when goal complete)
+Root cause: A goal at `status='on_track'` can stay there indefinitely; no auto-archive when an LLM judges completion. UX result: long-completed goals look "active".
+Status: WON'T FIX (2026-04-25) — explicit product decision. Most coaching goals are practices, not terminal achievements. Goals exit the active list via user-initiated `archived_at`. Terminal goals (find_romantic_partner, change_careers) exit the same way — the LLM coach_message can suggest archiving when it observes a milestone, but the user always decides.
+
+FINDING 7
+Severity: MED
+Lens: data-integrity
+Location: supabase/migrations/20260425090000_goals_table.sql (lazy seed concurrency contract)
+Root cause: G.3's lazy-seed helper must use `INSERT ... ON CONFLICT (user_id, title) DO NOTHING` to be race-safe under the unique partial index.
+Status: OPEN — deferred to G.3 implementation. The G.3 PR will explicitly use the ON CONFLICT clause and the G.3 audit will verify it.
+
+FINDING 8
+Severity: MED
+Lens: architecture
+Location: supabase/migrations/20260425090000_goals_table.sql (lazy seed home — src/lib/goals.ts vs onboarding.ts vs goals-seed.ts)
+Root cause: Migration header references `src/lib/goals.ts` for the lazy seed; that file doesn't exist yet. Architecture lens flagged the architectural home as unresolved.
+Status: OPEN — deferred to G.3. Plan: create `src/lib/goals.ts` as the home for goal-related TS helpers (lazy seed + read helpers can co-locate). If the file grows large, split later.
+
+FINDING 9
+Severity: LOW
+Lens: security
+Location: supabase/migrations/20260425090000_goals_table.sql (CHECK constraint enumerability)
+Root cause: Adding a 4th status value later requires both a migration and an application code change. Documentation suggestion.
+Status: WON'T FIX (2026-04-25) — accepted. Future status additions will land in a coupled PR (migration + TS schema + prompt rule) like the coach_message wiring in PR #55.
+
+FINDING 10
+Severity: LOW
+Lens: security
+Location: supabase/migrations/20260425090000_goals_table.sql (Clerk webhook failure mode)
+Root cause: Goals leak forever if the Clerk user.deleted webhook fails. Recovery concern, not security.
+Status: WON'T FIX (2026-04-25) — accepted, captured by the existing 2026-04-22 PR #53 audit FINDING 4 ("verify deletion webhook E2E"). Already in the ledger as OPEN.
+
+FINDING 11
+Severity: LOW
+Lens: correctness
+Location: supabase/migrations/20260425090000_goals_table.sql (status state-machine permissive)
+Root cause: Schema allows any transition (e.g., not_started → at_risk directly).
+Status: WON'T FIX (2026-04-25) — intentional. The LLM may legitimately observe early drift and skip the on_track state. Schema-level state machines are over-engineering at this stage.
+
+FINDING 12
+Severity: LOW
+Lens: correctness
+Location: supabase/migrations/20260425090000_goals_table.sql (smallint sizing on progress_percent + no text caps)
+Root cause: smallint is 2 bytes for a 0-100 value (oversized but harmless); progress_rationale and description have no length cap.
+Status: WON'T FIX (2026-04-25) — text caps belong at write time in G.2's RPC, matching the `left(p_analysis ->> 'coach_message', 2000)` pattern from 20260424130000. Schema stays minimal.
+
+FINDING 13
+Severity: LOW
+Lens: architecture
+Location: supabase/migrations/20260425090000_goals_table.sql (dual indexing — partial active + full chronological)
+Root cause: `goals_user_active_idx` partial + `goals_user_created_idx` full overlap on the active subset.
+Status: WON'T FIX (2026-04-25) — intentional. Partial optimizes the common Goals tab list query; full serves the future Archived view. Drop the full one in a follow-up if profiling later shows it unused.
