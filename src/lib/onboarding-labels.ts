@@ -18,7 +18,10 @@ import {
   THEMES,
 } from "@/app/onboarding/data";
 
-const goalByValue = new Map(
+// Exported for callers that need strict lookup (undefined on miss)
+// rather than goalLabel's humanized fallback — e.g. server actions
+// that must reject unknown values rather than render them.
+export const GOAL_LABEL_BY_VALUE = new Map(
   GOAL_CATEGORIES.flatMap((c) => c.goals).map((g) => [g.value, g.label]),
 );
 const themeByValue = new Map(THEMES.map((t) => [t.value, t.label]));
@@ -34,7 +37,7 @@ function humanizeSnakeCase(value: string): string {
 }
 
 export function goalLabel(value: string): string {
-  return goalByValue.get(value) ?? humanizeSnakeCase(value);
+  return GOAL_LABEL_BY_VALUE.get(value) ?? humanizeSnakeCase(value);
 }
 
 export function themeLabel(value: string): string {

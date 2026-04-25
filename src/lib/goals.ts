@@ -24,7 +24,7 @@ export type ActiveGoal = {
 
 // Postgres SQLSTATE 23505 = unique_violation. Swallowed when a
 // concurrent tab seeds the same predefined goal first.
-const PG_UNIQUE_VIOLATION = "23505";
+export const PG_UNIQUE_VIOLATION = "23505";
 
 // Soft cap on each goal's description in the prompt rendering.
 // Descriptions can be longer in the DB (no schema cap, see PR #70
@@ -74,18 +74,11 @@ export function starterActionForGoalTitle(title: string): string | null {
 
 export { CUSTOM_GOAL_GENERIC_STARTER };
 
-// /goals/new catalog: predefined goals from GOAL_CATEGORIES annotated
-// with the user's per-goal state. Match is by canonical title because
-// goals.title carries the label (not the value).
+// Match is by canonical title because goals.title carries the label
+// (not the value).
 export type CatalogGoalState = "available" | "active" | "archived";
 
-export type CatalogGoal = GoalOption & {
-  state: CatalogGoalState;
-  // Set when state === 'archived' so the re-add action can UPDATE the
-  // existing row (preserving progress + last_session_id) instead of
-  // inserting a fresh one.
-  archived_goal_id: string | null;
-};
+export type CatalogGoal = GoalOption & { state: CatalogGoalState };
 
 export type CatalogCategory = { name: string; goals: CatalogGoal[] };
 
@@ -94,38 +87,26 @@ export async function loadGoalCatalogState(
 ): Promise<CatalogCategory[]> {
   const { data, error } = await ctx.client
     .from("goals")
-    .select("id, title, archived_at")
-    .order("archived_at", { ascending: false, nullsFirst: true });
+    .select("title, archived_at");
   if (error) throw error;
 
-  const activeByTitle = new Map<string, string>();
-  const archivedByTitle = new Map<string, string>();
+  const activeTitles = new Set<string>();
+  const archivedTitles = new Set<string>();
   for (const row of (data ?? []) as Array<{
-    id: string;
     title: string;
     archived_at: string | null;
   }>) {
-    if (row.archived_at === null) {
-      activeByTitle.set(row.title, row.id);
-    } else if (!archivedByTitle.has(row.title)) {
-      archivedByTitle.set(row.title, row.id);
-    }
+    if (row.archived_at === null) activeTitles.add(row.title);
+    else archivedTitles.add(row.title);
   }
 
   return GOAL_CATEGORIES.map((cat) => ({
     name: cat.name,
     goals: cat.goals.map((g) => {
-      if (activeByTitle.has(g.label)) {
-        return { ...g, state: "active" as const, archived_goal_id: null };
-      }
-      if (archivedByTitle.has(g.label)) {
-        return {
-          ...g,
-          state: "archived" as const,
-          archived_goal_id: archivedByTitle.get(g.label) ?? null,
-        };
-      }
-      return { ...g, state: "available" as const, archived_goal_id: null };
+      if (activeTitles.has(g.label)) return { ...g, state: "active" as const };
+      if (archivedTitles.has(g.label))
+        return { ...g, state: "archived" as const };
+      return { ...g, state: "available" as const };
     }),
   }));
 }
