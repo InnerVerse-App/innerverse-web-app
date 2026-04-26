@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-import { ProgressBar } from "@/app/_components/ProgressBar";
+import { RecencyBar } from "@/app/_components/RecencyBar";
 
 // Title falls back from first breakthrough's content → session's
 // progress_summary_short → "Growth session" — our schema has no
@@ -8,7 +8,7 @@ import { ProgressBar } from "@/app/_components/ProgressBar";
 
 export type RecentGrowthItem = {
   sessionId: string;
-  progressPercent: number;
+  endedAt: string;
   title: string;
   note: string | null;
 };
@@ -49,13 +49,8 @@ export function PersonalGrowthProgressCard({ items }: Props) {
           <ul className="mt-4 flex flex-col gap-5">
             {items.map((item) => (
               <li key={item.sessionId}>
-                <div className="flex items-start justify-between gap-3">
-                  <p className="text-sm font-medium text-white">{item.title}</p>
-                  <span className="shrink-0 text-sm text-neutral-400">
-                    {item.progressPercent}%
-                  </span>
-                </div>
-                <ProgressBar percent={item.progressPercent} />
+                <p className="text-sm font-medium text-white">{item.title}</p>
+                <RecencyBar lastEngagedAt={item.endedAt} color="#59A4C0" />
                 {item.note ? (
                   <p className="mt-2 text-sm text-neutral-400">{item.note}</p>
                 ) : null}

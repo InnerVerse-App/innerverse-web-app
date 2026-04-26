@@ -71,10 +71,7 @@ type BreakthroughRow = {
 
 function buildGrowthItems(rows: GrowthRow[]): RecentGrowthItem[] {
   return rows
-    .filter(
-      (r): r is GrowthRow & { progress_percent: number } =>
-        r.progress_percent !== null,
-    )
+    .filter((r): r is GrowthRow & { ended_at: string } => !!r.ended_at)
     .map((r) => {
       const firstBreakthrough = r.breakthroughs[0];
       const title =
@@ -84,7 +81,7 @@ function buildGrowthItems(rows: GrowthRow[]): RecentGrowthItem[] {
       const note = firstBreakthrough?.note?.trim() || null;
       return {
         sessionId: r.id,
-        progressPercent: r.progress_percent,
+        endedAt: r.ended_at,
         title,
         note,
       };
@@ -217,19 +214,19 @@ export default async function HomePage({
     recentGrowth = [
       {
         sessionId: "demo-s6",
-        progressPercent: 78,
+        endedAt: latest.ended_at,
         title: "Greater clarity in own decision-making",
         note: "Recognized that time in nature is the felt marker of a meaningful day.",
       },
       {
         sessionId: "demo-s4",
-        progressPercent: 64,
+        endedAt: DEMO_SESSIONS_LIST[2].ended_at,
         title: "Distinguishing harm from discomfort",
         note: "Moved from preventing all upset to honoring explicit commitments.",
       },
       {
         sessionId: "demo-s2",
-        progressPercent: 47,
+        endedAt: DEMO_SESSIONS_LIST[4].ended_at,
         title: "Named the fear behind negative feedback",
         note: "Held a balanced interpretation instead of collapsing into shame.",
       },
