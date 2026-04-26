@@ -1260,3 +1260,14 @@ Root cause: `.in("goal_id", goalIds)` with no LIMIT pulls every step row across 
 Blast radius: At 1-user / ≤10-tester scale, payload is realistically <100 rows. Theoretical at current scale.
 Suggested fix: Move to a Postgres view/RPC `select distinct on (goal_id) ... order by goal_id, created_at desc` once a real user accumulates >50 active goals or >50 steps per goal.
 Status: OPEN (deferred until user telemetry shows it matters).
+
+## 2026-04-26 — Cross-cutting deferred finding: redundant auth() in goals actions
+
+FINDING 1
+Severity: LOW
+Lens: efficiency
+Location: src/app/goals/actions.ts (archiveGoal), src/app/goals/new/actions.ts (createGoal, addPredefinedGoal), src/app/goals/[id]/edit/actions.ts (updateGoal)
+Root cause: The standard goals-action prelude — `auth()` → `getOnboardingState()` → `supabaseForUser()` — does 3 separate `auth()` calls per click. `getOnboardingState()` and `supabaseForUser()` each call `auth()` internally on top of the explicit top-level redirect-gate. Two of the three are redundant.
+Blast radius: One extra Clerk round-trip per server-action invocation. Negligible at 1 user / ≤10 testers; would be material at scale.
+Suggested fix: Wrap `auth()` once at the lib layer with React's `cache()` (request-scoped memoization). `supabaseForUser` already documents the round-trip-avoidance pattern in its docstring (`src/lib/supabase.ts:36`) — this is finishing that work, not a new pattern. Single edit; no action-file changes.
+Status: OPEN (deferred; revisit before Phase 10 pre-launch gate or if Clerk per-call latency becomes user-visible).
