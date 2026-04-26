@@ -266,7 +266,7 @@ export default async function SessionsListPage({
                                   aria-hidden
                                 />
                                 <Link
-                                  href={`/progress?demo=1#bt-${b.id}`}
+                                  href={`/progress?demo=1&constellation=${b.id}#constellation-map`}
                                   className="flex-1 text-neutral-200 transition hover:text-brand-primary"
                                 >
                                   {b.content}
@@ -295,7 +295,7 @@ export default async function SessionsListPage({
                                 />
                                 <div className="flex-1">
                                   <Link
-                                    href={`/progress?demo=1#ms-${m.id}`}
+                                    href={`/progress?demo=1&shift=${m.id}#constellation-map`}
                                     className="font-medium text-neutral-200 transition hover:text-brand-primary"
                                   >
                                     {m.content}
@@ -319,7 +319,7 @@ export default async function SessionsListPage({
                             {goals.map((g) => (
                               <Link
                                 key={g.id}
-                                href={`/goals?demo=1#g-${g.id}`}
+                                href={`/goals?demo=1&goal=${g.id}#g-${g.id}`}
                                 className="inline-flex items-center rounded-full border border-white/10 bg-white/[0.03] px-2.5 py-0.5 text-[11px] text-neutral-300 transition hover:border-brand-primary/40 hover:text-brand-primary"
                                 style={{
                                   borderColor: "rgba(74,222,128,0.4)",

@@ -439,7 +439,13 @@ export function Constellation({
                   />
 
                   {layout.mindsetShifts.map((m) => (
-                    <MindsetShiftStar key={m.id} dot={m} />
+                    <MindsetShiftStar
+                      key={m.id}
+                      dot={m}
+                      buildHref={(id) =>
+                        buildUrl({ shift: id, constellation: null, goal: null }) + `#ms-${id}`
+                      }
+                    />
                   ))}
                   {layout.goals.map((g) => (
                     <GoalStar key={g.id} dot={g} goalsHref={goalsHref} />
@@ -448,7 +454,13 @@ export function Constellation({
                     <SessionStar key={s.id} dot={s} />
                   ))}
                   {layout.breakthroughs.map((b) => (
-                    <BreakthroughStar key={b.id} dot={b} />
+                    <BreakthroughStar
+                      key={b.id}
+                      dot={b}
+                      buildHref={(id) =>
+                        buildUrl({ constellation: id, shift: null, goal: null }) + `#bt-${id}`
+                      }
+                    />
                   ))}
 
                   {isEmpty ? (
@@ -541,10 +553,16 @@ function SessionStar({ dot }: { dot: Positioned<SessionDot> }) {
   );
 }
 
-function BreakthroughStar({ dot }: { dot: Positioned<BreakthroughDot> }) {
+function BreakthroughStar({
+  dot,
+  buildHref,
+}: {
+  dot: Positioned<BreakthroughDot>;
+  buildHref: (id: string) => string;
+}) {
   return (
-    <a
-      href={`#bt-${dot.id}`}
+    <Link
+      href={buildHref(dot.id)}
       aria-label={`Breakthrough: ${dot.content}`}
       title={`Breakthrough — ${dot.content}`}
       className={`absolute -translate-x-1/2 -translate-y-1/2 ${TAP_PADDING}`}
@@ -565,14 +583,20 @@ function BreakthroughStar({ dot }: { dot: Positioned<BreakthroughDot> }) {
       >
         <polygon points={STAR_POINTS} fill={BREAKTHROUGH_COLOR} />
       </svg>
-    </a>
+    </Link>
   );
 }
 
-function MindsetShiftStar({ dot }: { dot: Positioned<MindsetShiftDot> }) {
+function MindsetShiftStar({
+  dot,
+  buildHref,
+}: {
+  dot: Positioned<MindsetShiftDot>;
+  buildHref: (id: string) => string;
+}) {
   return (
-    <a
-      href={`#ms-${dot.id}`}
+    <Link
+      href={buildHref(dot.id)}
       aria-label={`Mindset shift: ${dot.content}`}
       title={`Mindset shift — ${dot.content}`}
       className={`absolute -translate-x-1/2 -translate-y-1/2 ${TAP_PADDING}`}
@@ -589,7 +613,7 @@ function MindsetShiftStar({ dot }: { dot: Positioned<MindsetShiftDot> }) {
           boxShadow: `0 0 5px ${MINDSET_COLOR}, 0 0 11px ${MINDSET_COLOR}80, inset 0 0 0 0.5px rgba(0,5,10,0.6)`,
         }}
       />
-    </a>
+    </Link>
   );
 }
 
@@ -600,9 +624,15 @@ function GoalStar({
   dot: Positioned<GoalDot>;
   goalsHref: string;
 }) {
+  // Append ?goal=<id> as a real query param so /goals can read it
+  // and apply the highlight via a server-rendered class (CSS :target
+  // is unreliable across Next.js client navigation). Hash stays for
+  // scroll positioning.
+  const sep = goalsHref.includes("?") ? "&" : "?";
+  const href = `${goalsHref}${sep}goal=${dot.id}#g-${dot.id}`;
   return (
     <Link
-      href={`${goalsHref}#g-${dot.id}`}
+      href={href}
       aria-label={`Goal: ${dot.title}`}
       title={`Goal — ${dot.title}`}
       className={`absolute -translate-x-1/2 -translate-y-1/2 ${TAP_PADDING}`}

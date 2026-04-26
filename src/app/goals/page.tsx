@@ -97,10 +97,11 @@ async function buildCardData(
 export default async function GoalsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ demo?: string }>;
+  searchParams: Promise<{ demo?: string; goal?: string }>;
 }) {
   const params = await searchParams;
   const isDemo = params.demo === "1";
+  const highlightedGoalId = params.goal ?? null;
 
   if (isDemo) {
     // Pull the full demo dataset so each goal card can build its
@@ -168,13 +169,19 @@ export default async function GoalsPage({
           {DEMO_GOALS.map((g) => {
             const detail = goalDetailFor(g.id);
             const starMapHref = `/progress?demo=1&goal=${g.id}#constellation-map`;
+            const isHighlighted = highlightedGoalId === g.id;
             return (
               <li
                 key={g.id}
                 id={`g-${g.id}`}
-                className="scroll-mt-20 rounded-xl border border-white/10 bg-white/[0.02] target:border-brand-primary target:bg-brand-primary/10 target:shadow-[0_0_18px_rgba(89,164,192,0.35)]"
+                className={
+                  "scroll-mt-20 rounded-xl border bg-white/[0.02] target:border-brand-primary target:bg-brand-primary/10 target:shadow-[0_0_18px_rgba(89,164,192,0.35)] " +
+                  (isHighlighted
+                    ? "border-brand-primary bg-brand-primary/10 shadow-[0_0_18px_rgba(89,164,192,0.35)]"
+                    : "border-white/10")
+                }
               >
-                <details className="group">
+                <details className="group" open={isHighlighted || undefined}>
                   <summary className="flex cursor-pointer list-none items-start justify-between gap-3 p-5 [&::-webkit-details-marker]:hidden">
                     <div className="flex-1">
                       <h2 className="break-words text-lg font-semibold text-white">
