@@ -31,10 +31,19 @@ function daysAgoIso(days: number, hours = 10): string {
 // led to it, plus a distinct evocative name. Goals are intentionally
 // NOT contributors: per the influence model, goals are caused by
 // breakthroughs, not the other way around.
+//
+// `sessionIds` and `shiftIds` define galaxy membership (who's
+// positioned in this galaxy on the star map). `directSessionIds` is
+// the smaller subset of sessions that fed the breakthrough DIRECTLY
+// without going through a mindset shift first — used to draw the
+// constellation as a layered tree (breakthrough → shifts → shifts'
+// sessions; breakthrough → directSessions) rather than a flat
+// fan from breakthrough to every member.
 export type ConstellationLinks = {
   name: string;
   sessionIds: string[];
   shiftIds: string[];
+  directSessionIds: string[];
 };
 
 // A mindset shift's contributors — only sessions that built up to
@@ -53,9 +62,12 @@ export type GoalLinks = {
 };
 
 const TOTAL_DAYS = 500;
-const N_SESSIONS = 100;
-const N_BREAKTHROUGHS = 25;
-const N_SHIFTS = 130;
+// Tuned so each breakthrough has ~10 sessions + ~5 shifts of work
+// behind it. With 12 breakthroughs over 500 days that's ~one per
+// ~6 weeks — feels like an earned milestone, not a routine event.
+const N_SESSIONS = 130;
+const N_BREAKTHROUGHS = 12;
+const N_SHIFTS = 70;
 const N_GOALS = 10;
 
 const NAMES = [
@@ -381,34 +393,77 @@ export function buildDemoData(): {
   // Constellation links per breakthrough — sessions + mindset shifts
   // that led to it. Goals are NOT contributors (goals are caused by
   // breakthroughs in the influence model, not the other way).
-  // Contributors must pre-date the breakthrough.
+  //
+  // Each session/shift is assigned to ONE breakthrough — the first
+  // one chronologically AFTER it. This matches the user's mental
+  // model: "a breakthrough is the culmination of all the work
+  // between the last breakthrough and this one." Sessions/shifts
+  // after the most recent breakthrough land in the in-progress
+  // region (no galaxy yet).
+  const breakthroughsByTime = [...breakthroughs].sort(
+    (a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt),
+  );
+  // Build prev-breakthrough-time per breakthrough (0 for the first).
+  const prevTimeByBreakthrough = new Map<string, number>();
+  breakthroughsByTime.forEach((b, idx) => {
+    prevTimeByBreakthrough.set(
+      b.id,
+      idx === 0 ? 0 : Date.parse(breakthroughsByTime[idx - 1].createdAt),
+    );
+  });
+
   const constellationLinks = new Map<string, ConstellationLinks>();
   for (const b of breakthroughs) {
     const bTime = Date.parse(b.createdAt);
-    const eligibleSessions = sessions.filter(
-      (s) => Date.parse(s.endedAt) <= bTime && s.id !== b.sessionId,
-    );
-    const eligibleShifts = mindsetShifts.filter(
-      (m) => Date.parse(m.createdAt) <= bTime,
-    );
-    const numSessions = 2 + Math.floor(hashFloat(`bls${b.id}`) * 3);
-    const numShifts = 2 + Math.floor(hashFloat(`blm${b.id}`) * 4);
+    const prevTime = prevTimeByBreakthrough.get(b.id) ?? 0;
+    const intervalSessions = sessions.filter((s) => {
+      const t = Date.parse(s.endedAt);
+      return t > prevTime && t <= bTime && s.id !== b.sessionId;
+    });
+    const intervalShifts = mindsetShifts.filter((m) => {
+      const t = Date.parse(m.createdAt);
+      return t > prevTime && t <= bTime;
+    });
+    // Direct session contributors: 1-2 sessions that fed the
+    // breakthrough WITHOUT going through a shift first. The rest of
+    // the interval's sessions reach the breakthrough through shifts.
+    const numDirect = 1 + Math.floor(hashFloat(`bd${b.id}`) * 2);
+    const directSessions = pickN(intervalSessions, numDirect, b.id + "_d");
     constellationLinks.set(b.id, {
       name: pickIdx(NAMES, `bn${b.id}`),
-      sessionIds: pickN(eligibleSessions, numSessions, b.id + "_s").map(
-        (s) => s.id,
-      ),
-      shiftIds: pickN(eligibleShifts, numShifts, b.id + "_m").map((m) => m.id),
+      sessionIds: intervalSessions.map((s) => s.id),
+      shiftIds: intervalShifts.map((m) => m.id),
+      directSessionIds: directSessions.map((s) => s.id),
     });
   }
 
-  // Per-shift contributors: 1-3 prior sessions that led to the shift.
+  // Per-shift contributors: 1-3 prior sessions FROM THE SAME GALAXY
+  // (same breakthrough interval) as the shift. This guarantees that
+  // every shift in galaxy G is tied to at least one session also in
+  // galaxy G — otherwise the shift would visually float without a
+  // narrative connection to anything around it.
+  //
+  // If a shift isn't in any galaxy's interval (e.g. lives in the
+  // in-progress region after the most recent breakthrough), fall
+  // back to all prior sessions.
+  const shiftToParentSessionIds = new Map<string, Set<string>>();
+  for (const [, links] of constellationLinks) {
+    const ownSessions = new Set(links.sessionIds);
+    for (const sid of links.shiftIds) {
+      shiftToParentSessionIds.set(sid, ownSessions);
+    }
+  }
+
   const mindsetShiftLinks = new Map<string, MindsetShiftLinks>();
   for (const m of mindsetShifts) {
     const mTime = Date.parse(m.createdAt);
-    const eligibleSessions = sessions.filter(
-      (s) => Date.parse(s.endedAt) <= mTime && s.id !== m.sessionId,
-    );
+    const sameGalaxySessionIds = shiftToParentSessionIds.get(m.id);
+    const eligibleSessions = sessions.filter((s) => {
+      if (s.id === m.sessionId) return false;
+      if (Date.parse(s.endedAt) > mTime) return false;
+      if (sameGalaxySessionIds) return sameGalaxySessionIds.has(s.id);
+      return true; // in-progress shift: any prior session is fair game
+    });
     const numSessions = 1 + Math.floor(hashFloat(`mls${m.id}`) * 3);
     mindsetShiftLinks.set(m.id, {
       sessionIds: pickN(eligibleSessions, numSessions, m.id + "_s").map(

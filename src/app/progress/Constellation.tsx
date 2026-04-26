@@ -14,8 +14,9 @@ import { ConstellationRename } from "./ConstellationRename";
 import {
   type BreakthroughDot,
   type ConstellationLayout,
-  type GoalDot,
+  type GalaxyMeta,
   type MindsetShiftDot,
+  type PositionedGoal,
   type Positioned,
   type SessionDot,
 } from "./constellation-layout";
@@ -24,6 +25,11 @@ type ConstellationLinkRow = {
   name: string;
   sessionIds: string[];
   shiftIds: string[];
+  // Subset of sessionIds that fed the breakthrough directly (didn't
+  // route through a mindset shift). Used for the layered tree
+  // rendering: breakthrough → directSessions, breakthrough → shifts
+  // → each shift's contributing sessions.
+  directSessionIds: string[];
 };
 
 type ShiftLinkRow = {
@@ -39,13 +45,15 @@ type GoalLinkRow = {
 type SelectedAnchor =
   | { type: "breakthrough"; id: string }
   | { type: "shift"; id: string }
-  | { type: "goal"; id: string };
+  | { type: "goal"; id: string }
+  | { type: "session"; id: string };
 
 type CurrentParams = {
   demo?: string;
   constellation?: string;
   shift?: string;
   goal?: string;
+  session?: string;
   window?: string;
 };
 
@@ -99,9 +107,12 @@ const FAR_STARS: Array<{ x: number; y: number; size: number }> = [
 const STAR_POINTS =
   "12,2 13.53,8.30 19.07,4.93 15.70,10.47 22,12 15.70,13.53 19.07,19.07 13.53,15.70 12,22 10.47,15.70 4.93,19.07 8.30,13.53 2,12 8.30,10.47 4.93,4.93 10.47,8.30";
 
-// Tap-zone padding around each star — keeps the visible dot small
-// while making the touch target reach ~44pt (Apple HIG minimum).
-const TAP_PADDING = "p-3";
+// Tap-zone padding around each star. Smaller than HIG's 44pt because
+// dense galaxies have neighbors closer than 44pt apart — a wide tap
+// zone causes neighbors to capture each other's hover/click. The
+// visible dot itself plus a small p-1 (4px) padding gives a hit
+// area large enough for finger taps in practice without crowding.
+const TAP_PADDING = "p-1";
 
 // Time-window options shown in the toggle pill row above the panel.
 // Value is what gets written to ?window=<value>; the layout-level
@@ -161,6 +172,13 @@ export function Constellation({
   // they stay visible even when the constellation includes old
   // contributors that would otherwise be at the recency floor.
   const boostedIds = new Set<string>();
+  // Explicit "from → to" edges. Lets the renderer draw a layered
+  // tree (e.g. breakthrough → shift → shift's session) instead of a
+  // flat anchor-to-everything fan.
+  type ChainEdge = { fromX: number; fromY: number; toX: number; toY: number };
+  const chainEdges: ChainEdge[] = [];
+  // All distinct points in the chain — used for the auto-zoom
+  // bounding box. Includes the anchor.
   const chainPoints: Array<{ x: number; y: number; t: number }> = [];
   if (selectedAnchor) {
     const sessionById = new Map(layout.sessions.map((s) => [s.id, s]));
@@ -171,10 +189,18 @@ export function Constellation({
     );
 
     let anchorPoint: { x: number; y: number; t: number } | null = null;
-    let contributingSessionIds: string[] = [];
-    let contributingShiftIds: string[] = [];
-    const contributingGoalIds: string[] = [];
-    let contributingBreakthroughIds: string[] = [];
+
+    function pushPoint(x: number, y: number, t: number) {
+      chainPoints.push({ x, y, t });
+    }
+    function pushEdge(
+      fromX: number,
+      fromY: number,
+      toX: number,
+      toY: number,
+    ) {
+      chainEdges.push({ fromX, fromY, toX, toY });
+    }
 
     if (selectedAnchor.type === "breakthrough") {
       const b = breakthroughById.get(selectedAnchor.id);
@@ -185,11 +211,87 @@ export function Constellation({
           y: b.y * 100,
           t: Date.parse(b.createdAt),
         };
-        contributingSessionIds = links.sessionIds;
-        contributingShiftIds = links.shiftIds;
+        pushPoint(anchorPoint.x, anchorPoint.y, anchorPoint.t);
         boostedIds.add(b.id);
+        // Boost ALL galaxy members so the whole constellation
+        // brightens, even though most reach the breakthrough
+        // through shifts (not direct lines).
         for (const id of links.sessionIds) boostedIds.add(id);
         for (const id of links.shiftIds) boostedIds.add(id);
+
+        // Conservative line caps so the constellation reads as the
+        // narrative arc, not every-thing-that-may-have-contributed.
+        // Will be replaced by LLM-emitted influence scores in V.5a;
+        // until then, "most recent" is the heuristic for primacy.
+        const MAX_DIRECT_SESSION_LINES = 1;
+        const MAX_SHIFT_LINES = 2;
+        const MAX_SESSIONS_PER_SHIFT = 1;
+
+        // Direct sessions: keep the most recent only.
+        const directSorted = links.directSessionIds
+          .map((sid) => sessionById.get(sid))
+          .filter((s): s is NonNullable<typeof s> => !!s)
+          .sort(
+            (a, b) => Date.parse(b.endedAt) - Date.parse(a.endedAt),
+          )
+          .slice(0, MAX_DIRECT_SESSION_LINES);
+        for (const s of directSorted) {
+          const sx = s.x * 100;
+          const sy = s.y * 100;
+          pushEdge(anchorPoint.x, anchorPoint.y, sx, sy);
+          pushPoint(sx, sy, Date.parse(s.endedAt));
+        }
+
+        // Shifts: keep the most recent few; for each, draw a line
+        // to its single most recent contributing session.
+        const shiftsSorted = links.shiftIds
+          .map((mid) => shiftById.get(mid))
+          .filter((m): m is NonNullable<typeof m> => !!m)
+          .sort(
+            (a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt),
+          )
+          .slice(0, MAX_SHIFT_LINES);
+        for (const m of shiftsSorted) {
+          const mx = m.x * 100;
+          const my = m.y * 100;
+          pushEdge(anchorPoint.x, anchorPoint.y, mx, my);
+          pushPoint(mx, my, Date.parse(m.createdAt));
+          const sl = mindsetShiftLinks?.get(m.id);
+          if (sl) {
+            const shiftSessionsSorted = sl.sessionIds
+              .map((sid) => sessionById.get(sid))
+              .filter((s): s is NonNullable<typeof s> => !!s)
+              .sort(
+                (a, b) => Date.parse(b.endedAt) - Date.parse(a.endedAt),
+              )
+              .slice(0, MAX_SESSIONS_PER_SHIFT);
+            for (const ss of shiftSessionsSorted) {
+              const sx = ss.x * 100;
+              const sy = ss.y * 100;
+              pushEdge(mx, my, sx, sy);
+              pushPoint(sx, sy, Date.parse(ss.endedAt));
+            }
+          }
+        }
+
+        // Goals that include this breakthrough — fan from the
+        // breakthrough.
+        if (goalLinks) {
+          for (const [gid, gl] of goalLinks) {
+            if (!gl.breakthroughIds.includes(selectedAnchor.id)) continue;
+            const g = goalById.get(gid);
+            if (!g) continue;
+            const gx = g.x * 100;
+            const gy = g.y * 100;
+            pushEdge(anchorPoint.x, anchorPoint.y, gx, gy);
+            pushPoint(
+              gx,
+              gy,
+              Date.parse(g.lastEngagedAt ?? b.createdAt),
+            );
+            boostedIds.add(gid);
+          }
+        }
       }
     } else if (selectedAnchor.type === "shift") {
       const m = shiftById.get(selectedAnchor.id);
@@ -200,9 +302,47 @@ export function Constellation({
           y: m.y * 100,
           t: Date.parse(m.createdAt),
         };
-        contributingSessionIds = links.sessionIds;
+        pushPoint(anchorPoint.x, anchorPoint.y, anchorPoint.t);
         boostedIds.add(m.id);
-        for (const id of links.sessionIds) boostedIds.add(id);
+
+        // Sessions that fed this shift.
+        for (const sid of links.sessionIds) {
+          const s = sessionById.get(sid);
+          if (!s) continue;
+          const sx = s.x * 100;
+          const sy = s.y * 100;
+          pushEdge(anchorPoint.x, anchorPoint.y, sx, sy);
+          pushPoint(sx, sy, Date.parse(s.endedAt));
+          boostedIds.add(sid);
+        }
+
+        // Parent breakthroughs (the shift fed them).
+        if (constellationLinks) {
+          for (const [bid, bl] of constellationLinks) {
+            if (!bl.shiftIds.includes(selectedAnchor.id)) continue;
+            const bb = breakthroughById.get(bid);
+            if (!bb) continue;
+            const bx = bb.x * 100;
+            const by = bb.y * 100;
+            pushEdge(anchorPoint.x, anchorPoint.y, bx, by);
+            pushPoint(bx, by, Date.parse(bb.createdAt));
+            boostedIds.add(bid);
+          }
+        }
+
+        // Goals that include this shift.
+        if (goalLinks) {
+          for (const [gid, gl] of goalLinks) {
+            if (!gl.shiftIds.includes(selectedAnchor.id)) continue;
+            const g = goalById.get(gid);
+            if (!g) continue;
+            const gx = g.x * 100;
+            const gy = g.y * 100;
+            pushEdge(anchorPoint.x, anchorPoint.y, gx, gy);
+            pushPoint(gx, gy, Date.parse(g.lastEngagedAt ?? m.createdAt));
+            boostedIds.add(gid);
+          }
+        }
       }
     } else if (selectedAnchor.type === "goal") {
       const g = goalById.get(selectedAnchor.id);
@@ -213,60 +353,84 @@ export function Constellation({
           y: g.y * 100,
           t: Date.parse(g.lastEngagedAt),
         };
-        contributingSessionIds = links.sessionIds;
-        contributingShiftIds = links.shiftIds;
-        contributingBreakthroughIds = links.breakthroughIds;
+        pushPoint(anchorPoint.x, anchorPoint.y, anchorPoint.t);
         boostedIds.add(g.id);
-        for (const id of links.sessionIds) boostedIds.add(id);
-        for (const id of links.shiftIds) boostedIds.add(id);
-        for (const id of links.breakthroughIds) boostedIds.add(id);
+        for (const sid of links.sessionIds) {
+          const s = sessionById.get(sid);
+          if (!s) continue;
+          pushEdge(anchorPoint.x, anchorPoint.y, s.x * 100, s.y * 100);
+          pushPoint(s.x * 100, s.y * 100, Date.parse(s.endedAt));
+          boostedIds.add(sid);
+        }
+        for (const mid of links.shiftIds) {
+          const m = shiftById.get(mid);
+          if (!m) continue;
+          pushEdge(anchorPoint.x, anchorPoint.y, m.x * 100, m.y * 100);
+          pushPoint(m.x * 100, m.y * 100, Date.parse(m.createdAt));
+          boostedIds.add(mid);
+        }
+        for (const bid of links.breakthroughIds) {
+          const bb = breakthroughById.get(bid);
+          if (!bb) continue;
+          pushEdge(anchorPoint.x, anchorPoint.y, bb.x * 100, bb.y * 100);
+          pushPoint(bb.x * 100, bb.y * 100, Date.parse(bb.createdAt));
+          boostedIds.add(bid);
+        }
+      }
+    } else if (selectedAnchor.type === "session") {
+      const s = sessionById.get(selectedAnchor.id);
+      if (s) {
+        anchorPoint = {
+          x: s.x * 100,
+          y: s.y * 100,
+          t: Date.parse(s.endedAt),
+        };
+        pushPoint(anchorPoint.x, anchorPoint.y, anchorPoint.t);
+        boostedIds.add(s.id);
+        const sid = selectedAnchor.id;
+        // Breakthroughs this session fed DIRECTLY (not through a
+        // shift). Most sessions will have none — they reach a
+        // breakthrough through a shift, which is shown via the shift
+        // anchor instead.
+        if (constellationLinks) {
+          for (const [bid, links] of constellationLinks) {
+            if (!links.directSessionIds.includes(sid)) continue;
+            const bb = breakthroughById.get(bid);
+            if (!bb) continue;
+            pushEdge(anchorPoint.x, anchorPoint.y, bb.x * 100, bb.y * 100);
+            pushPoint(bb.x * 100, bb.y * 100, Date.parse(bb.createdAt));
+            boostedIds.add(bid);
+          }
+        }
+        // Shifts this session fed.
+        if (mindsetShiftLinks) {
+          for (const [mid, links] of mindsetShiftLinks) {
+            if (!links.sessionIds.includes(sid)) continue;
+            const m = shiftById.get(mid);
+            if (!m) continue;
+            pushEdge(anchorPoint.x, anchorPoint.y, m.x * 100, m.y * 100);
+            pushPoint(m.x * 100, m.y * 100, Date.parse(m.createdAt));
+            boostedIds.add(mid);
+          }
+        }
+        // Goals this session contributed to.
+        if (goalLinks) {
+          for (const [gid, links] of goalLinks) {
+            if (!links.sessionIds.includes(sid)) continue;
+            const g = goalById.get(gid);
+            if (!g) continue;
+            pushEdge(anchorPoint.x, anchorPoint.y, g.x * 100, g.y * 100);
+            pushPoint(
+              g.x * 100,
+              g.y * 100,
+              Date.parse(g.lastEngagedAt ?? s.endedAt),
+            );
+            boostedIds.add(gid);
+          }
+        }
       }
     }
 
-    if (anchorPoint) {
-      for (const id of contributingSessionIds) {
-        const s = sessionById.get(id);
-        if (s) {
-          chainPoints.push({
-            x: s.x * 100,
-            y: s.y * 100,
-            t: Date.parse(s.endedAt),
-          });
-        }
-      }
-      for (const id of contributingShiftIds) {
-        const m = shiftById.get(id);
-        if (m) {
-          chainPoints.push({
-            x: m.x * 100,
-            y: m.y * 100,
-            t: Date.parse(m.createdAt),
-          });
-        }
-      }
-      for (const id of contributingGoalIds) {
-        const g = goalById.get(id);
-        if (g && g.lastEngagedAt) {
-          chainPoints.push({
-            x: g.x * 100,
-            y: g.y * 100,
-            t: Date.parse(g.lastEngagedAt),
-          });
-        }
-      }
-      for (const id of contributingBreakthroughIds) {
-        const b = breakthroughById.get(id);
-        if (b) {
-          chainPoints.push({
-            x: b.x * 100,
-            y: b.y * 100,
-            t: Date.parse(b.createdAt),
-          });
-        }
-      }
-      chainPoints.sort((a, b) => a.t - b.t);
-      chainPoints.push(anchorPoint);
-    }
   }
   // Keep the old name for the rename-component reference below.
   const selectedLinks = selectedConstellationLinks;
@@ -305,7 +469,7 @@ export function Constellation({
     const bboxHPx = ((maxY - minY) / 100) * h;
     const padding = 1.6;
     const desiredScale = Math.min(
-      4,
+      8,
       Math.max(
         1,
         Math.min(w, h) / Math.max(bboxWPx * padding, bboxHPx * padding, 1),
@@ -443,28 +607,28 @@ export function Constellation({
           ref={transformRef}
           initialScale={1}
           minScale={1}
-          maxScale={4}
-          // Update --zoom-counter on the panel so each star's
-          // visual element can counter-scale itself by 1/zoom and
-          // stay crisp at any zoom level. Box-shadow halos and SVG
-          // drop-shadows otherwise grow proportionally to zoom and
-          // turn into fuzzy blobs.
+          maxScale={10}
+          // Update --zoom-counter (= 1/scale, for counter-scaling
+          // stars to stay crisp) and --zoom-scale (= scale itself,
+          // used by the zoom-fade-in class so contributor stars
+          // appear only as the user zooms in past the universe view).
           onTransform={(_ref, state) => {
-            if (panelRef.current) {
-              panelRef.current.style.setProperty(
-                "--zoom-counter",
-                String(1 / state.scale),
-              );
-            }
+            const el = panelRef.current;
+            if (!el) return;
+            el.style.setProperty("--zoom-counter", String(1 / state.scale));
+            el.style.setProperty("--zoom-scale", String(state.scale));
           }}
-          // Pinch-zoom is the primary mobile gesture. Wheel zoom on
-          // desktop uses ctrl+wheel by default; we leave that off so
-          // ordinary page scroll still works when the cursor is over
-          // the panel. Desktop users can use the +/- buttons.
-          wheel={{ disabled: true }}
+          // Wheel zooms when the cursor is over the panel. Tiny step
+          // (~1% per notch) so the user can glide in slowly rather
+          // than leap.
+          wheel={{ disabled: false, step: 0.01 }}
           pinch={{ disabled: false, step: 5 }}
           panning={{ disabled: false, velocityDisabled: true }}
-          doubleClick={{ disabled: false, mode: "toggle", step: 1 }}
+          // Double-click is reserved for star navigation (e.g.
+          // double-click a breakthrough to scroll to its detail
+          // card). Disabling the wrapper's built-in zoom-toggle so
+          // it doesn't fire alongside the per-star handler.
+          doubleClick={{ disabled: true }}
           limitToBounds={true}
         >
           {({ zoomIn, zoomOut, resetTransform }) => (
@@ -474,6 +638,87 @@ export function Constellation({
                 contentStyle={{ width: "100%", height: "100%" }}
               >
                 <div className="relative h-full w-full">
+                  {/* Shared soft-halo radial gradients. Each star
+                      renders as a solid colored circle with a larger,
+                      fading halo behind it — gives crisp, distinct
+                      circles with a soft atmospheric glow rather
+                      than the gradient-shaded "sphere" look that
+                      reads as a fuzzy bokeh ring at high zoom. */}
+                  <svg
+                    className="pointer-events-none absolute h-0 w-0"
+                    aria-hidden
+                  >
+                    <defs>
+                      <radialGradient id="halo-session">
+                        <stop
+                          offset="0%"
+                          stopColor={SESSION_COLOR}
+                          stopOpacity={0.55}
+                        />
+                        <stop
+                          offset="55%"
+                          stopColor={SESSION_COLOR}
+                          stopOpacity={0.18}
+                        />
+                        <stop
+                          offset="100%"
+                          stopColor={SESSION_COLOR}
+                          stopOpacity={0}
+                        />
+                      </radialGradient>
+                      <radialGradient id="halo-shift">
+                        <stop
+                          offset="0%"
+                          stopColor={MINDSET_COLOR}
+                          stopOpacity={0.6}
+                        />
+                        <stop
+                          offset="55%"
+                          stopColor={MINDSET_COLOR}
+                          stopOpacity={0.2}
+                        />
+                        <stop
+                          offset="100%"
+                          stopColor={MINDSET_COLOR}
+                          stopOpacity={0}
+                        />
+                      </radialGradient>
+                      <radialGradient id="halo-sun">
+                        <stop
+                          offset="0%"
+                          stopColor={BREAKTHROUGH_COLOR}
+                          stopOpacity={0.7}
+                        />
+                        <stop
+                          offset="55%"
+                          stopColor={BREAKTHROUGH_COLOR}
+                          stopOpacity={0.25}
+                        />
+                        <stop
+                          offset="100%"
+                          stopColor={BREAKTHROUGH_COLOR}
+                          stopOpacity={0}
+                        />
+                      </radialGradient>
+                      <radialGradient id="halo-goal">
+                        <stop
+                          offset="0%"
+                          stopColor={GOAL_COLOR}
+                          stopOpacity={0.55}
+                        />
+                        <stop
+                          offset="55%"
+                          stopColor={GOAL_COLOR}
+                          stopOpacity={0.18}
+                        />
+                        <stop
+                          offset="100%"
+                          stopColor={GOAL_COLOR}
+                          stopOpacity={0}
+                        />
+                      </radialGradient>
+                    </defs>
+                  </svg>
                   {FAR_STARS.map((s, i) => (
                     <span
                       key={`bg-${i}`}
@@ -488,26 +733,44 @@ export function Constellation({
                     />
                   ))}
 
-                  {chainPoints.length >= 2 ? (
+                  {/* Galaxy nebula glows. Rendered behind everything
+                      else so the sun (breakthrough star) and member
+                      stars (sessions, shifts) sit on top. Soft radial
+                      gradient with no hard edge — the user explicitly
+                      asked for "no hard boundaries". */}
+                  {layout.galaxies.map((g) => (
+                    <GalaxyGlow key={`glow-${g.breakthroughId}`} galaxy={g} />
+                  ))}
+
+                  {chainEdges.length > 0 ? (
                     <svg
                       className="pointer-events-none absolute inset-0 h-full w-full"
                       viewBox="0 0 100 100"
                       preserveAspectRatio="none"
                       aria-hidden
                     >
-                      <polyline
-                        points={chainPoints.map((p) => `${p.x},${p.y}`).join(" ")}
-                        fill="none"
-                        stroke="white"
-                        strokeWidth={0.3}
-                        strokeOpacity={0.5}
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        vectorEffect="non-scaling-stroke"
-                        style={{
-                          filter: "drop-shadow(0 0 1px rgba(255,255,255,0.5))",
-                        }}
-                      />
+                      {/* Each edge is an explicit from→to pair, so a
+                          breakthrough's constellation reads as a tree
+                          (breakthrough → shift → shift's session)
+                          rather than a flat fan. */}
+                      {chainEdges.map((e, i) => (
+                        <line
+                          key={i}
+                          x1={e.fromX}
+                          y1={e.fromY}
+                          x2={e.toX}
+                          y2={e.toY}
+                          stroke="white"
+                          strokeWidth={0.3}
+                          strokeOpacity={0.5}
+                          strokeLinecap="round"
+                          vectorEffect="non-scaling-stroke"
+                          style={{
+                            filter:
+                              "drop-shadow(0 0 1px rgba(255,255,255,0.5))",
+                          }}
+                        />
+                      ))}
                     </svg>
                   ) : null}
 
@@ -522,36 +785,73 @@ export function Constellation({
                     aria-hidden
                   />
 
-                  {layout.mindsetShifts.map((m) => (
-                    <MindsetShiftStar
-                      key={m.id}
-                      dot={
-                        boostedIds.has(m.id) ? { ...m, opacity: 1 } : m
-                      }
-                      buildHref={(id) =>
-                        buildUrl({ shift: id, constellation: null, goal: null })
-                      }
-                    />
-                  ))}
+                  {/* Cross-galaxy chain — chronological line through
+                      every breakthrough (the "spine of growth").
+                      Heuristic stand-in for "most significant impact"
+                      until real influence scoring lands in V.5a. */}
+                  {layout.breakthroughs.length >= 2 ? (
+                    <CrossGalaxyChain breakthroughs={layout.breakthroughs} />
+                  ) : null}
+
+                  {/* Sessions + shifts share a fade-in wrapper so they
+                      only become visible once the user has zoomed in
+                      past the universe view. At full zoom-out the user
+                      sees galaxy glows and suns, not individual stars. */}
+                  <div className="constellation-zoom-fade-in absolute inset-0">
+                    {layout.mindsetShifts.map((m) => (
+                      <MindsetShiftStar
+                        key={m.id}
+                        dot={
+                          boostedIds.has(m.id) ? { ...m, opacity: 1 } : m
+                        }
+                        buildHref={(id) =>
+                          buildUrl({ shift: id, constellation: null, goal: null })
+                        }
+                      />
+                    ))}
+                    {layout.sessions.map((s) => (
+                      <SessionStar
+                        key={s.id}
+                        dot={
+                          boostedIds.has(s.id) ? { ...s, opacity: 1 } : s
+                        }
+                        buildSessionHref={(id) =>
+                          // Stay on /progress and select the session as
+                          // the anchor — same UX as clicking any other
+                          // dot. To open the session detail page, the
+                          // user can use the Sessions tab.
+                          buildUrl({
+                            session: id,
+                            constellation: null,
+                            shift: null,
+                            goal: null,
+                          })
+                        }
+                      />
+                    ))}
+                  </div>
+
                   {layout.goals.map((g) => (
-                    <GoalStar
+                    <GoalComet
                       key={g.id}
                       dot={
                         boostedIds.has(g.id) ? { ...g, opacity: 1 } : g
                       }
-                      goalsHref={goalsHref}
-                    />
-                  ))}
-                  {layout.sessions.map((s) => (
-                    <SessionStar
-                      key={s.id}
-                      dot={
-                        boostedIds.has(s.id) ? { ...s, opacity: 1 } : s
+                      buildGoalHref={(id) =>
+                        // Single-tap selects the goal as anchor on the
+                        // map. Existing /goals tab is the path to the
+                        // goal's full detail.
+                        buildUrl({
+                          goal: id,
+                          constellation: null,
+                          shift: null,
+                          session: null,
+                        })
                       }
                     />
                   ))}
                   {layout.breakthroughs.map((b) => (
-                    <BreakthroughStar
+                    <BreakthroughSun
                       key={b.id}
                       dot={
                         boostedIds.has(b.id) ? { ...b, opacity: 1 } : b
@@ -597,10 +897,10 @@ export function Constellation({
       </div>
 
       <div className="mt-3 flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-[11px] text-neutral-500">
-        <Legend color={SESSION_COLOR} label="Session" shape="dot" size={6} />
-        <Legend color={GOAL_COLOR} label="Goal" shape="ring" size={8} />
-        <Legend color={MINDSET_COLOR} label="Mindset shift" shape="dot" size={10} />
-        <Legend color={BREAKTHROUGH_COLOR} label="Breakthrough" shape="star" size={16} />
+        <Legend color={SESSION_COLOR} label="Session" size={8} />
+        <Legend color={GOAL_COLOR} label="Goal" size={9} />
+        <Legend color={MINDSET_COLOR} label="Mindset shift" size={10} />
+        <Legend color={BREAKTHROUGH_COLOR} label="Breakthrough" size={14} />
       </div>
     </section>
   );
@@ -627,11 +927,19 @@ function ZoomButton({
   );
 }
 
-function SessionStar({ dot }: { dot: Positioned<SessionDot> }) {
+function SessionStar({
+  dot,
+  buildSessionHref,
+}: {
+  dot: Positioned<SessionDot>;
+  buildSessionHref: (id: string) => string;
+}) {
   const dateLabel = formatDateCompact(dot.endedAt);
+  // Crisp pinpoint — bright solid core, thin hard-edged ring. No
+  // soft outer halo (those turn into bokeh when zoomed in).
   return (
     <Link
-      href={`/sessions/${dot.id}`}
+      href={buildSessionHref(dot.id)}
       aria-label={`Open session from ${dateLabel}`}
       title={`Session — ${dateLabel}`}
       className={`absolute -translate-x-1/2 -translate-y-1/2 ${TAP_PADDING}`}
@@ -641,19 +949,29 @@ function SessionStar({ dot }: { dot: Positioned<SessionDot> }) {
         opacity: dot.opacity,
       }}
     >
-      <span
-        className="block h-1.5 w-1.5 rounded-full transition hover:scale-150"
-        style={{
-          background: SESSION_COLOR,
-          boxShadow: `0 0 3px ${SESSION_COLOR}, 0 0 8px ${SESSION_COLOR}80, inset 0 0 0 0.5px rgba(0,5,10,0.6)`,
-          transform: "scale(var(--zoom-counter, 1))",
-        }}
-      />
+      <svg
+        viewBox="-8 -8 16 16"
+        className="block h-4 w-4 transition hover:scale-150"
+        style={{ overflow: "visible" }}
+        aria-hidden
+      >
+        <circle r={7} fill="url(#halo-session)" />
+        <circle r={2.4} fill={SESSION_COLOR} />
+      </svg>
     </Link>
   );
 }
 
-function BreakthroughStar({
+// The sun at the center of a galaxy. Larger and brighter than a
+// session/shift star — a solid yellow disc with a wider, warmer
+// halo behind it. The galaxy's nebula glow is rendered separately
+// (see GalaxyGlow); this is just the sun's body + its own halo.
+//
+// Single-click selects this breakthrough as the anchor (via the
+// Link href). Double-click scrolls the page to this breakthrough's
+// detail card below the constellation map — that's "go to the
+// actual breakthrough" per the operator's spec.
+function BreakthroughSun({
   dot,
   buildHref,
 }: {
@@ -663,6 +981,13 @@ function BreakthroughStar({
   return (
     <Link
       href={buildHref(dot.id)}
+      // scroll={false} stops Next.js from scrolling to the URL's
+      // #constellation-map fragment on every click. Without this,
+      // a double-click first scrolls to the breakthrough's detail
+      // card (via onDoubleClick below) and then snaps back up to
+      // the constellation map when the second click's URL change
+      // re-applies the fragment scroll.
+      scroll={false}
       aria-label={`Breakthrough: ${dot.content}`}
       title={`Breakthrough — ${dot.content}`}
       className={`absolute -translate-x-1/2 -translate-y-1/2 ${TAP_PADDING}`}
@@ -671,20 +996,85 @@ function BreakthroughStar({
         top: `${dot.y * 100}%`,
         opacity: dot.opacity,
       }}
+      onDoubleClick={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const target = document.getElementById(`bt-${dot.id}`);
+        if (target) {
+          target.scrollIntoView({ behavior: "smooth", block: "center" });
+        }
+      }}
     >
       <svg
-        viewBox="0 0 24 24"
-        className="block h-5 w-5 transition hover:scale-125"
-        style={{
-          filter: `drop-shadow(0 0 4px ${BREAKTHROUGH_COLOR}) drop-shadow(0 0 10px ${BREAKTHROUGH_COLOR}cc) drop-shadow(0 0 18px ${BREAKTHROUGH_COLOR}66)`,
-          overflow: "visible",
-          transform: "scale(var(--zoom-counter, 1))",
-        }}
+        viewBox="-12 -12 24 24"
+        className="block h-7 w-7 transition hover:scale-125"
+        style={{ overflow: "visible" }}
         aria-hidden
       >
-        <polygon points={STAR_POINTS} fill={BREAKTHROUGH_COLOR} />
+        <circle r={11} fill="url(#halo-sun)" />
+        <circle r={4.5} fill={BREAKTHROUGH_COLOR} />
       </svg>
     </Link>
+  );
+}
+
+// Galaxy atmospheric glow — very faint, barely-visible white haze
+// around the sun. The galaxy's IDENTITY comes from the cluster of
+// stars, not the glow; the glow just gives the impression of an
+// unresolved disc behind them. No more orange-nebula bleed.
+function GalaxyGlow({ galaxy }: { galaxy: GalaxyMeta }) {
+  const haloPct = galaxy.radius * 100 * 1.6;
+  return (
+    <span
+      className="pointer-events-none absolute -translate-x-1/2 -translate-y-1/2 rounded-full"
+      style={{
+        left: `${galaxy.centerX * 100}%`,
+        top: `${galaxy.centerY * 100}%`,
+        width: `${haloPct}%`,
+        height: `${haloPct}%`,
+        background:
+          "radial-gradient(circle, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.025) 35%, transparent 75%)",
+      }}
+      aria-hidden
+    />
+  );
+}
+
+// Chronological line through every breakthrough — the "spine" of the
+// user's growth across galaxies. Heuristic stand-in for cross-galaxy
+// significance; will be replaced by LLM-emitted influence scoring in
+// V.5a. Drawn with a subtle white stroke that doesn't compete with
+// per-constellation chains.
+function CrossGalaxyChain({
+  breakthroughs,
+}: {
+  breakthroughs: Positioned<BreakthroughDot>[];
+}) {
+  const ordered = [...breakthroughs].sort(
+    (a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt),
+  );
+  const points = ordered
+    .map((b) => `${b.x * 100},${b.y * 100}`)
+    .join(" ");
+  return (
+    <svg
+      className="pointer-events-none absolute inset-0 h-full w-full"
+      viewBox="0 0 100 100"
+      preserveAspectRatio="none"
+      aria-hidden
+    >
+      <polyline
+        points={points}
+        fill="none"
+        stroke={BREAKTHROUGH_COLOR}
+        strokeWidth={0.18}
+        strokeOpacity={0.35}
+        strokeDasharray="0.8 1.4"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        vectorEffect="non-scaling-stroke"
+      />
+    </svg>
   );
 }
 
@@ -707,107 +1097,132 @@ function MindsetShiftStar({
         opacity: dot.opacity,
       }}
     >
-      <span
-        className="block h-2.5 w-2.5 rounded-full transition hover:scale-125"
-        style={{
-          background: MINDSET_COLOR,
-          boxShadow: `0 0 5px ${MINDSET_COLOR}, 0 0 11px ${MINDSET_COLOR}80, inset 0 0 0 0.5px rgba(0,5,10,0.6)`,
-          transform: "scale(var(--zoom-counter, 1))",
-        }}
-      />
+      <svg
+        viewBox="-8 -8 16 16"
+        className="block h-4 w-4 transition hover:scale-125"
+        style={{ overflow: "visible" }}
+        aria-hidden
+      >
+        <circle r={7.5} fill="url(#halo-shift)" />
+        <circle r={2.8} fill={MINDSET_COLOR} />
+      </svg>
     </Link>
   );
 }
 
-function GoalStar({
+// Goals are comets — they wander the universe independent of any
+// galaxy, with a soft tail trailing behind. Position + tail direction
+// come from the layout module (deterministic per goal id). The tail
+// is an SVG line from the head outward in tailAngle direction; head
+// is the same green ring used previously.
+function GoalComet({
   dot,
-  goalsHref,
+  buildGoalHref,
 }: {
-  dot: Positioned<GoalDot>;
-  goalsHref: string;
+  dot: PositionedGoal;
+  buildGoalHref: (id: string) => string;
 }) {
-  // Append ?goal=<id> as a real query param so /goals can read it
-  // and apply the highlight via a server-rendered class (CSS :target
-  // is unreliable across Next.js client navigation). Hash stays for
-  // scroll positioning.
-  const sep = goalsHref.includes("?") ? "&" : "?";
-  const href = `${goalsHref}${sep}goal=${dot.id}#g-${dot.id}`;
+  const href = buildGoalHref(dot.id);
+  const headX = dot.x * 100;
+  const headY = dot.y * 100;
+  const tailEndX = (dot.x + Math.cos(dot.tailAngle) * dot.tailLength) * 100;
+  const tailEndY = (dot.y + Math.sin(dot.tailAngle) * dot.tailLength) * 100;
+  const tailGradId = `comet-tail-${dot.id}`;
+  // Tail tapers from the head circle's width (≈ head r in tail-SVG
+  // viewBox units, which is panel-fraction-percent) to a single
+  // point at the tail-end. Computed as a triangle polygon: two
+  // perpendicular-offset vertices at the head, one vertex at the
+  // tail-end.
+  const headHalfWidthPct = 0.42; // tuned to match the head circle's visible radius
+  const perpX = -Math.sin(dot.tailAngle) * headHalfWidthPct;
+  const perpY = Math.cos(dot.tailAngle) * headHalfWidthPct;
+  const tailPolyPoints = [
+    `${headX + perpX},${headY + perpY}`,
+    `${headX - perpX},${headY - perpY}`,
+    `${tailEndX},${tailEndY}`,
+  ].join(" ");
+
   return (
-    <Link
-      href={href}
-      aria-label={`Goal: ${dot.title}`}
-      title={`Goal — ${dot.title}`}
-      className={`absolute -translate-x-1/2 -translate-y-1/2 ${TAP_PADDING}`}
-      style={{
-        left: `${dot.x * 100}%`,
-        top: `${dot.y * 100}%`,
-        opacity: dot.opacity,
-      }}
-    >
-      <span
-        className="block h-2 w-2 rounded-full transition hover:scale-125"
+    <>
+      {/* Tail: triangular polygon tapering from the head's circle
+          width down to a single point at the tail-end, filled with
+          a gradient that fades from head color to transparent. */}
+      <svg
+        className="pointer-events-none absolute inset-0 h-full w-full"
+        viewBox="0 0 100 100"
+        preserveAspectRatio="none"
+        style={{ opacity: dot.opacity }}
+        aria-hidden
+      >
+        <defs>
+          <linearGradient
+            id={tailGradId}
+            gradientUnits="userSpaceOnUse"
+            x1={headX}
+            y1={headY}
+            x2={tailEndX}
+            y2={tailEndY}
+          >
+            <stop offset="0%" stopColor={GOAL_COLOR} stopOpacity={0.8} />
+            <stop offset="100%" stopColor={GOAL_COLOR} stopOpacity={0} />
+          </linearGradient>
+        </defs>
+        <polygon
+          points={tailPolyPoints}
+          fill={`url(#${tailGradId})`}
+        />
+      </svg>
+      {/* Head: same shape language as session/shift — halo + solid
+          colored disc — just green. */}
+      <Link
+        href={href}
+        aria-label={`Goal: ${dot.title}`}
+        title={`Goal — ${dot.title}`}
+        className={`absolute -translate-x-1/2 -translate-y-1/2 ${TAP_PADDING}`}
         style={{
-          background: `${GOAL_COLOR}26`,
-          border: `1.5px solid ${GOAL_COLOR}`,
-          boxShadow: `0 0 3px ${GOAL_COLOR}80, 0 0 8px ${GOAL_COLOR}40`,
-          transform: "scale(var(--zoom-counter, 1))",
+          left: `${headX}%`,
+          top: `${headY}%`,
+          opacity: dot.opacity,
         }}
-      />
-    </Link>
+      >
+        <svg
+          viewBox="-8 -8 16 16"
+          className="block h-4 w-4 transition hover:scale-125"
+          style={{ overflow: "visible" }}
+          aria-hidden
+        >
+          <circle r={7} fill="url(#halo-goal)" />
+          <circle r={2.4} fill={GOAL_COLOR} />
+        </svg>
+      </Link>
+    </>
   );
 }
 
 function Legend({
   color,
   label,
-  shape,
   size,
 }: {
   color: string;
   label: string;
-  shape: "dot" | "ring" | "star";
   size: number;
 }) {
-  const swatch =
-    shape === "star" ? (
-      <svg
-        viewBox="0 0 24 24"
-        width={size}
-        height={size}
-        style={{
-          filter: `drop-shadow(0 0 2px ${color}) drop-shadow(0 0 5px ${color}88)`,
-          overflow: "visible",
-        }}
-        aria-hidden
-      >
-        <polygon points={STAR_POINTS} fill={color} />
-      </svg>
-    ) : shape === "ring" ? (
-      <span
-        className="inline-block rounded-full"
-        style={{
-          width: size,
-          height: size,
-          background: `${color}26`,
-          border: `1.5px solid ${color}`,
-        }}
-        aria-hidden
-      />
-    ) : (
+  // Mirror the on-map look: solid colored disc with a soft halo,
+  // matching the SessionStar / MindsetShiftStar / BreakthroughSun /
+  // GoalComet visual language.
+  return (
+    <span className="inline-flex items-center gap-1.5">
       <span
         className="inline-block rounded-full"
         style={{
           width: size,
           height: size,
           background: color,
-          boxShadow: `0 0 3px ${color}, 0 0 6px ${color}80`,
+          boxShadow: `0 0 4px ${color}aa, 0 0 10px ${color}55`,
         }}
         aria-hidden
       />
-    );
-  return (
-    <span className="inline-flex items-center gap-1.5">
-      {swatch}
       {label}
     </span>
   );

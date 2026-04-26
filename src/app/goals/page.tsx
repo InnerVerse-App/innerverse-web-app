@@ -8,6 +8,7 @@ import {
   ExpandedDetailBody,
 } from "@/app/_components/ExpandedDetailBody";
 import { PageShell } from "@/app/_components/PageShell";
+import { CircularProgressRing } from "@/app/_components/CircularProgressRing";
 import { ProgressBar } from "@/app/_components/ProgressBar";
 import { RecencyBar } from "@/app/_components/RecencyBar";
 import { formatDateCompact } from "@/lib/format";
@@ -188,25 +189,40 @@ export default async function GoalsPage({
                 <details className="group" open={isHighlighted || undefined}>
                   <summary className="flex cursor-pointer list-none items-start justify-between gap-3 p-5 [&::-webkit-details-marker]:hidden">
                     <div className="flex-1">
-                      <h2 className="break-words text-lg font-semibold text-white">
-                        {g.title}
-                      </h2>
-                      {g.description ? (
-                        <p className="mt-2 text-sm text-neutral-400">
-                          {g.description}
-                        </p>
-                      ) : null}
+                      {g.completionType === "milestone" ? (
+                        <div className="flex items-start gap-4">
+                          <div className="min-w-0 flex-1">
+                            <h2 className="break-words text-lg font-semibold text-white">
+                              {g.title}
+                            </h2>
+                            {g.description ? (
+                              <p className="mt-2 text-sm text-neutral-400">
+                                {g.description}
+                              </p>
+                            ) : null}
+                          </div>
+                          <CircularProgressRing
+                            percent={g.progressPercent ?? 0}
+                          />
+                        </div>
+                      ) : (
+                        <>
+                          <h2 className="break-words text-lg font-semibold text-white">
+                            {g.title}
+                          </h2>
+                          {g.description ? (
+                            <p className="mt-2 text-sm text-neutral-400">
+                              {g.description}
+                            </p>
+                          ) : null}
+                        </>
+                      )}
                       <div className="mt-4">
                         {g.completionType === "milestone" ? (
-                          <>
-                            <div className="flex items-center justify-between text-sm">
-                              <span className="text-neutral-400">Progress</span>
-                              <span className="text-neutral-300">
-                                {g.progressPercent ?? 0}%
-                              </span>
-                            </div>
-                            <ProgressBar percent={g.progressPercent ?? 0} />
-                          </>
+                          <ProgressBar
+                            percent={g.progressPercent ?? 0}
+                            variant="goal"
+                          />
                         ) : (
                           <>
                             <div className="flex items-center justify-between text-sm">

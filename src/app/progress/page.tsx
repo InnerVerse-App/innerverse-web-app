@@ -29,13 +29,15 @@ export const dynamic = "force-dynamic";
 const CONSTELLATION_SESSION_LIMIT = 10;
 
 // Convert the ?window= query value into the layout's ageWindowDays
-// parameter. "all" maps to 10 years — effectively no clamping for any
-// realistic data set.
+// parameter. "all" maps to 10 years — effectively no clamping for
+// any realistic data set. Default is 365 days so the recency curve
+// has visible variation across the user's whole year of work
+// instead of pinning everything older than 30d to the floor.
 function parseAgeWindowDays(windowParam: string | undefined): number {
   if (windowParam === "all") return 365 * 10;
-  if (windowParam === "365") return 365;
+  if (windowParam === "30") return 30;
   if (windowParam === "90") return 90;
-  return 30;
+  return 365;
 }
 
 type TextRow = {
@@ -182,22 +184,25 @@ type SearchParamsShape = {
   constellation?: string;
   shift?: string;
   goal?: string;
+  session?: string;
   window?: string;
 };
 
 // Resolve the URL params to a single selectedAnchor (or null). Only
-// one of constellation / shift / goal is honored per render — the
-// first one set wins.
+// one of constellation / shift / goal / session is honored per
+// render — the first one set wins.
 function resolveSelectedAnchor(
   p: SearchParamsShape,
 ):
   | { type: "breakthrough"; id: string }
   | { type: "shift"; id: string }
   | { type: "goal"; id: string }
+  | { type: "session"; id: string }
   | null {
   if (p.constellation) return { type: "breakthrough", id: p.constellation };
   if (p.shift) return { type: "shift", id: p.shift };
   if (p.goal) return { type: "goal", id: p.goal };
+  if (p.session) return { type: "session", id: p.session };
   return null;
 }
 
@@ -217,13 +222,12 @@ export default async function ProgressPage({
       ageWindowDays,
       constellationLinks: demo.constellationLinks,
     });
-    const autoScrollId = selectedAnchor
-      ? selectedAnchor.type === "breakthrough"
-        ? `bt-${selectedAnchor.id}`
-        : selectedAnchor.type === "shift"
-          ? `ms-${selectedAnchor.id}`
-          : null
-      : null;
+    // Single-click on a star sets the anchor and updates the
+    // constellation map in place — no page-scroll. The user
+    // explicitly opted into "navigate to detail" via double-click,
+    // which is wired separately. Setting autoScrollId to null
+    // keeps the scroll position where the user clicked.
+    const autoScrollId = null;
 
     // Demo lookup maps so we can resolve link ids → display data.
     const sessionById = new Map(
@@ -315,6 +319,10 @@ export default async function ProgressPage({
               selectedAnchor?.type === "shift" ? selectedAnchor.id : undefined,
             goal:
               selectedAnchor?.type === "goal" ? selectedAnchor.id : undefined,
+            session:
+              selectedAnchor?.type === "session"
+                ? selectedAnchor.id
+                : undefined,
             window: params.window,
           }}
         />
@@ -398,6 +406,10 @@ export default async function ProgressPage({
             selectedAnchor?.type === "shift" ? selectedAnchor.id : undefined,
           goal:
             selectedAnchor?.type === "goal" ? selectedAnchor.id : undefined,
+          session:
+            selectedAnchor?.type === "session"
+              ? selectedAnchor.id
+              : undefined,
           window: params.window,
         }}
       />
