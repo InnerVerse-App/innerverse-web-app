@@ -157,6 +157,10 @@ export function Constellation({
     selectedAnchor?.type === "breakthrough" && constellationLinks
       ? constellationLinks.get(selectedAnchor.id) ?? null
       : null;
+  // Members of the selected constellation get an opacity boost so
+  // they stay visible even when the constellation includes old
+  // contributors that would otherwise be at the recency floor.
+  const boostedIds = new Set<string>();
   const chainPoints: Array<{ x: number; y: number; t: number }> = [];
   if (selectedAnchor) {
     const sessionById = new Map(layout.sessions.map((s) => [s.id, s]));
@@ -183,8 +187,9 @@ export function Constellation({
         };
         contributingSessionIds = links.sessionIds;
         contributingShiftIds = links.shiftIds;
-        // No contributingGoalIds — goals don't influence
-        // breakthroughs.
+        boostedIds.add(b.id);
+        for (const id of links.sessionIds) boostedIds.add(id);
+        for (const id of links.shiftIds) boostedIds.add(id);
       }
     } else if (selectedAnchor.type === "shift") {
       const m = shiftById.get(selectedAnchor.id);
@@ -196,6 +201,8 @@ export function Constellation({
           t: Date.parse(m.createdAt),
         };
         contributingSessionIds = links.sessionIds;
+        boostedIds.add(m.id);
+        for (const id of links.sessionIds) boostedIds.add(id);
       }
     } else if (selectedAnchor.type === "goal") {
       const g = goalById.get(selectedAnchor.id);
@@ -209,6 +216,10 @@ export function Constellation({
         contributingSessionIds = links.sessionIds;
         contributingShiftIds = links.shiftIds;
         contributingBreakthroughIds = links.breakthroughIds;
+        boostedIds.add(g.id);
+        for (const id of links.sessionIds) boostedIds.add(id);
+        for (const id of links.shiftIds) boostedIds.add(id);
+        for (const id of links.breakthroughIds) boostedIds.add(id);
       }
     }
 
@@ -514,24 +525,39 @@ export function Constellation({
                   {layout.mindsetShifts.map((m) => (
                     <MindsetShiftStar
                       key={m.id}
-                      dot={m}
+                      dot={
+                        boostedIds.has(m.id) ? { ...m, opacity: 1 } : m
+                      }
                       buildHref={(id) =>
-                        buildUrl({ shift: id, constellation: null, goal: null }) + `#ms-${id}`
+                        buildUrl({ shift: id, constellation: null, goal: null })
                       }
                     />
                   ))}
                   {layout.goals.map((g) => (
-                    <GoalStar key={g.id} dot={g} goalsHref={goalsHref} />
+                    <GoalStar
+                      key={g.id}
+                      dot={
+                        boostedIds.has(g.id) ? { ...g, opacity: 1 } : g
+                      }
+                      goalsHref={goalsHref}
+                    />
                   ))}
                   {layout.sessions.map((s) => (
-                    <SessionStar key={s.id} dot={s} />
+                    <SessionStar
+                      key={s.id}
+                      dot={
+                        boostedIds.has(s.id) ? { ...s, opacity: 1 } : s
+                      }
+                    />
                   ))}
                   {layout.breakthroughs.map((b) => (
                     <BreakthroughStar
                       key={b.id}
-                      dot={b}
+                      dot={
+                        boostedIds.has(b.id) ? { ...b, opacity: 1 } : b
+                      }
                       buildHref={(id) =>
-                        buildUrl({ constellation: id, shift: null, goal: null }) + `#bt-${id}`
+                        buildUrl({ constellation: id, shift: null, goal: null })
                       }
                     />
                   ))}

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@clerk/nextjs/server";
 
+import { AutoScrollToTarget } from "@/app/_components/AutoScrollToTarget";
 import { PageShell } from "@/app/_components/PageShell";
 import { formatDateShort } from "@/lib/format";
 import {
@@ -159,6 +160,9 @@ export default async function SessionsListPage({
 
   return (
     <PageShell active="sessions" navHrefSuffix="?demo=1">
+      <AutoScrollToTarget
+        targetId={highlightedSessionId ? `s-${highlightedSessionId}` : null}
+      />
       <h1 className="text-3xl font-bold text-white">Sessions</h1>
       <p className="mt-1 text-sm text-neutral-400">
         A log of your coaching sessions.{" "}
@@ -266,7 +270,7 @@ export default async function SessionsListPage({
                                   aria-hidden
                                 />
                                 <Link
-                                  href={`/progress?demo=1&constellation=${b.id}#constellation-map`}
+                                  href={`/progress?demo=1&constellation=${b.id}`}
                                   className="flex-1 text-neutral-200 transition hover:text-brand-primary"
                                 >
                                   {b.content}
@@ -295,7 +299,7 @@ export default async function SessionsListPage({
                                 />
                                 <div className="flex-1">
                                   <Link
-                                    href={`/progress?demo=1&shift=${m.id}#constellation-map`}
+                                    href={`/progress?demo=1&shift=${m.id}`}
                                     className="font-medium text-neutral-200 transition hover:text-brand-primary"
                                   >
                                     {m.content}

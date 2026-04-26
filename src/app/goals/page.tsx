@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@clerk/nextjs/server";
 
+import { AutoScrollToTarget } from "@/app/_components/AutoScrollToTarget";
 import {
   type ExpandedDetail,
   ExpandedDetailBody,
@@ -156,6 +157,9 @@ export default async function GoalsPage({
 
     return (
       <PageShell active="goals" navHrefSuffix="?demo=1">
+        <AutoScrollToTarget
+          targetId={highlightedGoalId ? `g-${highlightedGoalId}` : null}
+        />
         <div className="flex items-start justify-between gap-3">
           <div>
             <h1 className="text-3xl font-bold text-white">Goals Progress</h1>

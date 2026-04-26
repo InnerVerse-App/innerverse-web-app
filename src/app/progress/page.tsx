@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@clerk/nextjs/server";
 
+import { AutoScrollToTarget } from "@/app/_components/AutoScrollToTarget";
 import {
   type ExpandedDetail,
   ExpandedDetailBody,
@@ -216,6 +217,13 @@ export default async function ProgressPage({
       ageWindowDays,
       constellationLinks: demo.constellationLinks,
     });
+    const autoScrollId = selectedAnchor
+      ? selectedAnchor.type === "breakthrough"
+        ? `bt-${selectedAnchor.id}`
+        : selectedAnchor.type === "shift"
+          ? `ms-${selectedAnchor.id}`
+          : null
+      : null;
 
     // Demo lookup maps so we can resolve link ids → display data.
     const sessionById = new Map(
@@ -282,6 +290,7 @@ export default async function ProgressPage({
 
     return (
       <PageShell active="progress" navHrefSuffix="?demo=1">
+        <AutoScrollToTarget targetId={autoScrollId} />
         <h1 className="text-3xl font-bold text-white">Your Progress</h1>
         <p className="mt-1 text-sm text-neutral-400">
           Track your personal growth development.{" "}

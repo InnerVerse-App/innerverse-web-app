@@ -48,7 +48,10 @@ export function RecentBreakthroughsCard({ items, progressBase = "/progress" }: P
         <ul className="mt-4 flex flex-col gap-2">
           {items.map((item) => {
             const sep = progressBase.includes("?") ? "&" : "?";
-            const href = `${progressBase}${sep}constellation=${item.id}#constellation-map`;
+            // No fragment — AutoScrollToTarget on /progress will scroll
+            // to the card itself so the user lands on the breakthrough's
+            // detail body, not the constellation map at the top.
+            const href = `${progressBase}${sep}constellation=${item.id}`;
             return (
               <li key={item.id}>
                 <Link
