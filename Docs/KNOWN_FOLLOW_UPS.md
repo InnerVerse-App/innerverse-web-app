@@ -1227,3 +1227,36 @@ Severity: LOW
 Lens: misc — multiple smaller items not worth individual entries
 Root cause: Various code-style / observability suggestions across all four lenses — auth-check duplication between page.tsx and actions.ts (defense-in-depth, intentional), CreateGoalState return type unreachable on happy path (redirect throws), Clerk null-result tagging gap (Sentry-deferred), client-side maxLength matches but no client-side error message on overflow, etc. None blocking.
 Status: OPEN (acknowledged; case-by-case if any becomes a real issue).
+
+## 2026-04-26 — /simplify review of PR #73 (G.3 Goals tab rebuild)
+
+Three parallel agents (reuse, quality, efficiency). Six concrete fixes applied; two efficiency findings deferred.
+
+### Fixes applied (this branch)
+
+1. Extracted `<ProgressBar percent={n}>` into `src/app/_components/ProgressBar.tsx` — three identical 7-line bar markups in GoalCard.tsx, TopGoalCard.tsx, PersonalGrowthProgressCard.tsx now share the component (matches the icons.tsx 3+-uses convention).
+2. `GoalCardData` rewritten as `Pick<ActiveGoal, ...> & { ...derived }` — drops the duplicated status union and 6 redundant field declarations.
+3. Dropped dead `description` field from `GoalCardData` (and from buildCardData's return map) — the field was never read by GoalCard's JSX.
+4. `TopGoalCard` prop changed from a 3-field subset shape to `ActiveGoal | null`. Home page's `topGoalCardData` mapper deleted; `activeGoals[0] ?? null` is the entire derivation.
+5. Stripped audit/PR/phase references from comments per the no-audit-refs feedback rule: TopGoalCard's "As of G.3 the card now renders…" header block, goals/page.tsx's "+Add button links to /goals/new which lands in G.4…" comment, home/page.tsx's "loadActiveGoalsWithLazySeed handles the onboarding → public.goals seed lazily…" trail and the "v1 picks 'newest' as Top; a future chunk may add an explicit Top flag…" forward-looking comment.
+6. Stripped a WHAT-narrating comment block at goals/page.tsx (above buildCardData) — the code is self-evident.
+
+### Deferred (efficiency findings — pre-existing, not introduced by #73)
+
+FINDING 1
+Severity: LOW
+Lens: efficiency
+Location: src/lib/goals.ts:142-244 (loadActiveGoalsWithLazySeed)
+Root cause: The helper unconditionally re-fetches the goals list after the INSERT branch, and unconditionally fetches next_steps to backfill starters — even when `missing.length === 0` and no predefined goal lacks a starter. Steady-state every Home + /goals + session-start render performs 4 sequential round-trips when 1 (the initial existingRes SELECT) would suffice.
+Blast radius: Latency only. Material at p95 once user count grows; immaterial at 1-user / pre-launch scale.
+Suggested fix: Skip the re-fetch when `missing.length === 0` (use `existingActive` directly). Skip the next_steps backfill SELECT when no `is_predefined` goal is unseen (already true after the first call for any user with predefined goals — verify with a count guard).
+Status: OPEN (deferred; revisit when usage telemetry is in or before Phase 10 pre-launch gate).
+
+FINDING 2
+Severity: LOW
+Lens: efficiency
+Location: src/app/goals/page.tsx:44-49 (buildCardData next_steps fan-out)
+Root cause: `.in("goal_id", goalIds)` with no LIMIT pulls every step row across all active goals just to keep the most recent per goal. At >50 active goals × tens of steps each, this becomes wasteful.
+Blast radius: At 1-user / ≤10-tester scale, payload is realistically <100 rows. Theoretical at current scale.
+Suggested fix: Move to a Postgres view/RPC `select distinct on (goal_id) ... order by goal_id, created_at desc` once a real user accumulates >50 active goals or >50 steps per goal.
+Status: OPEN (deferred until user telemetry shows it matters).

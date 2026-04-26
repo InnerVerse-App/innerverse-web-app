@@ -1,21 +1,24 @@
 import Link from "next/link";
 
+import { ProgressBar } from "@/app/_components/ProgressBar";
 import { formatDateCompact } from "@/lib/format";
+import type { ActiveGoal } from "@/lib/goals";
 
 import { ArchiveButton } from "./ArchiveButton";
 
-export type GoalCardData = {
-  id: string;
-  title: string;
-  description: string | null;
-  status: "not_started" | "on_track" | "at_risk";
-  progress_percent: number | null;
-  progress_rationale: string | null;
-  last_session_id: string | null;
+export type GoalCardData = Pick<
+  ActiveGoal,
+  | "id"
+  | "title"
+  | "status"
+  | "progress_percent"
+  | "progress_rationale"
+  | "last_session_id"
+  | "is_predefined"
+> & {
   last_session_ended_at: string | null;
   current_next_step_content: string | null;
   current_next_step_done: boolean;
-  is_predefined: boolean;
 };
 
 type Props = {
@@ -85,13 +88,7 @@ export function GoalCard({ goal }: Props) {
             <span className="text-neutral-400">Progress</span>
             <span className="text-neutral-300">{goal.progress_percent}%</span>
           </div>
-          <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-white/10">
-            <div
-              className="h-full bg-brand-primary"
-              style={{ width: `${goal.progress_percent}%` }}
-              aria-hidden
-            />
-          </div>
+          <ProgressBar percent={goal.progress_percent} />
         </div>
       ) : null}
 

@@ -17,10 +17,6 @@ import { type GoalCardData, GoalCard } from "./GoalCard";
 
 export const dynamic = "force-dynamic";
 
-// Card-supporting data fetched once per Goals-tab render and merged
-// into each goal client-side. Three RLS-scoped reads, all keyed off
-// the user's own goals — no cross-user surface.
-
 type SessionEndedRow = { id: string; ended_at: string | null };
 type NextStepRow = {
   id: string;
@@ -75,7 +71,6 @@ async function buildCardData(
     return {
       id: g.id,
       title: g.title,
-      description: g.description,
       status: g.status,
       progress_percent: g.progress_percent,
       progress_rationale: g.progress_rationale,
@@ -112,10 +107,6 @@ export default async function GoalsPage() {
             Your personal growth development.
           </p>
         </div>
-        {/* +Add button links to /goals/new which lands in G.4. Brief
-            404 window between G.3 and G.4 deploys is acceptable —
-            the placement matches the canonical and Vercel deploys
-            them in sequence. */}
         <Link
           href="/goals/new"
           className="inline-flex shrink-0 items-center gap-1 rounded-md bg-brand-primary px-4 py-2 text-sm font-semibold text-brand-primary-contrast shadow-md transition hover:bg-brand-primary/90"
