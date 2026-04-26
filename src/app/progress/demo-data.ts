@@ -27,17 +27,14 @@ function daysAgoIso(days: number, hours = 10): string {
   return d.toISOString();
 }
 
-// A breakthrough's constellation — which stars led to it, plus a
-// distinct evocative name for the constellation (separate from the
-// breakthrough's content). Demo only; real data needs a schema chunk
-// to add contributing_*_ids + constellation_name columns to the
-// breakthroughs table and an LLM session-end tagging step that
-// names + populates them.
+// A breakthrough's constellation — sessions and mindset shifts that
+// led to it, plus a distinct evocative name. Goals are intentionally
+// NOT contributors: per the influence model, goals are caused by
+// breakthroughs, not the other way around.
 export type ConstellationLinks = {
   name: string;
   sessionIds: string[];
   shiftIds: string[];
-  goalIds: string[];
 };
 
 // A mindset shift's contributors — only sessions that built up to
@@ -289,10 +286,10 @@ export function buildDemoData(): {
     });
   }
 
-  // Constellation links per breakthrough — each constellation has
-  // 2-4 sessions, 2-5 mindset shifts, and 1-2 goals as contributors.
-  // Contributors must pre-date the breakthrough (you don't build
-  // toward a breakthrough with future events).
+  // Constellation links per breakthrough — sessions + mindset shifts
+  // that led to it. Goals are NOT contributors (goals are caused by
+  // breakthroughs in the influence model, not the other way).
+  // Contributors must pre-date the breakthrough.
   const constellationLinks = new Map<string, ConstellationLinks>();
   for (const b of breakthroughs) {
     const bTime = Date.parse(b.createdAt);
@@ -302,19 +299,14 @@ export function buildDemoData(): {
     const eligibleShifts = mindsetShifts.filter(
       (m) => Date.parse(m.createdAt) <= bTime,
     );
-    const eligibleGoals = goals.filter(
-      (g) => g.lastEngagedAt && Date.parse(g.lastEngagedAt) <= bTime,
-    );
     const numSessions = 2 + Math.floor(hashFloat(`bls${b.id}`) * 3);
     const numShifts = 2 + Math.floor(hashFloat(`blm${b.id}`) * 4);
-    const numGoals = 1 + Math.floor(hashFloat(`blg${b.id}`) * 2);
     constellationLinks.set(b.id, {
       name: pickIdx(NAMES, `bn${b.id}`),
       sessionIds: pickN(eligibleSessions, numSessions, b.id + "_s").map(
         (s) => s.id,
       ),
       shiftIds: pickN(eligibleShifts, numShifts, b.id + "_m").map((m) => m.id),
-      goalIds: pickN(eligibleGoals, numGoals, b.id + "_g").map((g) => g.id),
     });
   }
 

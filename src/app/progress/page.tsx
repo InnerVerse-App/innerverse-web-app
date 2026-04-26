@@ -209,17 +209,48 @@ export default async function ProgressPage({
     const demo = buildDemoData();
     const layout = computeLayout({ ...demo, ageWindowDays });
 
-    // Build expanded-detail strings from the demo links so each card
-    // tells the user what led to it.
-    const breakthroughDetailFor = (item: TextRow) => {
+    // Demo lookup maps so we can resolve link ids → display data.
+    const sessionById = new Map(
+      demo.sessions.map((s) => [s.id, s] as const),
+    );
+    const shiftById = new Map(
+      demo.mindsetShifts.map((m) => [m.id, m] as const),
+    );
+
+    const breakthroughDetailFor = (
+      item: TextRow,
+    ): ExpandedDetail | null => {
       const links = demo.constellationLinks.get(item.id);
       if (!links) return null;
-      return `Built across ${links.sessionIds.length} session${links.sessionIds.length === 1 ? "" : "s"}, ${links.shiftIds.length} mindset shift${links.shiftIds.length === 1 ? "" : "s"}, and ${links.goalIds.length} goal${links.goalIds.length === 1 ? "" : "s"}. The constellation "${links.name}" maps the path.`;
+      const sessions = links.sessionIds
+        .map((id) => sessionById.get(id))
+        .filter((s): s is NonNullable<typeof s> => !!s)
+        .map((s) => ({ id: s.id, endedAt: s.endedAt }))
+        .sort((a, b) => Date.parse(b.endedAt) - Date.parse(a.endedAt));
+      const shifts = links.shiftIds
+        .map((id) => shiftById.get(id))
+        .filter((m): m is NonNullable<typeof m> => !!m)
+        .map((m) => ({ id: m.id, content: m.content }));
+      const narrative =
+        sessions.length > 0
+          ? `This breakthrough emerged from ${sessions.length} coaching session${sessions.length === 1 ? "" : "s"} and ${shifts.length} mindset shift${shifts.length === 1 ? "" : "s"} of practice. The constellation "${links.name}" traces the path.`
+          : `The constellation "${links.name}" traces the path to this breakthrough.`;
+      return { narrative, sessions, shifts, breakthroughs: [] };
     };
-    const shiftDetailFor = (item: TextRow) => {
+
+    const shiftDetailFor = (item: TextRow): ExpandedDetail | null => {
       const links = demo.mindsetShiftLinks.get(item.id);
       if (!links) return null;
-      return `Emerged across ${links.sessionIds.length} session${links.sessionIds.length === 1 ? "" : "s"} of practice. Tap to see the path on the star map.`;
+      const sessions = links.sessionIds
+        .map((id) => sessionById.get(id))
+        .filter((s): s is NonNullable<typeof s> => !!s)
+        .map((s) => ({ id: s.id, endedAt: s.endedAt }))
+        .sort((a, b) => Date.parse(b.endedAt) - Date.parse(a.endedAt));
+      const narrative =
+        sessions.length > 0
+          ? `This shift emerged across ${sessions.length} coaching session${sessions.length === 1 ? "" : "s"} of practice.`
+          : "This shift is still settling in.";
+      return { narrative, sessions, shifts: [], breakthroughs: [] };
     };
 
     return (
@@ -377,6 +408,23 @@ function buildSelectUrl(params: {
   return qs ? `/progress?${qs}#constellation-map` : `/progress#constellation-map`;
 }
 
+// Structured detail for the expanded card body. Sessions become
+// clickable chips linking to /sessions/{id}; shifts and breakthroughs
+// render as a bulleted list of their content.
+type ExpandedDetail = {
+  // One-line human summary that frames the lists.
+  narrative: string;
+  // Sessions that contributed, with date for the chip label.
+  sessions: { id: string; endedAt: string }[];
+  // Mindset shifts that contributed (only relevant for breakthroughs
+  // and goals — shifts themselves don't list sub-shifts).
+  shifts: { id: string; content: string }[];
+  // Breakthroughs that contributed (only relevant for goals — both
+  // breakthroughs and shifts ignore goals as contributors per the
+  // influence model).
+  breakthroughs: { id: string; content: string }[];
+};
+
 // Expandable list — caps to ~5 items visible; older content scrolls.
 // Each card uses native <details>/<summary> so expand/collapse is
 // per-card and free of client state. The expanded body shows
@@ -398,7 +446,7 @@ function ExpandableList({
   recencyColor: string;
   idPrefix: string;
   buildStarMapHref?: (item: TextRow) => string;
-  expandedDetailFor?: (item: TextRow) => string | null;
+  expandedDetailFor?: (item: TextRow) => ExpandedDetail | null;
   buttonLabel?: string;
 }) {
   const visibleHeightPx = 420; // ≈ 5 collapsed cards
@@ -463,9 +511,77 @@ function ExpandableList({
                     </summary>
                     <div className="mt-3 border-t border-white/5 pt-3">
                       {detail ? (
-                        <p className="text-xs leading-relaxed text-neutral-400">
-                          {detail}
-                        </p>
+                        <div className="flex flex-col gap-3">
+                          <p className="text-xs leading-relaxed text-neutral-300">
+                            {detail.narrative}
+                          </p>
+                          {detail.sessions.length > 0 ? (
+                            <div>
+                              <p className="mb-1.5 text-[10px] font-medium uppercase tracking-wide text-neutral-500">
+                                Sessions
+                              </p>
+                              <div className="flex flex-wrap gap-1.5">
+                                {detail.sessions.map((s) => (
+                                  <Link
+                                    key={s.id}
+                                    href={`/sessions/${s.id}`}
+                                    className="inline-flex items-center rounded-full border border-white/10 bg-white/[0.03] px-2.5 py-0.5 text-[11px] text-neutral-300 transition hover:border-brand-primary/40 hover:text-brand-primary"
+                                  >
+                                    {formatDateCompact(s.endedAt)}
+                                  </Link>
+                                ))}
+                              </div>
+                            </div>
+                          ) : null}
+                          {detail.shifts.length > 0 ? (
+                            <div>
+                              <p className="mb-1.5 text-[10px] font-medium uppercase tracking-wide text-neutral-500">
+                                Mindset shifts that paved the way
+                              </p>
+                              <ul className="flex flex-col gap-1 text-xs text-neutral-300">
+                                {detail.shifts.map((s) => (
+                                  <li
+                                    key={s.id}
+                                    className="flex items-start gap-1.5"
+                                  >
+                                    <span
+                                      className="mt-1.5 inline-block h-1.5 w-1.5 shrink-0 rounded-full"
+                                      style={{ background: "#A78BFA" }}
+                                      aria-hidden
+                                    />
+                                    <span>{s.content}</span>
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          ) : null}
+                          {detail.breakthroughs.length > 0 ? (
+                            <div>
+                              <p className="mb-1.5 text-[10px] font-medium uppercase tracking-wide text-neutral-500">
+                                Breakthroughs along the way
+                              </p>
+                              <ul className="flex flex-col gap-1 text-xs text-neutral-300">
+                                {detail.breakthroughs.map((b) => (
+                                  <li
+                                    key={b.id}
+                                    className="flex items-start gap-1.5"
+                                  >
+                                    <span
+                                      className="mt-1 inline-block h-2 w-2 shrink-0"
+                                      style={{
+                                        background: "#DCA114",
+                                        clipPath:
+                                          "polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%)",
+                                      }}
+                                      aria-hidden
+                                    />
+                                    <span>{b.content}</span>
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          ) : null}
+                        </div>
                       ) : null}
                       {starMapHref ? (
                         <Link

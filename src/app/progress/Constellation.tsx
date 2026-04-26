@@ -19,7 +19,6 @@ type ConstellationLinkRow = {
   name: string;
   sessionIds: string[];
   shiftIds: string[];
-  goalIds: string[];
 };
 
 type ShiftLinkRow = {
@@ -148,7 +147,7 @@ export function Constellation({
     let anchorPoint: { x: number; y: number; t: number } | null = null;
     let contributingSessionIds: string[] = [];
     let contributingShiftIds: string[] = [];
-    let contributingGoalIds: string[] = [];
+    const contributingGoalIds: string[] = [];
     let contributingBreakthroughIds: string[] = [];
 
     if (selectedAnchor.type === "breakthrough") {
@@ -162,7 +161,8 @@ export function Constellation({
         };
         contributingSessionIds = links.sessionIds;
         contributingShiftIds = links.shiftIds;
-        contributingGoalIds = links.goalIds;
+        // No contributingGoalIds — goals don't influence
+        // breakthroughs.
       }
     } else if (selectedAnchor.type === "shift") {
       const m = shiftById.get(selectedAnchor.id);
