@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import { formatDateCompact } from "@/lib/format";
 
+import { ConstellationRename } from "./ConstellationRename";
 import {
   type ConstellationLayout,
   type Positioned,
@@ -213,6 +214,12 @@ export function Constellation({
               })}
             </div>
           </div>
+          {selectedBreakthroughId && selectedLinks ? (
+            <ConstellationRename
+              breakthroughId={selectedBreakthroughId}
+              initialName={selectedLinks.name}
+            />
+          ) : null}
         </div>
       ) : null}
 
@@ -263,11 +270,14 @@ export function Constellation({
           </svg>
         ) : null}
 
-        {/* Center "now" reference — subtle 1px tick rather than a
-            bright nucleus. The radial gradient on the panel already
-            implies the center; a loud dot was overkill. */}
+        {/* Center "now" reference — small dim white dot with a hint
+            of halo. Visible but not a glaring beacon. */}
         <span
-          className="pointer-events-none absolute left-1/2 top-1/2 h-px w-px -translate-x-1/2 -translate-y-1/2 rounded-full bg-white/30"
+          className="pointer-events-none absolute left-1/2 top-1/2 h-1 w-1 -translate-x-1/2 -translate-y-1/2 rounded-full"
+          style={{
+            background: "rgba(255,255,255,0.5)",
+            boxShadow: "0 0 3px rgba(255,255,255,0.35)",
+          }}
           aria-hidden
         />
 

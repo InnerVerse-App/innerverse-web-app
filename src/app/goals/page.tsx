@@ -115,7 +115,7 @@ export default async function GoalsPage({
             <li
               key={g.id}
               id={`g-${g.id}`}
-              className="scroll-mt-20 rounded-xl border border-white/10 bg-white/[0.02] p-5 target:border-brand-primary/40"
+              className="scroll-mt-20 rounded-xl border border-white/10 bg-white/[0.02] p-5 target:border-brand-primary target:bg-brand-primary/10 target:shadow-[0_0_18px_rgba(89,164,192,0.35)]"
             >
               <h2 className="break-words text-lg font-semibold text-white">
                 {g.title}
@@ -213,7 +213,7 @@ export default async function GoalsPage({
             <li
               key={card.id}
               id={`g-${card.id}`}
-              className="scroll-mt-20 target:rounded-xl target:outline target:outline-1 target:outline-brand-primary/40"
+              className="scroll-mt-20 rounded-xl target:outline target:outline-2 target:outline-brand-primary target:shadow-[0_0_18px_rgba(89,164,192,0.35)]"
             >
               <GoalCard goal={card} />
             </li>

@@ -272,7 +272,7 @@ function Section({
             <li
               key={item.id}
               id={`${idPrefix}-${item.id}`}
-              className="scroll-mt-20 rounded-lg border border-white/10 bg-white/[0.02] px-4 py-3 target:border-brand-primary/40"
+              className="scroll-mt-20 rounded-lg border border-white/10 bg-white/[0.02] px-4 py-3 target:border-brand-primary target:bg-brand-primary/10 target:shadow-[0_0_0_1px_var(--tw-shadow-color)] target:shadow-brand-primary/40"
             >
               <p className="text-sm text-neutral-200">{item.content}</p>
               <p className="mt-1 text-[11px] text-neutral-500">
