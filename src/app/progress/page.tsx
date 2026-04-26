@@ -172,22 +172,56 @@ async function loadConstellation(
   return { layout, hasGoals: activeGoals.length > 0 };
 }
 
+type SearchParamsShape = {
+  demo?: string;
+  constellation?: string;
+  shift?: string;
+  goal?: string;
+  window?: string;
+};
+
+// Resolve the URL params to a single selectedAnchor (or null). Only
+// one of constellation / shift / goal is honored per render — the
+// first one set wins.
+function resolveSelectedAnchor(
+  p: SearchParamsShape,
+):
+  | { type: "breakthrough"; id: string }
+  | { type: "shift"; id: string }
+  | { type: "goal"; id: string }
+  | null {
+  if (p.constellation) return { type: "breakthrough", id: p.constellation };
+  if (p.shift) return { type: "shift", id: p.shift };
+  if (p.goal) return { type: "goal", id: p.goal };
+  return null;
+}
+
 export default async function ProgressPage({
   searchParams,
 }: {
-  searchParams: Promise<{
-    demo?: string;
-    constellation?: string;
-    window?: string;
-  }>;
+  searchParams: Promise<SearchParamsShape>;
 }) {
   const params = await searchParams;
   const ageWindowDays = parseAgeWindowDays(params.window);
+  const selectedAnchor = resolveSelectedAnchor(params);
 
   if (params.demo === "1") {
     const demo = buildDemoData();
     const layout = computeLayout({ ...demo, ageWindowDays });
-    const selectedBreakthroughId = params.constellation ?? null;
+
+    // Build expanded-detail strings from the demo links so each card
+    // tells the user what led to it.
+    const breakthroughDetailFor = (item: TextRow) => {
+      const links = demo.constellationLinks.get(item.id);
+      if (!links) return null;
+      return `Built across ${links.sessionIds.length} session${links.sessionIds.length === 1 ? "" : "s"}, ${links.shiftIds.length} mindset shift${links.shiftIds.length === 1 ? "" : "s"}, and ${links.goalIds.length} goal${links.goalIds.length === 1 ? "" : "s"}. The constellation "${links.name}" maps the path.`;
+    };
+    const shiftDetailFor = (item: TextRow) => {
+      const links = demo.mindsetShiftLinks.get(item.id);
+      if (!links) return null;
+      return `Emerged across ${links.sessionIds.length} session${links.sessionIds.length === 1 ? "" : "s"} of practice. Tap to see the path on the star map.`;
+    };
+
     return (
       <PageShell active="progress" navHrefSuffix="?demo=1">
         <h1 className="text-3xl font-bold text-white">Your Progress</h1>
@@ -200,32 +234,52 @@ export default async function ProgressPage({
           hasGoals={true}
           goalsHref="/goals?demo=1"
           constellationLinks={demo.constellationLinks}
-          selectedBreakthroughId={selectedBreakthroughId}
+          mindsetShiftLinks={demo.mindsetShiftLinks}
+          goalLinks={demo.goalLinks}
+          selectedAnchor={selectedAnchor}
           basePath="/progress"
           currentParams={{
             demo: "1",
-            constellation: selectedBreakthroughId ?? undefined,
+            constellation:
+              selectedAnchor?.type === "breakthrough"
+                ? selectedAnchor.id
+                : undefined,
+            shift:
+              selectedAnchor?.type === "shift" ? selectedAnchor.id : undefined,
+            goal:
+              selectedAnchor?.type === "goal" ? selectedAnchor.id : undefined,
             window: params.window,
           }}
         />
-        <Section
+        <ExpandableList
           title="Breakthroughs"
           items={DEMO_LEGACY_SECTIONS.breakthroughs}
           recencyColor="#DCA114"
           idPrefix="bt"
-          selectableConstellationFor={(item) =>
+          expandedDetailFor={breakthroughDetailFor}
+          buildStarMapHref={(item) =>
             buildSelectUrl({
               demo: "1",
               constellation: item.id,
               window: params.window,
             })
           }
+          buttonLabel="See constellation"
         />
-        <Section
-          title="Insights"
+        <ExpandableList
+          title="Mindset shifts"
           items={DEMO_LEGACY_SECTIONS.insights}
           recencyColor="#A78BFA"
           idPrefix="ms"
+          expandedDetailFor={shiftDetailFor}
+          buildStarMapHref={(item) =>
+            buildSelectUrl({
+              demo: "1",
+              shift: item.id,
+              window: params.window,
+            })
+          }
+          buttonLabel="See on star map"
         />
       </PageShell>
     );
@@ -244,7 +298,6 @@ export default async function ProgressPage({
     loadConstellation(ctx, ageWindowDays),
     loadLegacySections(ctx),
   ]);
-  const selectedBreakthroughId = params.constellation ?? null;
 
   return (
     <PageShell active="progress">
@@ -257,31 +310,48 @@ export default async function ProgressPage({
         layout={layout}
         hasGoals={hasGoals}
         constellationLinks={undefined}
-        selectedBreakthroughId={selectedBreakthroughId}
+        mindsetShiftLinks={undefined}
+        goalLinks={undefined}
+        selectedAnchor={selectedAnchor}
         basePath="/progress"
         currentParams={{
-          constellation: selectedBreakthroughId ?? undefined,
+          constellation:
+            selectedAnchor?.type === "breakthrough"
+              ? selectedAnchor.id
+              : undefined,
+          shift:
+            selectedAnchor?.type === "shift" ? selectedAnchor.id : undefined,
+          goal:
+            selectedAnchor?.type === "goal" ? selectedAnchor.id : undefined,
           window: params.window,
         }}
       />
 
-      <Section
+      <ExpandableList
         title="Breakthroughs"
         items={breakthroughs}
         recencyColor="#DCA114"
         idPrefix="bt"
-        selectableConstellationFor={(item) =>
+        buildStarMapHref={(item) =>
           buildSelectUrl({
             constellation: item.id,
             window: params.window,
           })
         }
+        buttonLabel="See constellation"
       />
-      <Section
-        title="Insights"
+      <ExpandableList
+        title="Mindset shifts"
         items={insights}
         recencyColor="#A78BFA"
         idPrefix="ms"
+        buildStarMapHref={(item) =>
+          buildSelectUrl({
+            shift: item.id,
+            window: params.window,
+          })
+        }
+        buttonLabel="See on star map"
       />
     </PageShell>
   );
@@ -293,32 +363,45 @@ export default async function ProgressPage({
 function buildSelectUrl(params: {
   demo?: string;
   constellation?: string;
+  shift?: string;
+  goal?: string;
   window?: string;
 }): string {
   const sp = new URLSearchParams();
   if (params.demo) sp.set("demo", params.demo);
   if (params.constellation) sp.set("constellation", params.constellation);
+  if (params.shift) sp.set("shift", params.shift);
+  if (params.goal) sp.set("goal", params.goal);
   if (params.window) sp.set("window", params.window);
   const qs = sp.toString();
   return qs ? `/progress?${qs}#constellation-map` : `/progress#constellation-map`;
 }
 
-function Section({
+// Expandable list — caps to ~5 items visible; older content scrolls.
+// Each card uses native <details>/<summary> so expand/collapse is
+// per-card and free of client state. The expanded body shows
+// contextual info + a "See on star map" button that anchors back to
+// the constellation panel.
+function ExpandableList({
   title,
+  emoji,
   items,
   recencyColor,
   idPrefix,
-  selectableConstellationFor,
+  buildStarMapHref,
+  expandedDetailFor,
+  buttonLabel,
 }: {
   title: string;
+  emoji?: string;
   items: TextRow[];
   recencyColor: string;
   idPrefix: string;
-  // Optional: when provided, each card becomes a Link that selects
-  // that item's constellation on the star map (and anchor-scrolls
-  // back up). Used for the Breakthroughs section.
-  selectableConstellationFor?: (item: TextRow) => string;
+  buildStarMapHref?: (item: TextRow) => string;
+  expandedDetailFor?: (item: TextRow) => string | null;
+  buttonLabel?: string;
 }) {
+  const visibleHeightPx = 420; // ≈ 5 collapsed cards
   return (
     <section className="mt-6 rounded-xl border border-white/10 bg-white/[0.02] p-5">
       <h2 className="text-base font-semibold text-white">{title}</h2>
@@ -328,49 +411,87 @@ function Section({
           coaching sessions.
         </p>
       ) : (
-        <ul className="mt-3 flex flex-col gap-3">
-          {items.map((item) => {
-            const cardClass =
-              "scroll-mt-20 block rounded-lg border border-white/10 bg-white/[0.02] px-4 py-3 transition target:border-brand-primary target:bg-brand-primary/10 target:shadow-[0_0_18px_rgba(89,164,192,0.35)]";
-            const inner = (
-              <>
-                <p className="text-sm text-neutral-200">{item.content}</p>
-                <p className="mt-1 text-[11px] text-neutral-500">
-                  {formatDateCompact(item.created_at)}
-                </p>
-                <RecencyBar
-                  lastEngagedAt={item.created_at}
-                  color={recencyColor}
-                />
-              </>
-            );
-            const href = selectableConstellationFor?.(item);
-            // The `id` must live on the same element the target:
-            // classes are applied to — CSS :target only matches the
-            // element whose id is the URL fragment. Putting id on the
-            // wrapper <li> with target: styles on the inner card was
-            // the bug that hid the highlight.
-            const targetId = `${idPrefix}-${item.id}`;
-            return (
-              <li key={item.id}>
-                {href ? (
-                  <Link
+        <div
+          className="mt-3 overflow-y-auto pr-1"
+          style={{ maxHeight: `${visibleHeightPx}px` }}
+        >
+          <ul className="flex flex-col gap-3">
+            {items.map((item) => {
+              const targetId = `${idPrefix}-${item.id}`;
+              const detail = expandedDetailFor?.(item) ?? null;
+              const starMapHref = buildStarMapHref?.(item) ?? null;
+              return (
+                <li key={item.id}>
+                  <details
                     id={targetId}
-                    href={href}
-                    className={cardClass + " hover:border-brand-primary/40"}
-                    title="View this constellation on the star map"
+                    className="group scroll-mt-20 rounded-lg border border-white/10 bg-white/[0.02] px-4 py-3 transition target:border-brand-primary target:bg-brand-primary/10 target:shadow-[0_0_18px_rgba(89,164,192,0.35)]"
                   >
-                    {inner}
-                  </Link>
-                ) : (
-                  <div id={targetId} className={cardClass}>
-                    {inner}
-                  </div>
-                )}
-              </li>
-            );
-          })}
-        </ul>
+                    <summary className="flex cursor-pointer list-none items-start justify-between gap-3 [&::-webkit-details-marker]:hidden">
+                      <div className="flex-1">
+                        <p className="text-sm text-neutral-200">
+                          {emoji ? <span className="mr-1.5">{emoji}</span> : null}
+                          {item.content}
+                        </p>
+                        <p className="mt-1 text-[11px] text-neutral-500">
+                          {formatDateCompact(item.created_at)}
+                        </p>
+                        <RecencyBar
+                          lastEngagedAt={item.created_at}
+                          color={recencyColor}
+                        />
+                      </div>
+                      <span
+                        className="mt-0.5 inline-block shrink-0 text-neutral-500 transition group-open:rotate-180"
+                        aria-hidden
+                      >
+                        <svg
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth={1.8}
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          className="h-4 w-4"
+                        >
+                          <path d="m6 9 6 6 6-6" />
+                        </svg>
+                      </span>
+                    </summary>
+                    <div className="mt-3 border-t border-white/5 pt-3">
+                      {detail ? (
+                        <p className="text-xs leading-relaxed text-neutral-400">
+                          {detail}
+                        </p>
+                      ) : null}
+                      {starMapHref ? (
+                        <Link
+                          href={starMapHref}
+                          className="mt-3 inline-flex items-center gap-1.5 rounded-md border border-brand-primary/40 bg-brand-primary/10 px-3 py-1.5 text-[11px] font-medium text-brand-primary transition hover:bg-brand-primary/20"
+                        >
+                          <svg
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth={1.8}
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            className="h-3 w-3"
+                            aria-hidden
+                          >
+                            <circle cx="12" cy="12" r="9" />
+                            <circle cx="12" cy="12" r="5.25" />
+                            <circle cx="12" cy="12" r="1.5" />
+                          </svg>
+                          {buttonLabel ?? "See on star map"}
+                        </Link>
+                      ) : null}
+                    </div>
+                  </details>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
       )}
     </section>
   );

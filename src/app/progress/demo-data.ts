@@ -40,6 +40,21 @@ export type ConstellationLinks = {
   goalIds: string[];
 };
 
+// A mindset shift's contributors — only sessions that built up to
+// the shift. Shifts don't get a separate "name" (only breakthroughs
+// get named constellations).
+export type MindsetShiftLinks = {
+  sessionIds: string[];
+};
+
+// A goal's contributors — sessions worked, mindset shifts that
+// progressed it, and breakthroughs that landed in its theme.
+export type GoalLinks = {
+  sessionIds: string[];
+  shiftIds: string[];
+  breakthroughIds: string[];
+};
+
 const TOTAL_DAYS = 500;
 const N_SESSIONS = 100;
 const N_BREAKTHROUGHS = 25;
@@ -211,6 +226,8 @@ export function buildDemoData(): {
   mindsetShifts: MindsetShiftDot[];
   goals: GoalDot[];
   constellationLinks: Map<string, ConstellationLinks>;
+  mindsetShiftLinks: Map<string, MindsetShiftLinks>;
+  goalLinks: Map<string, GoalLinks>;
   legacySections: {
     breakthroughs: LegacyTextRow[];
     insights: LegacyTextRow[];
@@ -301,6 +318,61 @@ export function buildDemoData(): {
     });
   }
 
+  // Per-shift contributors: 1-3 prior sessions that led to the shift.
+  const mindsetShiftLinks = new Map<string, MindsetShiftLinks>();
+  for (const m of mindsetShifts) {
+    const mTime = Date.parse(m.createdAt);
+    const eligibleSessions = sessions.filter(
+      (s) => Date.parse(s.endedAt) <= mTime && s.id !== m.sessionId,
+    );
+    const numSessions = 1 + Math.floor(hashFloat(`mls${m.id}`) * 3);
+    mindsetShiftLinks.set(m.id, {
+      sessionIds: pickN(eligibleSessions, numSessions, m.id + "_s").map(
+        (s) => s.id,
+      ),
+    });
+  }
+
+  // Per-goal contributors: sessions worked, shifts that progressed
+  // it, and breakthroughs that landed in its theme. Pulls from items
+  // pre-dating the goal's lastEngagedAt — so a goal with no
+  // engagement gets no contributors (lines aren't drawable anyway).
+  const goalLinks = new Map<string, GoalLinks>();
+  for (const g of goals) {
+    if (!g.lastEngagedAt) {
+      goalLinks.set(g.id, {
+        sessionIds: [],
+        shiftIds: [],
+        breakthroughIds: [],
+      });
+      continue;
+    }
+    const gTime = Date.parse(g.lastEngagedAt);
+    const eligibleSessions = sessions.filter(
+      (s) => Date.parse(s.endedAt) <= gTime,
+    );
+    const eligibleShifts = mindsetShifts.filter(
+      (m) => Date.parse(m.createdAt) <= gTime,
+    );
+    const eligibleBreakthroughs = breakthroughs.filter(
+      (b) => Date.parse(b.createdAt) <= gTime,
+    );
+    const numSessions = 2 + Math.floor(hashFloat(`gls${g.id}`) * 4);
+    const numShifts = 1 + Math.floor(hashFloat(`glm${g.id}`) * 3);
+    const numBreakthroughs = Math.floor(hashFloat(`glb${g.id}`) * 2);
+    goalLinks.set(g.id, {
+      sessionIds: pickN(eligibleSessions, numSessions, g.id + "_s").map(
+        (s) => s.id,
+      ),
+      shiftIds: pickN(eligibleShifts, numShifts, g.id + "_m").map((m) => m.id),
+      breakthroughIds: pickN(
+        eligibleBreakthroughs,
+        numBreakthroughs,
+        g.id + "_b",
+      ).map((b) => b.id),
+    });
+  }
+
   // Legacy sections — most-recent 50 of each, sorted newest first.
   const legacyBreakthroughs: LegacyTextRow[] = [...breakthroughs]
     .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))
@@ -325,6 +397,8 @@ export function buildDemoData(): {
     mindsetShifts,
     goals,
     constellationLinks,
+    mindsetShiftLinks,
+    goalLinks,
     legacySections: {
       breakthroughs: legacyBreakthroughs,
       insights: legacyInsights,

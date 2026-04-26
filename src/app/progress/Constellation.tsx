@@ -22,9 +22,26 @@ type ConstellationLinkRow = {
   goalIds: string[];
 };
 
+type ShiftLinkRow = {
+  sessionIds: string[];
+};
+
+type GoalLinkRow = {
+  sessionIds: string[];
+  shiftIds: string[];
+  breakthroughIds: string[];
+};
+
+type SelectedAnchor =
+  | { type: "breakthrough"; id: string }
+  | { type: "shift"; id: string }
+  | { type: "goal"; id: string };
+
 type CurrentParams = {
   demo?: string;
   constellation?: string;
+  shift?: string;
+  goal?: string;
   window?: string;
 };
 
@@ -37,8 +54,13 @@ type Props = {
   // ids. When a breakthrough is selected, lines are drawn from it to
   // those stars.
   constellationLinks?: Map<string, ConstellationLinkRow>;
-  // The currently-selected breakthrough id (URL query param).
-  selectedBreakthroughId?: string | null;
+  // Map of shift_id → contributing session ids.
+  mindsetShiftLinks?: Map<string, ShiftLinkRow>;
+  // Map of goal_id → contributing session/shift/breakthrough ids.
+  goalLinks?: Map<string, GoalLinkRow>;
+  // The currently-selected anchor (any of the three types). Drives
+  // the line layer on the constellation panel.
+  selectedAnchor?: SelectedAnchor | null;
   // URL helper inputs — current page params + base path. Constellation
   // builds its own toggle URLs from these so all params are preserved.
   basePath?: string;
@@ -92,68 +114,129 @@ export function Constellation({
   hasGoals,
   goalsHref = "/goals",
   constellationLinks,
-  selectedBreakthroughId = null,
+  mindsetShiftLinks,
+  goalLinks,
+  selectedAnchor = null,
   basePath = "/progress",
   currentParams = {},
 }: Props) {
+  const selectedBreakthroughId =
+    selectedAnchor?.type === "breakthrough" ? selectedAnchor.id : null;
   const isEmpty =
     layout.sessions.length === 0 &&
     layout.breakthroughs.length === 0 &&
     layout.mindsetShifts.length === 0 &&
     layout.goals.length === 0;
 
-  // Build a chronological "path of progression" through the
-  // constellation — each contributing star ordered by when it
-  // happened, with the breakthrough as the final point.
-  const selectedLinks =
-    selectedBreakthroughId && constellationLinks
-      ? constellationLinks.get(selectedBreakthroughId)
+  // Build a chronological "path of progression" through whichever
+  // anchor is selected (breakthrough / mindset shift / goal). Each
+  // contributing star ordered by when it happened, with the anchor
+  // itself as the final point.
+  const selectedConstellationLinks =
+    selectedAnchor?.type === "breakthrough" && constellationLinks
+      ? constellationLinks.get(selectedAnchor.id) ?? null
       : null;
-  const selectedBreakthrough = selectedBreakthroughId
-    ? layout.breakthroughs.find((b) => b.id === selectedBreakthroughId)
-    : null;
   const chainPoints: Array<{ x: number; y: number; t: number }> = [];
-  if (selectedBreakthrough && selectedLinks) {
+  if (selectedAnchor) {
     const sessionById = new Map(layout.sessions.map((s) => [s.id, s]));
     const shiftById = new Map(layout.mindsetShifts.map((m) => [m.id, m]));
     const goalById = new Map(layout.goals.map((g) => [g.id, g]));
-    for (const id of selectedLinks.sessionIds) {
-      const s = sessionById.get(id);
-      if (s) {
-        chainPoints.push({
-          x: s.x * 100,
-          y: s.y * 100,
-          t: Date.parse(s.endedAt),
-        });
+    const breakthroughById = new Map(
+      layout.breakthroughs.map((b) => [b.id, b]),
+    );
+
+    let anchorPoint: { x: number; y: number; t: number } | null = null;
+    let contributingSessionIds: string[] = [];
+    let contributingShiftIds: string[] = [];
+    let contributingGoalIds: string[] = [];
+    let contributingBreakthroughIds: string[] = [];
+
+    if (selectedAnchor.type === "breakthrough") {
+      const b = breakthroughById.get(selectedAnchor.id);
+      const links = constellationLinks?.get(selectedAnchor.id);
+      if (b && links) {
+        anchorPoint = {
+          x: b.x * 100,
+          y: b.y * 100,
+          t: Date.parse(b.createdAt),
+        };
+        contributingSessionIds = links.sessionIds;
+        contributingShiftIds = links.shiftIds;
+        contributingGoalIds = links.goalIds;
       }
-    }
-    for (const id of selectedLinks.shiftIds) {
-      const m = shiftById.get(id);
-      if (m) {
-        chainPoints.push({
+    } else if (selectedAnchor.type === "shift") {
+      const m = shiftById.get(selectedAnchor.id);
+      const links = mindsetShiftLinks?.get(selectedAnchor.id);
+      if (m && links) {
+        anchorPoint = {
           x: m.x * 100,
           y: m.y * 100,
           t: Date.parse(m.createdAt),
-        });
+        };
+        contributingSessionIds = links.sessionIds;
       }
-    }
-    for (const id of selectedLinks.goalIds) {
-      const g = goalById.get(id);
-      if (g && g.lastEngagedAt) {
-        chainPoints.push({
+    } else if (selectedAnchor.type === "goal") {
+      const g = goalById.get(selectedAnchor.id);
+      const links = goalLinks?.get(selectedAnchor.id);
+      if (g && g.lastEngagedAt && links) {
+        anchorPoint = {
           x: g.x * 100,
           y: g.y * 100,
           t: Date.parse(g.lastEngagedAt),
-        });
+        };
+        contributingSessionIds = links.sessionIds;
+        contributingShiftIds = links.shiftIds;
+        contributingBreakthroughIds = links.breakthroughIds;
       }
     }
-    chainPoints.sort((a, b) => a.t - b.t);
-    chainPoints.push({
-      x: selectedBreakthrough.x * 100,
-      y: selectedBreakthrough.y * 100,
-      t: Date.parse(selectedBreakthrough.createdAt),
-    });
+
+    if (anchorPoint) {
+      for (const id of contributingSessionIds) {
+        const s = sessionById.get(id);
+        if (s) {
+          chainPoints.push({
+            x: s.x * 100,
+            y: s.y * 100,
+            t: Date.parse(s.endedAt),
+          });
+        }
+      }
+      for (const id of contributingShiftIds) {
+        const m = shiftById.get(id);
+        if (m) {
+          chainPoints.push({
+            x: m.x * 100,
+            y: m.y * 100,
+            t: Date.parse(m.createdAt),
+          });
+        }
+      }
+      for (const id of contributingGoalIds) {
+        const g = goalById.get(id);
+        if (g && g.lastEngagedAt) {
+          chainPoints.push({
+            x: g.x * 100,
+            y: g.y * 100,
+            t: Date.parse(g.lastEngagedAt),
+          });
+        }
+      }
+      for (const id of contributingBreakthroughIds) {
+        const b = breakthroughById.get(id);
+        if (b) {
+          chainPoints.push({
+            x: b.x * 100,
+            y: b.y * 100,
+            t: Date.parse(b.createdAt),
+          });
+        }
+      }
+      chainPoints.sort((a, b) => a.t - b.t);
+      chainPoints.push(anchorPoint);
+    }
   }
+  // Keep the old name for the rename-component reference below.
+  const selectedLinks = selectedConstellationLinks;
 
   // URL helper — merge overrides into currentParams, then back into a
   // query string. Pass null to clear a param. Used by every toggle
