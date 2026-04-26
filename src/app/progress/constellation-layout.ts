@@ -126,6 +126,54 @@ function jitter(id: string, seed: number, scale: number): number {
   return (hashFloat(id, seed) - 0.5) * scale * 2;
 }
 
+// Per-constellation contributor wedge size (radians). When a session
+// or mindset shift is a contributor to a breakthrough's constellation,
+// its angle is clustered within ±half this width around the
+// breakthrough's angle — so each constellation occupies a wedge of
+// the sky instead of having its lines crisscross the diameter.
+const CONSTELLATION_WEDGE_RAD = Math.PI / 9; // ≈ 20°
+
+// Narrow shape of constellation links that the layout function
+// cares about — just the contributor lists. Demo data and (V.5a)
+// real data can both satisfy this.
+type ConstellationContributorIds = {
+  sessionIds: string[];
+  shiftIds: string[];
+};
+
+// Hash-based stable angle for a breakthrough. Exposed so demo /
+// callers can compute identical angles outside the layout if they
+// need to pre-compute anchor maps.
+export function angleForBreakthrough(id: string): number {
+  return hashFloat(id, 7) * Math.PI * 2;
+}
+
+// Build a map of contributor_id → anchor angle, using the most-
+// recent breakthrough an item contributes to as its anchor (newest-
+// wins). Items not in any breakthrough's constellation get no anchor
+// and fall back to hash-random angles.
+function buildContributorAnchorMap(
+  breakthroughs: BreakthroughDot[],
+  links: Map<string, ConstellationContributorIds>,
+): Map<string, number> {
+  const sortedNewestFirst = [...breakthroughs].sort(
+    (a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt),
+  );
+  const anchors = new Map<string, number>();
+  for (const b of sortedNewestFirst) {
+    const cl = links.get(b.id);
+    if (!cl) continue;
+    const angle = angleForBreakthrough(b.id);
+    for (const sid of cl.sessionIds) {
+      if (!anchors.has(sid)) anchors.set(sid, angle);
+    }
+    for (const mid of cl.shiftIds) {
+      if (!anchors.has(mid)) anchors.set(mid, angle);
+    }
+  }
+  return anchors;
+}
+
 export function computeLayout(input: {
   sessions: SessionDot[];
   breakthroughs: BreakthroughDot[];
@@ -136,9 +184,19 @@ export function computeLayout(input: {
   // brightest. ageWindowDays old → outer ring + floor opacity.
   // User-toggleable via the constellation panel's window pills.
   ageWindowDays?: number;
+  // When provided, sessions and shifts that are contributors to a
+  // breakthrough's constellation cluster their angle around that
+  // breakthrough's angle (within a small jitter wedge). Otherwise
+  // they use hash-random angles like other freelancers. This makes
+  // each constellation occupy a wedge of the sky, so its lines stay
+  // localized rather than crisscrossing the diameter.
+  constellationLinks?: Map<string, ConstellationContributorIds>;
 }): ConstellationLayout {
   const nowMs = input.nowMs ?? Date.now();
   const ageWindowDays = input.ageWindowDays ?? DEFAULT_AGE_WINDOW_DAYS;
+  const contributorAnchors = input.constellationLinks
+    ? buildContributorAnchorMap(input.breakthroughs, input.constellationLinks)
+    : new Map<string, number>();
 
   // Goals: angle = hash by goal id (each goal is a stable direction).
   const positionedGoals: Positioned<GoalDot>[] = input.goals.map((g) => {
@@ -155,10 +213,15 @@ export function computeLayout(input: {
     };
   });
 
-  // Sessions: angle = hash by session id (freelancer scatter).
+  // Sessions: angle anchored to primary breakthrough wedge if the
+  // session is a contributor; hash-random freelancer otherwise.
   const positionedSessions: Positioned<SessionDot>[] = input.sessions.map(
     (s) => {
-      const angle = hashFloat(s.id, 11) * Math.PI * 2;
+      const anchor = contributorAnchors.get(s.id);
+      const angle =
+        anchor !== undefined
+          ? anchor + (hashFloat(s.id, 11) - 0.5) * CONSTELLATION_WEDGE_RAD
+          : hashFloat(s.id, 11) * Math.PI * 2;
       const distance =
         distanceFromCenter(s.endedAt, nowMs, ageWindowDays) +
         jitter(s.id, 19, 0.015);
@@ -172,12 +235,11 @@ export function computeLayout(input: {
     },
   );
 
-  // Breakthroughs: angle = hash by breakthrough id (freelancer
-  // scatter — explicitly NOT inheriting from any goal). Distance =
-  // age. A breakthrough stands as its own moment.
+  // Breakthroughs: angle = hash by breakthrough id (the constellation
+  // anchors). Distance = age. A breakthrough stands as its own moment.
   const positionedBreakthroughs: Positioned<BreakthroughDot>[] =
     input.breakthroughs.map((b) => {
-      const angle = hashFloat(b.id, 7) * Math.PI * 2;
+      const angle = angleForBreakthrough(b.id);
       const distance =
         distanceFromCenter(b.createdAt, nowMs, ageWindowDays) +
         jitter(b.id, 23, 0.02);
@@ -190,12 +252,16 @@ export function computeLayout(input: {
       };
     });
 
-  // Mindset shifts: same model as breakthroughs (freelancer angle,
-  // age-based distance). Different hash salt so they don't always
-  // co-locate with their session's breakthroughs.
+  // Mindset shifts: same anchor-vs-freelancer behavior as sessions.
+  // When a shift contributes to a breakthrough, its angle clusters
+  // in that breakthrough's wedge.
   const positionedShifts: Positioned<MindsetShiftDot>[] =
     input.mindsetShifts.map((m) => {
-      const angle = hashFloat(m.id, 13) * Math.PI * 2;
+      const anchor = contributorAnchors.get(m.id);
+      const angle =
+        anchor !== undefined
+          ? anchor + (hashFloat(m.id, 13) - 0.5) * CONSTELLATION_WEDGE_RAD
+          : hashFloat(m.id, 13) * Math.PI * 2;
       const distance =
         distanceFromCenter(m.createdAt, nowMs, ageWindowDays) +
         jitter(m.id, 29, 0.02);

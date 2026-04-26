@@ -211,7 +211,11 @@ export default async function ProgressPage({
 
   if (params.demo === "1") {
     const demo = buildDemoData();
-    const layout = computeLayout({ ...demo, ageWindowDays });
+    const layout = computeLayout({
+      ...demo,
+      ageWindowDays,
+      constellationLinks: demo.constellationLinks,
+    });
 
     // Demo lookup maps so we can resolve link ids → display data.
     const sessionById = new Map(
