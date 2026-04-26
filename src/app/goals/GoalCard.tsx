@@ -82,15 +82,13 @@ export function GoalCard({ goal }: Props) {
         </div>
       </div>
 
-      {goal.progress_percent !== null ? (
-        <div className="mt-4">
-          <div className="flex items-center justify-between text-sm">
-            <span className="text-neutral-400">Progress</span>
-            <span className="text-neutral-300">{goal.progress_percent}%</span>
-          </div>
-          <ProgressBar percent={goal.progress_percent} />
+      <div className="mt-4">
+        <div className="flex items-center justify-between text-sm">
+          <span className="text-neutral-400">Progress</span>
+          <span className="text-neutral-300">{goal.progress_percent ?? 0}%</span>
         </div>
-      ) : null}
+        <ProgressBar percent={goal.progress_percent ?? 0} />
+      </div>
 
       {goal.progress_rationale ? (
         <p className="mt-3 text-sm text-neutral-300">{goal.progress_rationale}</p>
