@@ -319,6 +319,11 @@ export default async function ProgressPage({
             })
           }
           buttonLabel="See constellation"
+          highlightedItemId={
+            selectedAnchor?.type === "breakthrough"
+              ? selectedAnchor.id
+              : null
+          }
         />
         <ExpandableList
           title="Mindset shifts"
@@ -334,6 +339,9 @@ export default async function ProgressPage({
             })
           }
           buttonLabel="See on star map"
+          highlightedItemId={
+            selectedAnchor?.type === "shift" ? selectedAnchor.id : null
+          }
         />
       </PageShell>
     );
@@ -393,6 +401,11 @@ export default async function ProgressPage({
           })
         }
         buttonLabel="See constellation"
+        highlightedItemId={
+          selectedAnchor?.type === "breakthrough"
+            ? selectedAnchor.id
+            : null
+        }
       />
       <ExpandableList
         title="Mindset shifts"
@@ -406,6 +419,9 @@ export default async function ProgressPage({
           })
         }
         buttonLabel="See on star map"
+        highlightedItemId={
+          selectedAnchor?.type === "shift" ? selectedAnchor.id : null
+        }
       />
     </PageShell>
   );
@@ -445,6 +461,7 @@ function ExpandableList({
   buildStarMapHref,
   expandedDetailFor,
   buttonLabel,
+  highlightedItemId,
 }: {
   title: string;
   emoji?: string;
@@ -454,6 +471,11 @@ function ExpandableList({
   buildStarMapHref?: (item: TextRow) => string;
   expandedDetailFor?: (item: TextRow) => ExpandedDetail | null;
   buttonLabel?: string;
+  // When set, the matching item gets the same visual highlight that
+  // :target normally applies — used when arriving from home with a
+  // ?constellation=<id> param so the card lights up even though the
+  // URL fragment is #constellation-map (not #bt-<id>).
+  highlightedItemId?: string | null;
 }) {
   const visibleHeightPx = 420; // ≈ 5 collapsed cards
   return (
@@ -478,11 +500,18 @@ function ExpandableList({
               const targetId = `${idPrefix}-${item.id}`;
               const detail = expandedDetailFor?.(item) ?? null;
               const starMapHref = buildStarMapHref?.(item) ?? null;
+              const isHighlighted = highlightedItemId === item.id;
               return (
                 <li key={item.id}>
                   <details
                     id={targetId}
-                    className="group scroll-mt-20 rounded-lg border border-white/10 bg-white/[0.02] px-4 py-3 transition target:border-brand-primary target:bg-brand-primary/10 target:shadow-[0_0_18px_rgba(89,164,192,0.35)]"
+                    open={isHighlighted || undefined}
+                    className={
+                      "group scroll-mt-20 rounded-lg border bg-white/[0.02] px-4 py-3 transition target:border-brand-primary target:bg-brand-primary/10 target:shadow-[0_0_18px_rgba(89,164,192,0.35)] " +
+                      (isHighlighted
+                        ? "border-brand-primary bg-brand-primary/10 shadow-[0_0_18px_rgba(89,164,192,0.35)]"
+                        : "border-white/10")
+                    }
                   >
                     <summary className="flex cursor-pointer list-none items-start justify-between gap-3 [&::-webkit-details-marker]:hidden">
                       <div className="flex-1">

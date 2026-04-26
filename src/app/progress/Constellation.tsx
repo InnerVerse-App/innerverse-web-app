@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useRef } from "react";
 import { TransformComponent, TransformWrapper } from "react-zoom-pan-pinch";
 
 import { formatDateCompact } from "@/lib/format";
@@ -121,6 +122,19 @@ export function Constellation({
 }: Props) {
   const selectedBreakthroughId =
     selectedAnchor?.type === "breakthrough" ? selectedAnchor.id : null;
+
+  // Center the active constellation pill in its scroll container so
+  // selecting from the home tab (or any constellation off-screen)
+  // lands the pill in view automatically.
+  const activePillRef = useRef<HTMLAnchorElement | null>(null);
+  useEffect(() => {
+    if (!selectedBreakthroughId) return;
+    activePillRef.current?.scrollIntoView({
+      behavior: "smooth",
+      block: "nearest",
+      inline: "center",
+    });
+  }, [selectedBreakthroughId]);
   const isEmpty =
     layout.sessions.length === 0 &&
     layout.breakthroughs.length === 0 &&
@@ -315,6 +329,7 @@ export function Constellation({
                 return (
                   <Link
                     key={b.id}
+                    ref={isActive ? activePillRef : undefined}
                     href={buildUrl({ constellation: b.id })}
                     title={`${pillLabel} — ${b.content}`}
                     className={
