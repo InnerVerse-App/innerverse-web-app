@@ -389,8 +389,8 @@ export function Constellation({
 
       <div className="mt-3 flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-[11px] text-neutral-500">
         <Legend color={SESSION_COLOR} label="Session" shape="dot" size={6} />
-        <Legend color={GOAL_COLOR} label="Goal" shape="ring" size={10} />
-        <Legend color={MINDSET_COLOR} label="Mindset shift" shape="dot" size={14} />
+        <Legend color={GOAL_COLOR} label="Goal" shape="ring" size={8} />
+        <Legend color={MINDSET_COLOR} label="Mindset shift" shape="dot" size={10} />
         <Legend color={BREAKTHROUGH_COLOR} label="Breakthrough" shape="star" size={16} />
       </div>
     </section>
@@ -485,10 +485,10 @@ function MindsetShiftStar({ dot }: { dot: Positioned<MindsetShiftDot> }) {
       }}
     >
       <span
-        className="block h-3.5 w-3.5 rounded-full transition hover:scale-125"
+        className="block h-2.5 w-2.5 rounded-full transition hover:scale-125"
         style={{
           background: MINDSET_COLOR,
-          boxShadow: `0 0 6px ${MINDSET_COLOR}, 0 0 14px ${MINDSET_COLOR}80, inset 0 0 0 0.5px rgba(0,5,10,0.6)`,
+          boxShadow: `0 0 5px ${MINDSET_COLOR}, 0 0 11px ${MINDSET_COLOR}80, inset 0 0 0 0.5px rgba(0,5,10,0.6)`,
         }}
       />
     </a>
@@ -515,11 +515,11 @@ function GoalStar({
       }}
     >
       <span
-        className="block h-2.5 w-2.5 rounded-full transition hover:scale-125"
+        className="block h-2 w-2 rounded-full transition hover:scale-125"
         style={{
           background: `${GOAL_COLOR}26`,
           border: `1.5px solid ${GOAL_COLOR}`,
-          boxShadow: `0 0 4px ${GOAL_COLOR}80, 0 0 10px ${GOAL_COLOR}40`,
+          boxShadow: `0 0 3px ${GOAL_COLOR}80, 0 0 8px ${GOAL_COLOR}40`,
         }}
       />
     </Link>
