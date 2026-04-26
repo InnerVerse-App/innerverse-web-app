@@ -460,7 +460,7 @@ export function buildDemoData(): {
   // Legacy sections — most-recent 50 of each, sorted newest first.
   const legacyBreakthroughs: LegacyTextRow[] = [...breakthroughs]
     .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))
-    .slice(0, 50)
+    .slice(0, 100)
     .map((b) => ({
       id: b.id,
       content: b.content,
@@ -468,7 +468,7 @@ export function buildDemoData(): {
     }));
   const legacyInsights: LegacyTextRow[] = [...mindsetShifts]
     .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))
-    .slice(0, 50)
+    .slice(0, 100)
     .map((m) => ({
       id: m.id,
       content: m.content,
@@ -536,7 +536,7 @@ function startedAtFor(id: string, endedAtIso: string): string {
 
 export const DEMO_SESSIONS_LIST = [..._DEMO.sessions]
   .sort((a, b) => Date.parse(b.endedAt) - Date.parse(a.endedAt))
-  .slice(0, 50)
+  .slice(0, 100)
   .map((s) => ({
     id: s.id,
     started_at: startedAtFor(s.id, s.endedAt),
