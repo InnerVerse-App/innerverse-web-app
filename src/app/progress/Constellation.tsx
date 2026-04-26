@@ -328,11 +328,12 @@ function SessionStar({ dot }: { dot: Positioned<SessionDot> }) {
   );
 }
 
-// 5-pointed star polygon centered in viewBox 0..24. Outer radius 10,
-// inner radius 4. Distinct shape from circles so breakthroughs read
-// as the rare, hard-won moments.
+// 8-pointed compass-rose star polygon centered in viewBox 0..24.
+// Outer radius 10, inner radius 4. Long cardinal + diagonal rays.
+// Distinct shape from circles so breakthroughs read as the rare,
+// hard-won, "shining" moments.
 const STAR_POINTS =
-  "12,2 14.35,8.76 21.51,8.91 15.80,13.24 17.88,20.09 12,16 6.12,20.09 8.20,13.24 2.49,8.91 9.65,8.76";
+  "12,2 13.53,8.30 19.07,4.93 15.70,10.47 22,12 15.70,13.53 19.07,19.07 13.53,15.70 12,22 10.47,15.70 4.93,19.07 8.30,13.53 2,12 8.30,10.47 4.93,4.93 10.47,8.30";
 
 function BreakthroughStar({ dot }: { dot: Positioned<BreakthroughDot> }) {
   return (
