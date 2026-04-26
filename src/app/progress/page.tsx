@@ -15,6 +15,7 @@ import {
   type ConstellationLayout,
   computeLayout,
 } from "./constellation-layout";
+import { buildDemoData, DEMO_LEGACY_SECTIONS } from "./demo-data";
 
 export const dynamic = "force-dynamic";
 
@@ -157,12 +158,36 @@ async function loadConstellation(ctx: UserSupabase): Promise<{
   return { layout, hasGoals: activeGoals.length > 0 };
 }
 
-export default async function ProgressPage() {
+export default async function ProgressPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ demo?: string }>;
+}) {
   const session = await auth();
   if (!session?.userId) redirect("/sign-in");
 
   const onboarding = await getOnboardingState();
   if (!isOnboardingComplete(onboarding)) redirect("/onboarding");
+
+  // Demo escape hatch — `?demo=1` swaps the DB read for a hardcoded
+  // realistic dataset so the operator can preview the constellation
+  // visually without seeding rows. Auth still required.
+  const params = await searchParams;
+  if (params.demo === "1") {
+    const layout = computeLayout(buildDemoData());
+    return (
+      <PageShell active="progress">
+        <h1 className="text-3xl font-bold text-white">Your Progress</h1>
+        <p className="mt-1 text-sm text-neutral-400">
+          Track your personal growth development.{" "}
+          <span className="text-amber-400">(demo mode)</span>
+        </p>
+        <Constellation layout={layout} hasGoals={true} />
+        <Section title="Breakthroughs" items={DEMO_LEGACY_SECTIONS.breakthroughs} />
+        <Section title="Insights" items={DEMO_LEGACY_SECTIONS.insights} />
+      </PageShell>
+    );
+  }
 
   const ctx = await supabaseForUser();
   if (!ctx) redirect("/sign-in");
