@@ -1227,3 +1227,24 @@ Severity: LOW
 Lens: misc — multiple smaller items not worth individual entries
 Root cause: Various code-style / observability suggestions across all four lenses — auth-check duplication between page.tsx and actions.ts (defense-in-depth, intentional), CreateGoalState return type unreachable on happy path (redirect throws), Clerk null-result tagging gap (Sentry-deferred), client-side maxLength matches but no client-side error message on overflow, etc. None blocking.
 Status: OPEN (acknowledged; case-by-case if any becomes a real issue).
+
+## 2026-04-26 — /simplify review of PR #78 (G.6a archive flow)
+
+Three parallel agents (reuse, quality, efficiency). **Clean — no code changes.** The action file (`src/app/goals/actions.ts`) and the post-#79 client wrapper (`src/app/goals/ArchiveButton.tsx`) follow the established sibling-action pattern, contain no audit/PR comment refs, and have no extractions worth making at current scale.
+
+Reuse: the auth/onboarding/ctx prelude appears in 4 server actions (archiveGoal, createGoal, addPredefinedGoal, updateGoal) but per CLAUDE.md "three similar lines beats premature abstraction" the inline form is more eyeball-reviewable than a `requireGoalsContext()` helper. The `revalidatePath` trio appears in 2 actions only — under threshold.
+
+Quality: zero comments in either file; no stringly-typed status; CSRF mitigated by Next.js 15 server-action same-origin enforcement; `.is("archived_at", null)` filter makes the UPDATE idempotent across concurrent submits; native `confirm()` is the boring/standard fallback (no Modal/Dialog component exists in the repo).
+
+Efficiency: one cross-cutting finding logged below as a deferred follow-up.
+
+### Deferred (cross-cutting, not specific to #78)
+
+FINDING 1
+Severity: LOW
+Lens: efficiency
+Location: src/app/goals/actions.ts (archiveGoal), src/app/goals/new/actions.ts (createGoal, addPredefinedGoal), src/app/goals/[id]/edit/actions.ts (updateGoal)
+Root cause: The standard goals-action prelude — `auth()` → `getOnboardingState()` → `supabaseForUser()` — does **3 separate `auth()` calls per click**. `getOnboardingState()` and `supabaseForUser()` each call `auth()` internally on top of the explicit top-level `auth()` redirect-gate. Two of the three are redundant (the latter two each re-derive userId from the same Clerk JWT).
+Blast radius: One extra Clerk call per server action invocation. Negligible at 1 user / ≤10 testers; would be material at scale.
+Suggested fix: Wrap `auth()` once at the lib layer with React's `cache()` (request-scoped memoization). Single edit to either `src/lib/onboarding.ts` or `src/lib/supabase.ts`; no action-file changes.
+Status: OPEN (deferred; revisit before Phase 10 pre-launch gate or if Clerk per-call latency becomes user-visible).
