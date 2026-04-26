@@ -54,27 +54,20 @@ export function Constellation({ layout, hasGoals, goalsHref = "/goals" }: Props)
     layout.mindsetShifts.length === 0 &&
     layout.goals.length === 0;
 
-  // Identify the most-recent session so we can label it "Today" /
-  // its date for orientation. Sessions are pre-sorted oldest→newest
-  // by computeLayout.
-  const latestSessionId =
-    layout.sessions.length > 0
-      ? layout.sessions[layout.sessions.length - 1].id
-      : null;
-
   return (
     <section className="mt-6">
       <h2 className="text-base font-semibold text-white">Your Constellation</h2>
       <p className="mt-1 text-xs text-neutral-500">
-        Each star is a moment of growth. Bright stars are recent; faded
-        stars are waiting for you to return.
+        Your growth radiating outward. The center is now; older stars
+        sit farther out. Bright stars are recent; faded stars are
+        waiting for you to return.
       </p>
 
       <div
-        className="relative mt-4 h-[360px] overflow-hidden rounded-xl border border-white/10"
+        className="relative mt-4 aspect-square w-full overflow-hidden rounded-xl border border-white/10"
         style={{
           background:
-            "radial-gradient(ellipse at 20% 30%, rgba(89,164,192,0.10) 0%, transparent 45%), radial-gradient(ellipse at 80% 60%, rgba(89,164,192,0.06) 0%, transparent 45%), linear-gradient(180deg, #02101c 0%, #00050a 100%)",
+            "radial-gradient(circle at center, rgba(89,164,192,0.12) 0%, transparent 35%), radial-gradient(ellipse at 75% 25%, rgba(89,164,192,0.06) 0%, transparent 50%), radial-gradient(ellipse at 25% 75%, rgba(89,164,192,0.05) 0%, transparent 50%), radial-gradient(circle at center, #02101c 0%, #00050a 80%)",
         }}
       >
         {FAR_STARS.map((s, i) => (
@@ -91,26 +84,17 @@ export function Constellation({ layout, hasGoals, goalsHref = "/goals" }: Props)
           />
         ))}
 
-        {layout.pathPoints.length >= 2 ? (
-          <svg
-            className="pointer-events-none absolute inset-0 h-full w-full"
-            viewBox="0 0 100 100"
-            preserveAspectRatio="none"
-            aria-hidden
-          >
-            <polyline
-              points={layout.pathPoints
-                .map((p) => `${p.x * 100},${p.y * 100}`)
-                .join(" ")}
-              fill="none"
-              stroke={SESSION_COLOR}
-              strokeWidth={0.25}
-              strokeOpacity={0.4}
-              strokeDasharray="0.8 1"
-              vectorEffect="non-scaling-stroke"
-            />
-          </svg>
-        ) : null}
+        {/* Center "now" nucleus — small bright marker showing the
+            point everything radiates from. */}
+        <span
+          className="pointer-events-none absolute left-1/2 top-1/2 h-1.5 w-1.5 -translate-x-1/2 -translate-y-1/2 rounded-full"
+          style={{
+            background: "#fff",
+            boxShadow:
+              "0 0 8px rgba(255,255,255,0.85), 0 0 18px rgba(255,255,255,0.5), 0 0 32px rgba(89,164,192,0.4)",
+          }}
+          aria-hidden
+        />
 
         {/* Render order = z-stack from bottom to top. Most-prominent
             and most-tap-likely items render last so their hit zone
@@ -123,11 +107,7 @@ export function Constellation({ layout, hasGoals, goalsHref = "/goals" }: Props)
           <GoalStar key={g.id} dot={g} goalsHref={goalsHref} />
         ))}
         {layout.sessions.map((s) => (
-          <SessionStar
-            key={s.id}
-            dot={s}
-            isLatest={s.id === latestSessionId}
-          />
+          <SessionStar key={s.id} dot={s} />
         ))}
         {layout.breakthroughs.map((b) => (
           <BreakthroughStar key={b.id} dot={b} />
@@ -154,13 +134,7 @@ export function Constellation({ layout, hasGoals, goalsHref = "/goals" }: Props)
   );
 }
 
-function SessionStar({
-  dot,
-  isLatest,
-}: {
-  dot: Positioned<SessionDot>;
-  isLatest: boolean;
-}) {
+function SessionStar({ dot }: { dot: Positioned<SessionDot> }) {
   const dateLabel = formatDateCompact(dot.endedAt);
   return (
     <Link
@@ -181,14 +155,6 @@ function SessionStar({
           boxShadow: `0 0 4px ${SESSION_COLOR}, 0 0 10px ${SESSION_COLOR}80, inset 0 0 0 0.5px rgba(0,5,10,0.6)`,
         }}
       />
-      {isLatest ? (
-        <span
-          className="pointer-events-none absolute left-1/2 top-full mt-1 -translate-x-1/2 whitespace-nowrap text-[10px] font-medium text-white/80"
-          aria-hidden
-        >
-          Today
-        </span>
-      ) : null}
     </Link>
   );
 }
