@@ -317,7 +317,10 @@ export default async function HomePage({
       </div>
 
       <PersonalGrowthProgressCard items={recentGrowth} />
-      <RecentBreakthroughsCard items={recentBreakthroughs} />
+      <RecentBreakthroughsCard
+        items={recentBreakthroughs}
+        progressBase={isDemo ? "/progress?demo=1" : "/progress"}
+      />
       {lastSession?.coach_message ? (
         <MessageFromCoachCard message={lastSession.coach_message} />
       ) : null}

@@ -39,6 +39,10 @@ export function PersonalGrowthProgressCard({ items }: Props) {
           Personal Growth Progress
         </h2>
       </div>
+      <p className="mt-1 text-xs text-neutral-500">
+        Themes from your most-analyzed sessions. Tap any to open the
+        session.
+      </p>
       {items.length === 0 ? (
         <p className="mt-3 text-sm text-neutral-500">
           Your growth progress will appear here after your first analyzed
@@ -46,14 +50,19 @@ export function PersonalGrowthProgressCard({ items }: Props) {
         </p>
       ) : (
         <>
-          <ul className="mt-4 flex flex-col gap-5">
+          <ul className="mt-4 flex flex-col gap-2">
             {items.map((item) => (
               <li key={item.sessionId}>
-                <p className="text-sm font-medium text-white">{item.title}</p>
-                <RecencyBar lastEngagedAt={item.endedAt} color="#59A4C0" />
-                {item.note ? (
-                  <p className="mt-2 text-sm text-neutral-400">{item.note}</p>
-                ) : null}
+                <Link
+                  href={`/sessions/${item.sessionId}`}
+                  className="block rounded-lg border border-transparent px-2 py-2 transition hover:border-brand-primary/30 hover:bg-white/5"
+                >
+                  <p className="text-sm font-medium text-white">{item.title}</p>
+                  <RecencyBar lastEngagedAt={item.endedAt} color="#59A4C0" />
+                  {item.note ? (
+                    <p className="mt-2 text-sm text-neutral-400">{item.note}</p>
+                  ) : null}
+                </Link>
               </li>
             ))}
           </ul>
