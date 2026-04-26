@@ -15,17 +15,17 @@ export function FeedbackForm({ sessionId }: Props) {
 
   return (
     <div className="flex min-h-[100dvh] flex-col bg-brand-dark text-neutral-200">
-      <header className="flex items-center gap-3 border-b border-white/10 px-4 py-3">
-        <Link
-          href="/home"
-          aria-label="Back"
-          className="rounded-md p-1 text-neutral-400 transition hover:bg-white/5 hover:text-white"
-        >
-          <BackArrowIcon className="h-5 w-5" />
-        </Link>
-        <div className="flex-1">
-          <h1 className="text-lg font-semibold text-white">Session Complete</h1>
-          <p className="text-xs text-neutral-400">
+      <header className="border-b border-white/10 px-4 pb-4 pt-5">
+        <h1 className="text-2xl font-bold text-white">Session Complete</h1>
+        <div className="mt-1 flex items-center gap-2">
+          <Link
+            href="/home"
+            aria-label="Back"
+            className="rounded-md p-1 text-neutral-400 transition hover:bg-white/5 hover:text-white"
+          >
+            <BackArrowIcon className="h-5 w-5" />
+          </Link>
+          <p className="text-sm text-neutral-400">
             Help us improve your coaching experience
           </p>
         </div>
@@ -50,22 +50,22 @@ export function FeedbackForm({ sessionId }: Props) {
             subtitle="Your feedback helps us improve your coaching experience"
           >
             <RatingSlider
-              name={FEEDBACK_FIELDS.SUPPORTIVE_RATING}
-              question="How supportive did this session feel?"
-              lowLabel="Not helpful"
-              highLabel="Very supportive"
+              name={FEEDBACK_FIELDS.ALIGNED_RATING}
+              question="Did this session feel aligned with what you needed today?"
+              lowLabel="Not aligned"
+              highLabel="Very aligned"
             />
             <RatingSlider
               name={FEEDBACK_FIELDS.HELPFUL_RATING}
               question="How helpful were the questions and reflections?"
               lowLabel="Not helpful"
-              highLabel="Very supportive"
+              highLabel="Very helpful"
             />
             <RatingSlider
-              name={FEEDBACK_FIELDS.ALIGNED_RATING}
-              question="Did this session feel aligned with what you needed today?"
-              lowLabel="Not helpful"
-              highLabel="Very supportive"
+              name={FEEDBACK_FIELDS.TONE_RATING}
+              question="How would you rate your coach's tone?"
+              lowLabel="Too direct"
+              highLabel="Too warm"
             />
           </Section>
 
@@ -115,10 +115,30 @@ function Section({
 }) {
   return (
     <section className="rounded-xl border border-white/10 bg-white/[0.02] p-5">
-      <h2 className="text-base font-semibold text-white">{title}</h2>
+      <div className="flex items-center gap-2">
+        <SpeechBubbleIcon className="h-5 w-5 text-brand-primary" />
+        <h2 className="text-base font-semibold text-white">{title}</h2>
+      </div>
       <p className="mt-1 text-xs text-neutral-400">{subtitle}</p>
       <div className="mt-4 flex flex-col gap-5">{children}</div>
     </section>
+  );
+}
+
+function SpeechBubbleIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.8}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+      {...props}
+    >
+      <path d="M21 12c0 4.418-4.03 8-9 8-1.06 0-2.078-.16-3.026-.456L3 21l1.586-4.243A8.06 8.06 0 0 1 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8Z" />
+    </svg>
   );
 }
 
@@ -134,11 +154,15 @@ function RatingSlider({
   highLabel: string;
 }) {
   const [value, setValue] = useState(3);
+  // 1..5 → 0..100% — drives the split-color track gradient via
+  // --fill-pct. Without it Chrome would paint the full track in one
+  // color (Firefox uses ::-moz-range-progress and doesn't need this).
+  const fillPct = ((value - 1) / 4) * 100;
   return (
     <div>
       <div className="flex items-start justify-between gap-3">
         <p className="text-sm text-neutral-200">{question}</p>
-        <span className="text-sm font-semibold text-brand-primary">{value}</span>
+        <span className="text-sm font-semibold text-brand-alert">{value}</span>
       </div>
       <input
         type="range"
@@ -148,7 +172,8 @@ function RatingSlider({
         step={1}
         value={value}
         onChange={(e) => setValue(Number.parseInt(e.target.value, 10))}
-        className="mt-3 w-full accent-brand-primary"
+        style={{ "--fill-pct": `${fillPct}%` } as React.CSSProperties}
+        className="feedback-slider mt-3 w-full"
       />
       <div className="mt-1 flex justify-between text-[11px] text-neutral-500">
         <span>1- {lowLabel}</span>

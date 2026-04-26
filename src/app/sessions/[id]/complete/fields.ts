@@ -4,7 +4,7 @@
 // so a typo on either side can't silently break submission.
 export const FEEDBACK_FIELDS = {
   REFLECTION: "reflection",
-  SUPPORTIVE_RATING: "supportive_rating",
+  TONE_RATING: "tone_rating",
   HELPFUL_RATING: "helpful_rating",
   ALIGNED_RATING: "aligned_rating",
   ADDITIONAL_FEEDBACK: "additional_feedback",
