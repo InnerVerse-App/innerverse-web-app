@@ -80,8 +80,11 @@ export function Constellation({
     layout.mindsetShifts.length === 0 &&
     layout.goals.length === 0;
 
-  // Build the line endpoints when a breakthrough is selected. Each
-  // line goes from the breakthrough star to a contributing star.
+  // Build a chronological "path of progression" through the
+  // constellation — each contributing star ordered by when it
+  // happened, with the breakthrough as the final point. The user
+  // reads the line as their journey leading up to the breakthrough,
+  // not as a hub-and-spoke radiating from it.
   const selectedLinks =
     selectedBreakthroughId && constellationLinks
       ? constellationLinks.get(selectedBreakthroughId)
@@ -89,25 +92,53 @@ export function Constellation({
   const selectedBreakthrough = selectedBreakthroughId
     ? layout.breakthroughs.find((b) => b.id === selectedBreakthroughId)
     : null;
-  const lines: Array<{ x1: number; y1: number; x2: number; y2: number }> = [];
+  const chainPoints: Array<{ x: number; y: number; t: number }> = [];
   if (selectedBreakthrough && selectedLinks) {
     const sessionById = new Map(layout.sessions.map((s) => [s.id, s]));
     const shiftById = new Map(layout.mindsetShifts.map((m) => [m.id, m]));
     const goalById = new Map(layout.goals.map((g) => [g.id, g]));
-    const x1 = selectedBreakthrough.x * 100;
-    const y1 = selectedBreakthrough.y * 100;
     for (const id of selectedLinks.sessionIds) {
-      const t = sessionById.get(id);
-      if (t) lines.push({ x1, y1, x2: t.x * 100, y2: t.y * 100 });
+      const s = sessionById.get(id);
+      if (s) {
+        chainPoints.push({
+          x: s.x * 100,
+          y: s.y * 100,
+          t: Date.parse(s.endedAt),
+        });
+      }
     }
     for (const id of selectedLinks.shiftIds) {
-      const t = shiftById.get(id);
-      if (t) lines.push({ x1, y1, x2: t.x * 100, y2: t.y * 100 });
+      const m = shiftById.get(id);
+      if (m) {
+        chainPoints.push({
+          x: m.x * 100,
+          y: m.y * 100,
+          t: Date.parse(m.createdAt),
+        });
+      }
     }
     for (const id of selectedLinks.goalIds) {
-      const t = goalById.get(id);
-      if (t) lines.push({ x1, y1, x2: t.x * 100, y2: t.y * 100 });
+      const g = goalById.get(id);
+      // Goals without lastEngagedAt have no time-position in the
+      // journey — skip them from the chain. They still appear as
+      // green rings on the panel.
+      if (g && g.lastEngagedAt) {
+        chainPoints.push({
+          x: g.x * 100,
+          y: g.y * 100,
+          t: Date.parse(g.lastEngagedAt),
+        });
+      }
     }
+    // Sort oldest → newest, then append the breakthrough as the
+    // terminal point. The chain visually leads the eye from the
+    // earliest contributor to the breakthrough.
+    chainPoints.sort((a, b) => a.t - b.t);
+    chainPoints.push({
+      x: selectedBreakthrough.x * 100,
+      y: selectedBreakthrough.y * 100,
+      t: Date.parse(selectedBreakthrough.createdAt),
+    });
   }
 
   // Pill-row helper: build the URL for "select breakthrough X". The
@@ -206,42 +237,37 @@ export function Constellation({
           />
         ))}
 
-        {/* White constellation lines, drawn behind stars. Visible
-            only when a breakthrough's constellation is selected. */}
-        {lines.length > 0 ? (
+        {/* White constellation polyline — chronological chain through
+            the contributing stars to the breakthrough. Drawn behind
+            stars. Visible only when a constellation is selected. */}
+        {chainPoints.length >= 2 ? (
           <svg
             className="pointer-events-none absolute inset-0 h-full w-full"
             viewBox="0 0 100 100"
             preserveAspectRatio="none"
             aria-hidden
           >
-            {lines.map((ln, i) => (
-              <line
-                key={i}
-                x1={ln.x1}
-                y1={ln.y1}
-                x2={ln.x2}
-                y2={ln.y2}
-                stroke="white"
-                strokeWidth={0.3}
-                strokeOpacity={0.45}
-                strokeLinecap="round"
-                vectorEffect="non-scaling-stroke"
-                style={{ filter: "drop-shadow(0 0 1px rgba(255,255,255,0.5))" }}
-              />
-            ))}
+            <polyline
+              points={chainPoints
+                .map((p) => `${p.x},${p.y}`)
+                .join(" ")}
+              fill="none"
+              stroke="white"
+              strokeWidth={0.3}
+              strokeOpacity={0.5}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              vectorEffect="non-scaling-stroke"
+              style={{ filter: "drop-shadow(0 0 1px rgba(255,255,255,0.5))" }}
+            />
           </svg>
         ) : null}
 
-        {/* Center "now" nucleus — small bright marker showing the
-            point everything radiates from. */}
+        {/* Center "now" reference — subtle 1px tick rather than a
+            bright nucleus. The radial gradient on the panel already
+            implies the center; a loud dot was overkill. */}
         <span
-          className="pointer-events-none absolute left-1/2 top-1/2 h-1.5 w-1.5 -translate-x-1/2 -translate-y-1/2 rounded-full"
-          style={{
-            background: "#fff",
-            boxShadow:
-              "0 0 8px rgba(255,255,255,0.85), 0 0 18px rgba(255,255,255,0.5), 0 0 32px rgba(89,164,192,0.4)",
-          }}
+          className="pointer-events-none absolute left-1/2 top-1/2 h-px w-px -translate-x-1/2 -translate-y-1/2 rounded-full bg-white/30"
           aria-hidden
         />
 
