@@ -5,12 +5,18 @@
 // Dates are computed relative to "now" so the constellation always
 // looks current regardless of when this file was written. The
 // returned data shape matches what the real DB readers produce.
+//
+// SCALE: 500 days of content (~100 sessions, ~130 mindset shifts,
+// ~25 breakthroughs, 10 goals) so the operator can stress-test the
+// time-window pills, pinch-zoom, and visual density on real-ish
+// volume.
 
-import type {
-  BreakthroughDot,
-  GoalDot,
-  MindsetShiftDot,
-  SessionDot,
+import {
+  type BreakthroughDot,
+  type GoalDot,
+  hashFloat,
+  type MindsetShiftDot,
+  type SessionDot,
 } from "./constellation-layout";
 
 const DAY_MS = 86_400_000;
@@ -34,324 +40,366 @@ export type ConstellationLinks = {
   goalIds: string[];
 };
 
+const TOTAL_DAYS = 500;
+const N_SESSIONS = 100;
+const N_BREAKTHROUGHS = 25;
+const N_SHIFTS = 130;
+const N_GOALS = 10;
+
+const NAMES = [
+  "Belonging Without Bargaining",
+  "The Honored Edge",
+  "The Sovereign",
+  "True North",
+  "The Quiet Yes",
+  "When the Edge Held",
+  "Naming What's Mine",
+  "The Soft Refusal",
+  "The Threshold",
+  "Permission Without Asking",
+  "The Careful Mirror",
+  "Unburdening",
+  "The Returning",
+  "Steady in the Doubt",
+  "The First Honest No",
+  "What I Won't Carry",
+  "Letting the Cost Show",
+  "Coming Back to Center",
+  "Owning the Ask",
+  "The Listening Self",
+  "Friends with the Pause",
+  "When Stillness Spoke",
+  "Through the Constriction",
+  "The New Pattern",
+  "What I'm Worth",
+];
+
+const BREAKTHROUGH_CONTENT = [
+  "Recognized perfectionism as fear in costume",
+  "Distinguishing harm from discomfort",
+  "Permission to choose self",
+  "Greater clarity in own decision-making",
+  "Felt sense as a compass",
+  "Listening without fixing",
+  "Letting belonging cost something",
+  "Honoring what doesn't fit",
+  "Choosing direction before certainty",
+  "Resting in the question",
+  "The first honest no",
+  "Coming back from spinning",
+  "Acknowledging what's been carrying",
+  "Trust in the after",
+  "Naming the fear behind the avoidance",
+  "Releasing the rescuer stance",
+  "Felt my edges hold under pressure",
+  "Stopped explaining, started being",
+  "Realized I'm allowed to take up space",
+  "Found steadiness without certainty",
+  "Met my own gaze without flinching",
+  "Trusted my discomfort as data",
+  "Stopped translating myself",
+  "Walked toward what I want",
+  "Returned to my body in the conflict",
+  "Stopped seeking permission to live",
+  "Released the weight of others' comfort",
+  "Met my anger without collapse",
+  "Heard my own no as a yes to me",
+  "Faced what I'd been outsourcing",
+];
+
+const SHIFT_CONTENT = [
+  "Started weighting alignment over external markers",
+  "Listening without fixing",
+  "Identified the cost of waiting for certainty",
+  "Recognized explanation as a cue to stop",
+  "Felt sense as a compass",
+  "Discomfort doesn't always mean wrong",
+  "Performing connection vs being in it",
+  "Anger as information, not aggression",
+  "Slowness isn't laziness",
+  "Capacity is finite and that's not a failure",
+  "I can be loved and inconvenient",
+  "Boundaries are how I love them, not punish them",
+  "My pace is allowed",
+  "Self-trust over self-monitoring",
+  "What I want matters even when no one asks",
+  "I don't have to optimize the present moment",
+  "Curiosity instead of certainty",
+  "It's safe to stop earning",
+  "Tenderness toward my younger parts",
+  "Resting is a discipline, not a reward",
+  "Disappointment isn't a wound",
+  "Conflict can be intimate",
+  "I get to want what I want",
+  "Reframed urgency as a learned response",
+  "Stopped armoring against ordinary feelings",
+  "Permission to not know",
+  "Trust the slow yes",
+  "Held people without saving them",
+  "Receiving feels different from taking",
+  "Direct doesn't have to be unkind",
+  "I can name dynamics out loud",
+  "Stopped attaching to others' comfort",
+  "Identified people-pleasing as self-erasure",
+  "Allowed for ambiguity",
+  "My intuition has a track record",
+  "Walked back from over-functioning",
+  "Comfort isn't always alignment",
+  "Surface compliance vs real consent",
+  "Quiet doesn't mean settled",
+  "Tracked my body's no",
+  "Said the second sentence I usually swallow",
+  "Realized I was performing my growth",
+  "Stopped explaining myself preemptively",
+  "Boundary = honesty in present tense",
+  "Disagreement isn't disconnection",
+  "Felt the difference between fear and reality",
+  "Practiced staying when I usually leave",
+  "Recognized self-doubt as someone else's voice",
+  "Allowed myself to be misunderstood",
+  "My body knows before my mind",
+  "Stopped curating my truth for others",
+  "What I notice is information",
+  "Gave myself permission to be in process",
+  "Anger held without spilling",
+  "Recognized when I'm borrowing fear",
+  "Stopped negotiating with the inner critic",
+  "Sat with the feeling without solving it",
+];
+
+const GOAL_TITLES = [
+  "Develop emotional intelligence",
+  "Practice mindful boundaries",
+  "Strengthen vocational alignment",
+  "Embrace creative play",
+  "Lead from values",
+  "Build self-trust",
+  "Cultivate steady presence",
+  "Honor my body's wisdom",
+  "Practice direct communication",
+  "Stay in conflict without leaving",
+];
+
+// Deterministic pick from an array using a hash key — stable across
+// renders so the demo dataset never shuffles.
+function pickIdx<T>(arr: T[], key: string, salt = 0): T {
+  return arr[Math.floor(hashFloat(key, salt) * arr.length)];
+}
+
+// Pick N distinct items deterministically. Implemented by hashing
+// each item's index + key prefix, sorting by hash, and taking the
+// first N.
+function pickN<T>(arr: T[], n: number, keyPrefix: string): T[] {
+  if (arr.length === 0) return [];
+  const indexed = arr.map((item, i) => ({
+    item,
+    key: hashFloat(`${keyPrefix}_${i}`),
+  }));
+  indexed.sort((a, b) => a.key - b.key);
+  return indexed.slice(0, Math.min(n, indexed.length)).map((p) => p.item);
+}
+
+type LegacyTextRow = {
+  id: string;
+  content: string;
+  created_at: string;
+};
+
 export function buildDemoData(): {
   sessions: SessionDot[];
   breakthroughs: BreakthroughDot[];
   mindsetShifts: MindsetShiftDot[];
   goals: GoalDot[];
   constellationLinks: Map<string, ConstellationLinks>;
+  legacySections: {
+    breakthroughs: LegacyTextRow[];
+    insights: LegacyTextRow[];
+  };
 } {
-  // 6 sessions spanning the last 21 days (within the recency-window).
-  const sessions: SessionDot[] = [
-    { id: "demo-s1", endedAt: daysAgoIso(21) },
-    { id: "demo-s2", endedAt: daysAgoIso(14) },
-    { id: "demo-s3", endedAt: daysAgoIso(9) },
-    { id: "demo-s4", endedAt: daysAgoIso(5) },
-    { id: "demo-s5", endedAt: daysAgoIso(2) },
-    { id: "demo-s6", endedAt: daysAgoIso(0, 9) },
-  ];
+  // Sessions spread across TOTAL_DAYS with light per-item jitter.
+  // Linear distribution so the constellation has stars at every age
+  // band — useful for testing the time-window pills.
+  const sessions: SessionDot[] = [];
+  for (let i = 0; i < N_SESSIONS; i++) {
+    const linearDays = (i / (N_SESSIONS - 1)) * TOTAL_DAYS;
+    const jitter = (hashFloat(`s${i}`, 1) - 0.5) * 4; // ±2 days
+    const days = Math.max(0, linearDays + jitter);
+    sessions.push({ id: `demo-s${i}`, endedAt: daysAgoIso(days) });
+  }
 
-  // 4 breakthroughs across 3 different sessions (one session has two).
-  const breakthroughs: BreakthroughDot[] = [
-    {
-      id: "demo-b1",
-      sessionId: "demo-s2",
-      content: "Named the fear behind negative feedback",
-      createdAt: daysAgoIso(14),
-    },
-    {
-      id: "demo-b2",
-      sessionId: "demo-s4",
-      content: "Distinguishing harm from discomfort",
-      createdAt: daysAgoIso(5),
-    },
-    {
-      id: "demo-b3",
-      sessionId: "demo-s4",
-      content: "Permission to choose self",
-      createdAt: daysAgoIso(5),
-    },
-    {
-      id: "demo-b4",
-      sessionId: "demo-s6",
-      content: "Greater clarity in own decision-making",
-      createdAt: daysAgoIso(0, 9),
-    },
-  ];
+  // Mindset shifts — each tied to a deterministic session.
+  const mindsetShifts: MindsetShiftDot[] = [];
+  for (let i = 0; i < N_SHIFTS; i++) {
+    const sessIdx = Math.floor(hashFloat(`m${i}`, 2) * N_SESSIONS);
+    const session = sessions[sessIdx];
+    mindsetShifts.push({
+      id: `demo-m${i}`,
+      sessionId: session.id,
+      content: pickIdx(SHIFT_CONTENT, `mc${i}`),
+      createdAt: session.endedAt,
+    });
+  }
 
-  // The "constellation" for each breakthrough — the stars that led
-  // to it. Demo only; real data needs a schema chunk that adds
-  // contributing_*_ids columns to the breakthroughs table and an LLM
-  // session-end tagging step that populates them.
-  const constellationLinks = new Map<string, ConstellationLinks>([
-    [
-      "demo-b1",
-      {
-        name: "Belonging Without Bargaining",
-        sessionIds: ["demo-s1", "demo-s2"],
-        shiftIds: ["demo-m1", "demo-m2"],
-        goalIds: ["demo-g1"],
-      },
-    ],
-    [
-      "demo-b2",
-      {
-        name: "The Honored Edge",
-        sessionIds: ["demo-s2", "demo-s3", "demo-s4"],
-        shiftIds: ["demo-m2", "demo-m3", "demo-m4"],
-        goalIds: ["demo-g2"],
-      },
-    ],
-    [
-      "demo-b3",
-      {
-        name: "The Sovereign",
-        sessionIds: ["demo-s3", "demo-s4"],
-        shiftIds: ["demo-m3", "demo-m4"],
-        goalIds: ["demo-g1", "demo-g2"],
-      },
-    ],
-    [
-      "demo-b4",
-      {
-        name: "True North",
-        sessionIds: ["demo-s5", "demo-s6"],
-        shiftIds: ["demo-m1", "demo-m3", "demo-m5"],
-        goalIds: ["demo-g3"],
-      },
-    ],
-  ]);
+  // Breakthroughs — rarer (every ~4 sessions on average), spread
+  // across the time range.
+  const breakthroughs: BreakthroughDot[] = [];
+  for (let i = 0; i < N_BREAKTHROUGHS; i++) {
+    const baseIdx = Math.floor((i / N_BREAKTHROUGHS) * N_SESSIONS);
+    const drift = Math.floor(hashFloat(`b${i}`, 3) * 3);
+    const sessIdx = Math.min(baseIdx + drift, N_SESSIONS - 1);
+    const session = sessions[sessIdx];
+    breakthroughs.push({
+      id: `demo-b${i}`,
+      sessionId: session.id,
+      content: pickIdx(BREAKTHROUGH_CONTENT, `bc${i}`),
+      createdAt: session.endedAt,
+    });
+  }
 
-  // 5 mindset shifts across 4 sessions, including one in a session
-  // with no breakthrough (so it orbits the session itself).
-  const mindsetShifts: MindsetShiftDot[] = [
-    {
-      id: "demo-m1",
-      sessionId: "demo-s1",
-      content: "Started weighting alignment over external markers",
-      createdAt: daysAgoIso(21),
-    },
-    {
-      id: "demo-m2",
-      sessionId: "demo-s2",
-      content: "Listening without fixing",
-      createdAt: daysAgoIso(14),
-    },
-    {
-      id: "demo-m3",
-      sessionId: "demo-s3",
-      content: "Identified the cost of waiting for certainty",
-      createdAt: daysAgoIso(9),
-    },
-    {
-      id: "demo-m4",
-      sessionId: "demo-s4",
-      content: "Recognized explanation as a cue to stop",
-      createdAt: daysAgoIso(5),
-    },
-    {
-      id: "demo-m5",
-      sessionId: "demo-s6",
-      content: "Felt sense as a compass",
-      createdAt: daysAgoIso(0, 9),
-    },
-  ];
+  // Goals — varied lastEngagedAt across the full time range,
+  // including some never engaged. Two goals get null lastEngagedAt.
+  const goals: GoalDot[] = [];
+  for (let i = 0; i < N_GOALS; i++) {
+    const isNeverEngaged = i >= 8;
+    const lastEngagedDays = isNeverEngaged
+      ? null
+      : hashFloat(`g${i}`, 5) * TOTAL_DAYS;
+    goals.push({
+      id: `demo-g${i}`,
+      title: pickIdx(GOAL_TITLES, `gt${i}`),
+      lastEngagedAt:
+        lastEngagedDays === null ? null : daysAgoIso(lastEngagedDays),
+    });
+  }
 
-  // 5 active goals showing the full recency spectrum:
-  //   - 2 recently engaged (bright, on the right)
-  //   - 1 mid-engaged (moderate fade)
-  //   - 1 stale (engaged once long ago, faded floor on left)
-  //   - 1 never engaged (faded floor on left)
-  const goals: GoalDot[] = [
-    {
-      id: "demo-g1",
-      title: "Develop emotional intelligence",
-      lastEngagedAt: daysAgoIso(0, 9),
-    },
-    {
-      id: "demo-g2",
-      title: "Practice mindful boundaries",
-      lastEngagedAt: daysAgoIso(5),
-    },
-    {
-      id: "demo-g3",
-      title: "Strengthen vocational alignment",
-      lastEngagedAt: daysAgoIso(14),
-    },
-    {
-      id: "demo-g4",
-      title: "Embrace creative play",
-      lastEngagedAt: daysAgoIso(45),
-    },
-    {
-      id: "demo-g5",
-      title: "Lead from values",
-      lastEngagedAt: null,
-    },
-  ];
+  // Constellation links per breakthrough — each constellation has
+  // 2-4 sessions, 2-5 mindset shifts, and 1-2 goals as contributors.
+  // Contributors must pre-date the breakthrough (you don't build
+  // toward a breakthrough with future events).
+  const constellationLinks = new Map<string, ConstellationLinks>();
+  for (const b of breakthroughs) {
+    const bTime = Date.parse(b.createdAt);
+    const eligibleSessions = sessions.filter(
+      (s) => Date.parse(s.endedAt) <= bTime && s.id !== b.sessionId,
+    );
+    const eligibleShifts = mindsetShifts.filter(
+      (m) => Date.parse(m.createdAt) <= bTime,
+    );
+    const eligibleGoals = goals.filter(
+      (g) => g.lastEngagedAt && Date.parse(g.lastEngagedAt) <= bTime,
+    );
+    const numSessions = 2 + Math.floor(hashFloat(`bls${b.id}`) * 3);
+    const numShifts = 2 + Math.floor(hashFloat(`blm${b.id}`) * 4);
+    const numGoals = 1 + Math.floor(hashFloat(`blg${b.id}`) * 2);
+    constellationLinks.set(b.id, {
+      name: pickIdx(NAMES, `bn${b.id}`),
+      sessionIds: pickN(eligibleSessions, numSessions, b.id + "_s").map(
+        (s) => s.id,
+      ),
+      shiftIds: pickN(eligibleShifts, numShifts, b.id + "_m").map((m) => m.id),
+      goalIds: pickN(eligibleGoals, numGoals, b.id + "_g").map((g) => g.id),
+    });
+  }
 
-  return { sessions, breakthroughs, mindsetShifts, goals, constellationLinks };
+  // Legacy sections — most-recent 50 of each, sorted newest first.
+  const legacyBreakthroughs: LegacyTextRow[] = [...breakthroughs]
+    .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))
+    .slice(0, 50)
+    .map((b) => ({
+      id: b.id,
+      content: b.content,
+      created_at: b.createdAt,
+    }));
+  const legacyInsights: LegacyTextRow[] = [...mindsetShifts]
+    .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))
+    .slice(0, 50)
+    .map((m) => ({
+      id: m.id,
+      content: m.content,
+      created_at: m.createdAt,
+    }));
+
+  return {
+    sessions,
+    breakthroughs,
+    mindsetShifts,
+    goals,
+    constellationLinks,
+    legacySections: {
+      breakthroughs: legacyBreakthroughs,
+      insights: legacyInsights,
+    },
+  };
 }
 
-// Mock data shared with the demo escape hatches on /home, /goals,
-// and /sessions so navigating between tabs in demo mode looks
-// coherent. DROP BEFORE MERGE.
+// ---------------------------------------------------------------
+// Cross-tab demo data exports for /home, /goals, /sessions demo
+// branches. Derived from the same generated dataset so navigating
+// across tabs in demo mode shows coherent content.
 
-export const DEMO_SESSIONS_LIST = [
-  {
-    id: "demo-s6",
-    started_at: daysAgoIso(0, 8),
-    ended_at: daysAgoIso(0, 9),
-    summary:
-      "We unpacked a creeping fear that your direction was just paper success. You named the felt difference between alignment and certainty and committed to weighting the sense of fit alongside external markers.",
-    progress_summary_short:
-      "Greater clarity in own decision-making — values direction over external markers.",
-  },
-  {
-    id: "demo-s5",
-    started_at: daysAgoIso(2, 9),
-    ended_at: daysAgoIso(2, 10),
-    summary:
-      "Continued the values-direction thread. Identified two specific upcoming decisions where the felt-fit framing applies and chose one to act on this week.",
-    progress_summary_short:
-      "Applied felt-fit framing to two real decisions; committed to acting on one.",
-  },
-  {
-    id: "demo-s4",
-    started_at: daysAgoIso(5, 8),
-    ended_at: daysAgoIso(5, 9),
-    summary:
-      "Two breakthroughs this session: distinguishing harm from discomfort, and giving yourself permission to choose self. Worked through the boundary you wanted to keep during the testing push.",
-    progress_summary_short:
-      "Distinguishing harm from discomfort + permission to choose self.",
-  },
-  {
-    id: "demo-s3",
-    started_at: daysAgoIso(9, 9),
-    ended_at: daysAgoIso(9, 10),
-    summary:
-      "Identified the hidden cost of waiting for certainty before acting on values-aligned decisions.",
-    progress_summary_short:
-      "Surfaced the cost of waiting for certainty.",
-  },
-  {
-    id: "demo-s2",
-    started_at: daysAgoIso(14, 8),
-    ended_at: daysAgoIso(14, 9),
-    summary:
-      "Named the fear behind negative feedback (loss of belonging) and held a balanced interpretation. Moved toward listening without fixing.",
-    progress_summary_short:
-      "Named the fear behind negative feedback; listening without fixing.",
-  },
-  {
-    id: "demo-s1",
-    started_at: daysAgoIso(21, 8),
-    ended_at: daysAgoIso(21, 9),
-    summary:
-      "First session. Surfaced what's been weighing on you and what would feel different — established the initial direction.",
-    progress_summary_short: "Setting initial direction.",
-  },
+const _DEMO = buildDemoData();
+
+export const DEMO_LEGACY_SECTIONS = _DEMO.legacySections;
+
+// /sessions list — most-recent 50 sessions with synthetic summary
+// text (deterministic via hash). Real sessions have richer content;
+// for demo this is enough to fill the list and exercise scrolling.
+const SESSION_SUMMARIES = [
+  "Worked through a familiar pattern with new awareness.",
+  "Surfaced what's been weighing and what would feel different.",
+  "Practiced staying with the discomfort instead of fixing it.",
+  "Identified a cost I'd been quietly paying.",
+  "Named the fear behind the avoidance.",
+  "Acknowledged the part of me that's been carrying this.",
+  "Distinguished real harm from ordinary discomfort.",
+  "Came back to my body in the middle of the spin.",
+  "Met my anger without collapsing.",
+  "Honored what doesn't fit anymore.",
+  "Said the no I'd been swallowing.",
+  "Released the obligation to be readable.",
+  "Trusted my discomfort as information.",
+  "Walked toward what I actually want.",
+  "Allowed for ambiguity.",
 ];
-
-export const DEMO_GOALS = [
-  {
-    id: "demo-g1",
-    title: "Develop emotional intelligence",
-    description: "Notice signals before they become reactions.",
-    completionType: "practice" as const,
-    lastEngagedAt: daysAgoIso(0, 9),
-    progressPercent: null as number | null,
-  },
-  {
-    id: "demo-g2",
-    title: "Practice mindful boundaries",
-    description: "Hold them with warmth, not defense.",
-    completionType: "practice" as const,
-    lastEngagedAt: daysAgoIso(5),
-    progressPercent: null,
-  },
-  {
-    id: "demo-g3",
-    title: "Strengthen vocational alignment",
-    description: "Move toward what feels in fit; let go of what doesn't.",
-    completionType: "practice" as const,
-    lastEngagedAt: daysAgoIso(14),
-    progressPercent: null,
-  },
-  {
-    id: "demo-g6",
-    title: "Finish the InnerVerse app",
-    description: "Ship the v1 build to testers.",
-    completionType: "milestone" as const,
-    lastEngagedAt: daysAgoIso(0, 9),
-    progressPercent: 78,
-  },
-  {
-    id: "demo-g4",
-    title: "Embrace creative play",
-    description: "Make something with no goal beyond making it.",
-    completionType: "practice" as const,
-    lastEngagedAt: daysAgoIso(45),
-    progressPercent: null,
-  },
-  {
-    id: "demo-g5",
-    title: "Lead from values",
-    description: "Choose the harder kindness when it matters.",
-    completionType: "practice" as const,
-    lastEngagedAt: null,
-    progressPercent: null,
-  },
+const PROGRESS_SHORTS = [
+  "Felt sense becoming a more reliable guide.",
+  "Less negotiating with the inner critic.",
+  "Permission to be in process.",
+  "Honored direction without certainty.",
+  "Boundaries with warmth.",
+  "Disagreement without disconnection.",
 ];
+export const DEMO_SESSIONS_LIST = [..._DEMO.sessions]
+  .sort((a, b) => Date.parse(b.endedAt) - Date.parse(a.endedAt))
+  .slice(0, 50)
+  .map((s) => ({
+    id: s.id,
+    started_at: s.endedAt, // use ended_at as a proxy in demo
+    ended_at: s.endedAt,
+    summary: pickIdx(SESSION_SUMMARIES, `summ${s.id}`),
+    progress_summary_short: pickIdx(PROGRESS_SHORTS, `prog${s.id}`),
+  }));
 
-export const DEMO_LEGACY_SECTIONS = {
-  breakthroughs: [
-    {
-      id: "demo-b4",
-      content: "Greater clarity in own decision-making",
-      created_at: daysAgoIso(0, 9),
-    },
-    {
-      id: "demo-b3",
-      content: "Permission to choose self",
-      created_at: daysAgoIso(5),
-    },
-    {
-      id: "demo-b2",
-      content: "Distinguishing harm from discomfort",
-      created_at: daysAgoIso(5),
-    },
-    {
-      id: "demo-b1",
-      content: "Named the fear behind negative feedback",
-      created_at: daysAgoIso(14),
-    },
-  ],
-  insights: [
-    {
-      id: "demo-m5",
-      content: "Felt sense as a compass",
-      created_at: daysAgoIso(0, 9),
-    },
-    {
-      id: "demo-m4",
-      content: "Recognized explanation as a cue to stop",
-      created_at: daysAgoIso(5),
-    },
-    {
-      id: "demo-m3",
-      content: "Identified the cost of waiting for certainty",
-      created_at: daysAgoIso(9),
-    },
-    {
-      id: "demo-m2",
-      content: "Listening without fixing",
-      created_at: daysAgoIso(14),
-    },
-    {
-      id: "demo-m1",
-      content: "Started weighting alignment over external markers",
-      created_at: daysAgoIso(21),
-    },
-  ],
-};
+// /goals — render the same goal pool with completion-type metadata
+// the demo /goals page expects.
+const GOAL_DESCRIPTIONS = [
+  "Notice signals before they become reactions.",
+  "Hold them with warmth, not defense.",
+  "Move toward what feels in fit; let go of what doesn't.",
+  "Make something with no goal beyond making it.",
+  "Choose the harder kindness when it matters.",
+  "Trust my own knowing.",
+  "Stay in the room when it's hard.",
+  "Listen to the body's quieter signals.",
+  "Speak the second sentence I usually swallow.",
+  "Stay until the resolution, not just the lull.",
+];
+export const DEMO_GOALS = _DEMO.goals.map((g, i) => ({
+  id: g.id,
+  title: g.title,
+  description: pickIdx(GOAL_DESCRIPTIONS, `gd${g.id}`),
+  completionType:
+    i === 0 ? ("milestone" as const) : ("practice" as const),
+  lastEngagedAt: g.lastEngagedAt,
+  progressPercent: i === 0 ? 78 : (null as number | null),
+}));

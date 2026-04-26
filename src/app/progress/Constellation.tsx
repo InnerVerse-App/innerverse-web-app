@@ -223,7 +223,7 @@ export function Constellation({
                     : "border-white/10 text-neutral-400 hover:border-white/30 hover:text-neutral-200")
                 }
               >
-                All
+                Off
               </Link>
               {layout.breakthroughs.map((b) => {
                 const isActive = selectedBreakthroughId === b.id;
