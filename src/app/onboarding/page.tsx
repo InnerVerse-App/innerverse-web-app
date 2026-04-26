@@ -9,12 +9,11 @@ import { Step1Themes } from "./Step1Themes";
 import { Step2Goals } from "./Step2Goals";
 import { Step3Ratings } from "./Step3Ratings";
 import { Step4Notes } from "./Step4Notes";
-import { Step5Style } from "./Step5Style";
-import { Step6Coach } from "./Step6Coach";
+import { Step5Coach } from "./Step5Coach";
 
 export const dynamic = "force-dynamic";
 
-type StepNumber = 1 | 2 | 3 | 4 | 5 | 6;
+type StepNumber = 1 | 2 | 3 | 4 | 5;
 
 // Step 4 is optional. We distinguish "not yet visited" (coach_notes IS
 // NULL) from "visited and possibly empty" (coach_notes IS NOT NULL,
@@ -24,8 +23,7 @@ function nextStep(state: OnboardingState | null): StepNumber {
   if (state.top_goals.length === 0) return 2;
   if (state.satisfaction_ratings == null) return 3;
   if (state.coach_notes == null) return 4;
-  if (state.coaching_style == null) return 5;
-  return 6;
+  return 5;
 }
 
 // `?step=N` lets the in-app Back button navigate to a previous step
@@ -74,8 +72,6 @@ export default async function OnboardingPage({
     case 4:
       return <Step4Notes initialNotes={state?.coach_notes ?? ""} />;
     case 5:
-      return <Step5Style initialStyle={state?.coaching_style ?? null} />;
-    case 6:
-      return <Step6Coach initialCoach={state?.coach_name ?? null} />;
+      return <Step5Coach initialCoach={state?.coach_name ?? null} />;
   }
 }

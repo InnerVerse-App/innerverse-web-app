@@ -31,7 +31,6 @@ export type OnboardingState = {
   top_goals_input: string | null;
   satisfaction_ratings: SatisfactionRatings | null;
   coach_notes: string | null;
-  coaching_style: string | null;
   coach_name: string | null;
   completed_at: string | null;
 };
@@ -39,7 +38,7 @@ export type OnboardingState = {
 export type OnboardingPatch = Partial<Omit<OnboardingState, "user_id">>;
 
 const ONBOARDING_COLUMNS =
-  "user_id, why_are_you_here, top_goals, top_goals_input, satisfaction_ratings, coach_notes, coaching_style, coach_name, completed_at";
+  "user_id, why_are_you_here, top_goals, top_goals_input, satisfaction_ratings, coach_notes, coach_name, completed_at";
 
 // Returns null when the user has no row yet OR when there's no Clerk
 // session — callers treat both as "onboarding not yet started."

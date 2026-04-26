@@ -40,7 +40,6 @@ export type CoachingState = {
 
 type ProfileSource = {
   user_name: string;
-  coaching_style: string;
   ai_persona: string;
   style_calibration: CoachingState;
   recent_breakthroughs: string[];
@@ -63,7 +62,6 @@ function formatClientProfile(src: ProfileSource): string {
   });
   return [
     `Client: ${src.user_name}`,
-    `Preferred coaching style: ${src.coaching_style}`,
     `Persona: ${src.ai_persona}`,
     `Style calibration (JSON): ${styleJson}`,
     `Recent style feedback: ${src.style_calibration.recent_style_feedback ?? ""}`,
@@ -95,7 +93,7 @@ export async function buildSessionStartInput(args: {
     await Promise.all([
       client
         .from("onboarding_selections")
-        .select("coaching_style, coach_name, completed_at")
+        .select("coach_name, completed_at")
         .maybeSingle(),
       client
         .from("coaching_state")
@@ -138,7 +136,6 @@ export async function buildSessionStartInput(args: {
 
   const profile = formatClientProfile({
     user_name: args.userName,
-    coaching_style: onboarding.coaching_style ?? "",
     ai_persona: onboarding.coach_name ?? "",
     style_calibration: state,
     recent_breakthroughs: (breakthroughsRes.data ?? []).map((r) => r.content),

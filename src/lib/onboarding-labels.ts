@@ -13,7 +13,6 @@
 
 import {
   COACHES,
-  COACHING_STYLES,
   GOAL_CATEGORIES,
   THEMES,
 } from "@/app/onboarding/data";
@@ -25,9 +24,6 @@ export const GOAL_LABEL_BY_VALUE = new Map(
   GOAL_CATEGORIES.flatMap((c) => c.goals).map((g) => [g.value, g.label]),
 );
 const themeByValue = new Map(THEMES.map((t) => [t.value, t.label]));
-const coachingStyleByValue = new Map(
-  COACHING_STYLES.map((s) => [s.value, s.label]),
-);
 const coachByValue = new Map(COACHES.map((c) => [c.value, c.label]));
 
 function humanizeSnakeCase(value: string): string {
@@ -42,10 +38,6 @@ export function goalLabel(value: string): string {
 
 export function themeLabel(value: string): string {
   return themeByValue.get(value) ?? humanizeSnakeCase(value);
-}
-
-export function coachingStyleLabel(value: string): string {
-  return coachingStyleByValue.get(value) ?? humanizeSnakeCase(value);
 }
 
 export function coachLabel(value: string | null | undefined): string {
