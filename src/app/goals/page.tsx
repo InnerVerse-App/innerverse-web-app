@@ -3,6 +3,9 @@ import { redirect } from "next/navigation";
 import { auth } from "@clerk/nextjs/server";
 
 import { PageShell } from "@/app/_components/PageShell";
+import { ProgressBar } from "@/app/_components/ProgressBar";
+import { RecencyBar } from "@/app/_components/RecencyBar";
+import { formatDateCompact } from "@/lib/format";
 import {
   type ActiveGoal,
   loadActiveGoalsWithLazySeed,
@@ -14,6 +17,8 @@ import {
 import { supabaseForUser } from "@/lib/supabase";
 
 import { type GoalCardData, GoalCard } from "./GoalCard";
+
+import { DEMO_GOALS } from "../progress/demo-data";
 
 export const dynamic = "force-dynamic";
 
@@ -85,7 +90,73 @@ async function buildCardData(
   });
 }
 
-export default async function GoalsPage() {
+export default async function GoalsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ demo?: string }>;
+}) {
+  const params = await searchParams;
+  const isDemo = params.demo === "1";
+
+  if (isDemo) {
+    return (
+      <PageShell active="goals" navHrefSuffix="?demo=1">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h1 className="text-3xl font-bold text-white">Goals Progress</h1>
+            <p className="mt-1 text-sm text-neutral-400">
+              Your personal growth development.{" "}
+              <span className="text-amber-400">(demo mode)</span>
+            </p>
+          </div>
+        </div>
+        <ul className="mt-6 flex flex-col gap-4">
+          {DEMO_GOALS.map((g) => (
+            <li
+              key={g.id}
+              className="rounded-xl border border-white/10 bg-white/[0.02] p-5"
+            >
+              <h2 className="break-words text-lg font-semibold text-white">
+                {g.title}
+              </h2>
+              {g.description ? (
+                <p className="mt-2 text-sm text-neutral-400">{g.description}</p>
+              ) : null}
+              <div className="mt-4">
+                {g.completionType === "milestone" ? (
+                  <>
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-neutral-400">Progress</span>
+                      <span className="text-neutral-300">
+                        {g.progressPercent ?? 0}%
+                      </span>
+                    </div>
+                    <ProgressBar percent={g.progressPercent ?? 0} />
+                  </>
+                ) : (
+                  <>
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-neutral-400">Recent activity</span>
+                      <span className="text-neutral-500 text-xs">
+                        {g.lastEngagedAt
+                          ? formatDateCompact(g.lastEngagedAt)
+                          : "Not yet engaged"}
+                      </span>
+                    </div>
+                    <RecencyBar
+                      lastEngagedAt={g.lastEngagedAt}
+                      color="#4ADE80"
+                    />
+                  </>
+                )}
+              </div>
+            </li>
+          ))}
+        </ul>
+      </PageShell>
+    );
+  }
+
   const session = await auth();
   if (!session?.userId) redirect("/sign-in");
 

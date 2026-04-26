@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { auth } from "@clerk/nextjs/server";
 
 import { PageShell } from "@/app/_components/PageShell";
+import { RecencyBar } from "@/app/_components/RecencyBar";
 import { loadActiveGoalsWithLazySeed } from "@/lib/goals";
 import { formatDateCompact } from "@/lib/format";
 import {
@@ -172,15 +173,23 @@ export default async function ProgressPage({
   if (params.demo === "1") {
     const layout = computeLayout(buildDemoData());
     return (
-      <PageShell active="progress">
+      <PageShell active="progress" navHrefSuffix="?demo=1">
         <h1 className="text-3xl font-bold text-white">Your Progress</h1>
         <p className="mt-1 text-sm text-neutral-400">
           Track your personal growth development.{" "}
           <span className="text-amber-400">(demo mode)</span>
         </p>
         <Constellation layout={layout} hasGoals={true} />
-        <Section title="Breakthroughs" items={DEMO_LEGACY_SECTIONS.breakthroughs} />
-        <Section title="Insights" items={DEMO_LEGACY_SECTIONS.insights} />
+        <Section
+          title="Breakthroughs"
+          items={DEMO_LEGACY_SECTIONS.breakthroughs}
+          recencyColor="#DCA114"
+        />
+        <Section
+          title="Insights"
+          items={DEMO_LEGACY_SECTIONS.insights}
+          recencyColor="#A78BFA"
+        />
       </PageShell>
     );
   }
@@ -208,13 +217,29 @@ export default async function ProgressPage({
 
       <Constellation layout={layout} hasGoals={hasGoals} />
 
-      <Section title="Breakthroughs" items={breakthroughs} />
-      <Section title="Insights" items={insights} />
+      <Section
+        title="Breakthroughs"
+        items={breakthroughs}
+        recencyColor="#DCA114"
+      />
+      <Section
+        title="Insights"
+        items={insights}
+        recencyColor="#A78BFA"
+      />
     </PageShell>
   );
 }
 
-function Section({ title, items }: { title: string; items: TextRow[] }) {
+function Section({
+  title,
+  items,
+  recencyColor,
+}: {
+  title: string;
+  items: TextRow[];
+  recencyColor: string;
+}) {
   return (
     <section className="mt-6 rounded-xl border border-white/10 bg-white/[0.02] p-5">
       <h2 className="text-base font-semibold text-white">{title}</h2>
@@ -234,6 +259,10 @@ function Section({ title, items }: { title: string; items: TextRow[] }) {
               <p className="mt-1 text-[11px] text-neutral-500">
                 {formatDateCompact(item.created_at)}
               </p>
+              <RecencyBar
+                lastEngagedAt={item.created_at}
+                color={recencyColor}
+              />
             </li>
           ))}
         </ul>

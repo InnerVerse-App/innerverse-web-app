@@ -10,6 +10,8 @@ import {
 } from "@/lib/onboarding";
 import { supabaseForUser } from "@/lib/supabase";
 
+import { DEMO_SESSIONS_LIST } from "../progress/demo-data";
+
 export const dynamic = "force-dynamic";
 
 type SessionListRow = {
@@ -31,20 +33,34 @@ async function loadSessionHistory(): Promise<SessionListRow[]> {
   return (data as SessionListRow[] | null) ?? [];
 }
 
-export default async function SessionsListPage() {
-  const session = await auth();
-  if (!session?.userId) redirect("/sign-in");
+export default async function SessionsListPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ demo?: string }>;
+}) {
+  const params = await searchParams;
+  const isDemo = params.demo === "1";
 
-  const onboarding = await getOnboardingState();
-  if (!isOnboardingComplete(onboarding)) redirect("/onboarding");
+  if (!isDemo) {
+    const session = await auth();
+    if (!session?.userId) redirect("/sign-in");
 
-  const sessions = await loadSessionHistory();
+    const onboarding = await getOnboardingState();
+    if (!isOnboardingComplete(onboarding)) redirect("/onboarding");
+  }
+
+  const sessions = isDemo
+    ? (DEMO_SESSIONS_LIST as SessionListRow[])
+    : await loadSessionHistory();
 
   return (
-    <PageShell active="sessions">
+    <PageShell active="sessions" navHrefSuffix={isDemo ? "?demo=1" : ""}>
       <h1 className="text-3xl font-bold text-white">Sessions</h1>
       <p className="mt-1 text-sm text-neutral-400">
         A log of your coaching sessions.
+        {isDemo ? (
+          <span className="text-amber-400"> (demo mode)</span>
+        ) : null}
       </p>
 
       {sessions.length === 0 ? (
@@ -53,12 +69,12 @@ export default async function SessionsListPage() {
         </p>
       ) : (
         <ul className="mt-6 flex flex-col gap-3">
-          {sessions.map((s) => (
-            <li key={s.id}>
-              <Link
-                href={`/sessions/${s.id}`}
-                className="block rounded-xl border border-white/10 bg-white/[0.02] p-5 transition hover:border-brand-primary/40"
-              >
+          {sessions.map((s) => {
+            const cardClass =
+              "block rounded-xl border border-white/10 bg-white/[0.02] p-5 transition" +
+              (isDemo ? "" : " hover:border-brand-primary/40");
+            const inner = (
+              <>
                 <div className="flex items-start justify-between gap-3">
                   <p className="text-xs text-neutral-400">
                     {formatDateShort(s.started_at)}
@@ -80,9 +96,20 @@ export default async function SessionsListPage() {
                       ? "Summary pending — analysis may still be running."
                       : "Open session — tap to continue.")}
                 </p>
-              </Link>
-            </li>
-          ))}
+              </>
+            );
+            return (
+              <li key={s.id}>
+                {isDemo ? (
+                  <div className={cardClass}>{inner}</div>
+                ) : (
+                  <Link href={`/sessions/${s.id}`} className={cardClass}>
+                    {inner}
+                  </Link>
+                )}
+              </li>
+            );
+          })}
         </ul>
       )}
     </PageShell>

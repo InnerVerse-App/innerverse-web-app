@@ -69,7 +69,16 @@ const TABS: Tab[] = [
 // nav visible (e.g. /next-steps). A null active means no tab
 // renders as selected — the nav is still there for navigation but
 // no visual "you are here" highlight.
-export function BottomNav({ active }: { active: TabKey | null }) {
+export function BottomNav({
+  active,
+  hrefSuffix = "",
+}: {
+  active: TabKey | null;
+  // Appended to every tab href. Used by demo mode to preserve
+  // ?demo=1 across navigation. DROP BEFORE MERGE along with the
+  // demo escape hatches.
+  hrefSuffix?: string;
+}) {
   return (
     // fixed inset-x-0 bottom-0 z-20 — pin to viewport bottom so the
     // nav stays visible while the page scrolls. PageShell's main
@@ -97,7 +106,11 @@ export function BottomNav({ active }: { active: TabKey | null }) {
           );
           if (tab.href) {
             return (
-              <Link key={tab.key} href={tab.href} className={className}>
+              <Link
+                key={tab.key}
+                href={`${tab.href}${hrefSuffix}`}
+                className={className}
+              >
                 {content}
               </Link>
             );
