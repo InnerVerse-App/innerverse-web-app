@@ -162,7 +162,7 @@ async function loadConstellation(ctx: UserSupabase): Promise<{
 export default async function ProgressPage({
   searchParams,
 }: {
-  searchParams: Promise<{ demo?: string }>;
+  searchParams: Promise<{ demo?: string; constellation?: string }>;
 }) {
   // Demo escape hatch runs BEFORE the auth gate so the redirect to
   // /sign-in doesn't strip the `?demo=1` query param. Demo data is
@@ -171,7 +171,9 @@ export default async function ProgressPage({
   // before merging V.1).
   const params = await searchParams;
   if (params.demo === "1") {
-    const layout = computeLayout(buildDemoData());
+    const demo = buildDemoData();
+    const layout = computeLayout(demo);
+    const selectedBreakthroughId = params.constellation ?? null;
     return (
       <PageShell active="progress" navHrefSuffix="?demo=1">
         <h1 className="text-3xl font-bold text-white">Your Progress</h1>
@@ -183,6 +185,9 @@ export default async function ProgressPage({
           layout={layout}
           hasGoals={true}
           goalsHref="/goals?demo=1"
+          constellationLinks={demo.constellationLinks}
+          selectedBreakthroughId={selectedBreakthroughId}
+          selectHrefBase="/progress?demo=1"
         />
         <Section
           title="Breakthroughs"

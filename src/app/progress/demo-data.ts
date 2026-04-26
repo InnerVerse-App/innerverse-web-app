@@ -21,11 +21,21 @@ function daysAgoIso(days: number, hours = 10): string {
   return d.toISOString();
 }
 
+// A breakthrough's constellation — which stars led to it. Demo only;
+// real data needs a schema chunk to add contributing_*_ids columns
+// to the breakthroughs table and an LLM session-end tagging step.
+export type ConstellationLinks = {
+  sessionIds: string[];
+  shiftIds: string[];
+  goalIds: string[];
+};
+
 export function buildDemoData(): {
   sessions: SessionDot[];
   breakthroughs: BreakthroughDot[];
   mindsetShifts: MindsetShiftDot[];
   goals: GoalDot[];
+  constellationLinks: Map<string, ConstellationLinks>;
 } {
   // 6 sessions spanning the last 21 days (within the recency-window).
   const sessions: SessionDot[] = [
@@ -64,6 +74,48 @@ export function buildDemoData(): {
       createdAt: daysAgoIso(0, 9),
     },
   ];
+
+  // The "constellation" for each breakthrough — the stars that led
+  // to it. Demo only; real data needs a schema chunk that adds
+  // contributing_*_ids columns to the breakthroughs table and an LLM
+  // session-end tagging step that populates them.
+  const constellationLinks = new Map<
+    string,
+    { sessionIds: string[]; shiftIds: string[]; goalIds: string[] }
+  >([
+    [
+      "demo-b1",
+      {
+        sessionIds: ["demo-s1", "demo-s2"],
+        shiftIds: ["demo-m1", "demo-m2"],
+        goalIds: ["demo-g1"],
+      },
+    ],
+    [
+      "demo-b2",
+      {
+        sessionIds: ["demo-s2", "demo-s3", "demo-s4"],
+        shiftIds: ["demo-m2", "demo-m3", "demo-m4"],
+        goalIds: ["demo-g2"],
+      },
+    ],
+    [
+      "demo-b3",
+      {
+        sessionIds: ["demo-s3", "demo-s4"],
+        shiftIds: ["demo-m3", "demo-m4"],
+        goalIds: ["demo-g1", "demo-g2"],
+      },
+    ],
+    [
+      "demo-b4",
+      {
+        sessionIds: ["demo-s5", "demo-s6"],
+        shiftIds: ["demo-m1", "demo-m3", "demo-m5"],
+        goalIds: ["demo-g3"],
+      },
+    ],
+  ]);
 
   // 5 mindset shifts across 4 sessions, including one in a session
   // with no breakthrough (so it orbits the session itself).
@@ -133,7 +185,7 @@ export function buildDemoData(): {
     },
   ];
 
-  return { sessions, breakthroughs, mindsetShifts, goals };
+  return { sessions, breakthroughs, mindsetShifts, goals, constellationLinks };
 }
 
 // Mock data shared with the demo escape hatches on /home, /goals,

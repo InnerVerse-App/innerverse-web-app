@@ -18,6 +18,19 @@ type Props = {
   // "/goals?demo=1" so navigation stays in demo. Real mode uses
   // "/goals" (default).
   goalsHref?: string;
+  // Map of breakthrough_id → contributing star ids. When a breakthrough
+  // is selected, lines are drawn from it to those stars.
+  constellationLinks?: Map<
+    string,
+    { sessionIds: string[]; shiftIds: string[]; goalIds: string[] }
+  >;
+  // The currently-selected breakthrough id (from the URL query param).
+  // null when no constellation is selected.
+  selectedBreakthroughId?: string | null;
+  // URL prefix for selecting a breakthrough — appended with
+  // `&constellation=<id>` (or `?constellation=<id>`). Demo passes
+  // "/progress?demo=1"; real passes "/progress".
+  selectHrefBase?: string;
 };
 
 const SESSION_COLOR = "#59A4C0";
@@ -47,12 +60,58 @@ const FAR_STARS: Array<{ x: number; y: number; size: number }> = [
 // minimum tap target (44pt).
 const TAP_PADDING = "p-3";
 
-export function Constellation({ layout, hasGoals, goalsHref = "/goals" }: Props) {
+export function Constellation({
+  layout,
+  hasGoals,
+  goalsHref = "/goals",
+  constellationLinks,
+  selectedBreakthroughId = null,
+  selectHrefBase = "/progress",
+}: Props) {
   const isEmpty =
     layout.sessions.length === 0 &&
     layout.breakthroughs.length === 0 &&
     layout.mindsetShifts.length === 0 &&
     layout.goals.length === 0;
+
+  // Build the line endpoints when a breakthrough is selected. Each
+  // line goes from the breakthrough star to a contributing star.
+  const selectedLinks =
+    selectedBreakthroughId && constellationLinks
+      ? constellationLinks.get(selectedBreakthroughId)
+      : null;
+  const selectedBreakthrough = selectedBreakthroughId
+    ? layout.breakthroughs.find((b) => b.id === selectedBreakthroughId)
+    : null;
+  const lines: Array<{ x1: number; y1: number; x2: number; y2: number }> = [];
+  if (selectedBreakthrough && selectedLinks) {
+    const sessionById = new Map(layout.sessions.map((s) => [s.id, s]));
+    const shiftById = new Map(layout.mindsetShifts.map((m) => [m.id, m]));
+    const goalById = new Map(layout.goals.map((g) => [g.id, g]));
+    const x1 = selectedBreakthrough.x * 100;
+    const y1 = selectedBreakthrough.y * 100;
+    for (const id of selectedLinks.sessionIds) {
+      const t = sessionById.get(id);
+      if (t) lines.push({ x1, y1, x2: t.x * 100, y2: t.y * 100 });
+    }
+    for (const id of selectedLinks.shiftIds) {
+      const t = shiftById.get(id);
+      if (t) lines.push({ x1, y1, x2: t.x * 100, y2: t.y * 100 });
+    }
+    for (const id of selectedLinks.goalIds) {
+      const t = goalById.get(id);
+      if (t) lines.push({ x1, y1, x2: t.x * 100, y2: t.y * 100 });
+    }
+  }
+
+  // Pill-row helper: build the URL for "select breakthrough X". The
+  // base is "/progress" or "/progress?demo=1"; we append the right
+  // separator.
+  const buildSelectUrl = (breakthroughId: string | null) => {
+    const sep = selectHrefBase.includes("?") ? "&" : "?";
+    if (breakthroughId === null) return selectHrefBase;
+    return `${selectHrefBase}${sep}constellation=${breakthroughId}`;
+  };
 
   return (
     <section className="mt-6">
@@ -62,6 +121,58 @@ export function Constellation({ layout, hasGoals, goalsHref = "/goals" }: Props)
         sit farther out. Bright stars are recent; faded stars are
         waiting for you to return.
       </p>
+
+      {constellationLinks && layout.breakthroughs.length > 0 ? (
+        <div className="mt-4">
+          <p className="mb-2 text-[11px] uppercase tracking-wide text-neutral-500">
+            Constellations
+          </p>
+          {/* Horizontal scrollable pill row. Each pill links to a
+              breakthrough's constellation; the lines draw on the
+              server-rendered next page. */}
+          <div className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
+            <div className="flex w-max gap-2">
+              <Link
+                href={buildSelectUrl(null)}
+                className={
+                  "shrink-0 rounded-full border px-3 py-1 text-xs transition " +
+                  (selectedBreakthroughId === null
+                    ? "border-white/40 bg-white/10 text-white"
+                    : "border-white/10 text-neutral-400 hover:border-white/30 hover:text-neutral-200")
+                }
+              >
+                All
+              </Link>
+              {layout.breakthroughs.map((b) => {
+                const isActive = selectedBreakthroughId === b.id;
+                return (
+                  <Link
+                    key={b.id}
+                    href={buildSelectUrl(b.id)}
+                    className={
+                      "shrink-0 rounded-full border px-3 py-1 text-xs transition " +
+                      (isActive
+                        ? "text-white"
+                        : "border-white/10 text-neutral-400 hover:text-neutral-200")
+                    }
+                    style={
+                      isActive
+                        ? {
+                            borderColor: `${BREAKTHROUGH_COLOR}80`,
+                            background: `${BREAKTHROUGH_COLOR}1a`,
+                            boxShadow: `0 0 8px ${BREAKTHROUGH_COLOR}40`,
+                          }
+                        : undefined
+                    }
+                  >
+                    {b.content}
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       <div
         className="relative mt-4 aspect-square w-full overflow-hidden rounded-xl border border-white/10"
@@ -83,6 +194,33 @@ export function Constellation({ layout, hasGoals, goalsHref = "/goals" }: Props)
             aria-hidden
           />
         ))}
+
+        {/* White constellation lines, drawn behind stars. Visible
+            only when a breakthrough's constellation is selected. */}
+        {lines.length > 0 ? (
+          <svg
+            className="pointer-events-none absolute inset-0 h-full w-full"
+            viewBox="0 0 100 100"
+            preserveAspectRatio="none"
+            aria-hidden
+          >
+            {lines.map((ln, i) => (
+              <line
+                key={i}
+                x1={ln.x1}
+                y1={ln.y1}
+                x2={ln.x2}
+                y2={ln.y2}
+                stroke="white"
+                strokeWidth={0.3}
+                strokeOpacity={0.45}
+                strokeLinecap="round"
+                vectorEffect="non-scaling-stroke"
+                style={{ filter: "drop-shadow(0 0 1px rgba(255,255,255,0.5))" }}
+              />
+            ))}
+          </svg>
+        ) : null}
 
         {/* Center "now" nucleus — small bright marker showing the
             point everything radiates from. */}
