@@ -54,15 +54,17 @@ export function hashFloat(input: string, seed = 0): number {
   return (h % 10000) / 10000;
 }
 
-// Recency curve: 0 days → 1.0; ≥30 days → 0.3 floor; linear between.
+// Recency curve: 0 days → 1.0; ≥30 days → 0.15 floor; linear between.
 // Floor exists so neglected items stay visible (the "fading gauge").
+// Floor is intentionally low — the whole point is that stale items
+// look ghostly so the user notices.
 export function recencyOpacity(
   whenIso: string | null,
   nowMs: number = Date.now(),
 ): number {
-  if (!whenIso) return 0.3;
+  if (!whenIso) return 0.15;
   const ageDays = Math.max(0, (nowMs - Date.parse(whenIso)) / 86_400_000);
-  return Math.max(0.3, 1 - (ageDays / 30) * 0.7);
+  return Math.max(0.15, 1 - (ageDays / 30) * 0.85);
 }
 
 // X-position helper for time-based items: maps a date to a position
@@ -130,8 +132,8 @@ export function computeLayout(input: {
     input.breakthroughs.map((b) => {
       const parent = sessionById.get(b.sessionId);
       const angle = hashFloat(b.id, 7) * Math.PI * 2;
-      const radiusX = 0.05;
-      const radiusY = 0.07;
+      const radiusX = 0.075;
+      const radiusY = 0.10;
       const px = parent?.x ?? 0.5;
       const py = parent?.y ?? 0.5;
       return {
@@ -164,14 +166,14 @@ export function computeLayout(input: {
         const peer = sessionPeers[Math.floor(hashFloat(m.id, 17) * sessionPeers.length)];
         anchorX = peer.x;
         anchorY = peer.y;
-        radiusX = 0.025;
-        radiusY = 0.035;
+        radiusX = 0.04;
+        radiusY = 0.055;
       } else {
         const parent = sessionById.get(m.sessionId);
         anchorX = parent?.x ?? 0.5;
         anchorY = parent?.y ?? 0.5;
-        radiusX = 0.06;
-        radiusY = 0.08;
+        radiusX = 0.085;
+        radiusY = 0.115;
       }
       return {
         ...m,
@@ -188,7 +190,10 @@ export function computeLayout(input: {
   // and don't compete with the session band.
   const positionedGoals: Positioned<GoalDot>[] = input.goals.map((g) => {
     const x = xForDate(g.lastEngagedAt, windowStartMs, windowEndMs);
-    const y = 0.1 + hashFloat(g.id, 31) * 0.8;
+    // Goal y-range tightened from 0.1–0.9 to 0.15–0.85 so goals don't
+    // press against the panel edges and feel like they're escaping
+    // the constellation.
+    const y = 0.15 + hashFloat(g.id, 31) * 0.7;
     return {
       ...g,
       x,

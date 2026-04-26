@@ -1,5 +1,7 @@
 import Link from "next/link";
 
+import { formatDateCompact } from "@/lib/format";
+
 import {
   type ConstellationLayout,
   type Positioned,
@@ -36,12 +38,25 @@ const FAR_STARS: Array<{ x: number; y: number; size: number }> = [
   { x: 88, y: 18, size: 1 },
 ];
 
+// Each Link wrapper carries this padding so the touch target reaches
+// ~44px even though the visible star is small. Matches Apple HIG
+// minimum tap target (44pt).
+const TAP_PADDING = "p-3";
+
 export function Constellation({ layout, hasGoals }: Props) {
   const isEmpty =
     layout.sessions.length === 0 &&
     layout.breakthroughs.length === 0 &&
     layout.mindsetShifts.length === 0 &&
     layout.goals.length === 0;
+
+  // Identify the most-recent session so we can label it "Today" /
+  // its date for orientation. Sessions are pre-sorted oldest→newest
+  // by computeLayout.
+  const latestSessionId =
+    layout.sessions.length > 0
+      ? layout.sessions[layout.sessions.length - 1].id
+      : null;
 
   return (
     <section className="mt-6">
@@ -94,7 +109,11 @@ export function Constellation({ layout, hasGoals }: Props) {
         ) : null}
 
         {layout.sessions.map((s) => (
-          <SessionStar key={s.id} dot={s} />
+          <SessionStar
+            key={s.id}
+            dot={s}
+            isLatest={s.id === latestSessionId}
+          />
         ))}
         {layout.mindsetShifts.map((m) => (
           <MindsetShiftStar key={m.id} dot={m} />
@@ -119,20 +138,28 @@ export function Constellation({ layout, hasGoals }: Props) {
 
       <div className="mt-3 flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-[11px] text-neutral-500">
         <Legend color={SESSION_COLOR} label="Session" />
-        <Legend color={BREAKTHROUGH_COLOR} label="Breakthrough" />
+        <Legend color={BREAKTHROUGH_COLOR} label="Breakthrough" filled />
         <Legend color={MINDSET_COLOR} label="Mindset shift" />
-        <Legend color={GOAL_COLOR} label="Goal" />
+        <Legend color={GOAL_COLOR} label="Goal" outlined />
       </div>
     </section>
   );
 }
 
-function SessionStar({ dot }: { dot: Positioned<SessionDot> }) {
+function SessionStar({
+  dot,
+  isLatest,
+}: {
+  dot: Positioned<SessionDot>;
+  isLatest: boolean;
+}) {
+  const dateLabel = formatDateCompact(dot.endedAt);
   return (
     <Link
       href={`/sessions/${dot.id}`}
-      aria-label="Open session"
-      className="absolute -translate-x-1/2 -translate-y-1/2"
+      aria-label={`Open session from ${dateLabel}`}
+      title={`Session — ${dateLabel}`}
+      className={`absolute -translate-x-1/2 -translate-y-1/2 ${TAP_PADDING}`}
       style={{
         left: `${dot.x * 100}%`,
         top: `${dot.y * 100}%`,
@@ -140,12 +167,20 @@ function SessionStar({ dot }: { dot: Positioned<SessionDot> }) {
       }}
     >
       <span
-        className="block h-3 w-3 rounded-full transition hover:scale-125"
+        className="block h-2.5 w-2.5 rounded-full transition hover:scale-125"
         style={{
           background: SESSION_COLOR,
-          boxShadow: `0 0 6px ${SESSION_COLOR}, 0 0 14px ${SESSION_COLOR}80`,
+          boxShadow: `0 0 4px ${SESSION_COLOR}, 0 0 10px ${SESSION_COLOR}80, inset 0 0 0 0.5px rgba(0,5,10,0.6)`,
         }}
       />
+      {isLatest ? (
+        <span
+          className="pointer-events-none absolute left-1/2 top-full mt-1 -translate-x-1/2 whitespace-nowrap text-[10px] font-medium text-white/80"
+          aria-hidden
+        >
+          Today
+        </span>
+      ) : null}
     </Link>
   );
 }
@@ -155,7 +190,8 @@ function BreakthroughStar({ dot }: { dot: Positioned<BreakthroughDot> }) {
     <Link
       href={`/sessions/${dot.sessionId}`}
       aria-label={`Breakthrough: ${dot.content}`}
-      className="absolute -translate-x-1/2 -translate-y-1/2"
+      title={`Breakthrough — ${dot.content}`}
+      className={`absolute -translate-x-1/2 -translate-y-1/2 ${TAP_PADDING}`}
       style={{
         left: `${dot.x * 100}%`,
         top: `${dot.y * 100}%`,
@@ -163,10 +199,10 @@ function BreakthroughStar({ dot }: { dot: Positioned<BreakthroughDot> }) {
       }}
     >
       <span
-        className="block h-3.5 w-3.5 rounded-full transition hover:scale-125"
+        className="block h-4 w-4 rounded-full transition hover:scale-125"
         style={{
           background: BREAKTHROUGH_COLOR,
-          boxShadow: `0 0 8px ${BREAKTHROUGH_COLOR}, 0 0 18px ${BREAKTHROUGH_COLOR}cc, 0 0 32px ${BREAKTHROUGH_COLOR}60`,
+          boxShadow: `0 0 10px ${BREAKTHROUGH_COLOR}, 0 0 22px ${BREAKTHROUGH_COLOR}cc, 0 0 36px ${BREAKTHROUGH_COLOR}66, inset 0 0 0 0.5px rgba(0,5,10,0.7)`,
         }}
       />
     </Link>
@@ -178,7 +214,8 @@ function MindsetShiftStar({ dot }: { dot: Positioned<MindsetShiftDot> }) {
     <Link
       href={`/sessions/${dot.sessionId}`}
       aria-label={`Mindset shift: ${dot.content}`}
-      className="absolute -translate-x-1/2 -translate-y-1/2"
+      title={`Mindset shift — ${dot.content}`}
+      className={`absolute -translate-x-1/2 -translate-y-1/2 ${TAP_PADDING}`}
       style={{
         left: `${dot.x * 100}%`,
         top: `${dot.y * 100}%`,
@@ -189,19 +226,23 @@ function MindsetShiftStar({ dot }: { dot: Positioned<MindsetShiftDot> }) {
         className="block h-2 w-2 rounded-full transition hover:scale-150"
         style={{
           background: MINDSET_COLOR,
-          boxShadow: `0 0 4px ${MINDSET_COLOR}, 0 0 10px ${MINDSET_COLOR}80`,
+          boxShadow: `0 0 3px ${MINDSET_COLOR}, 0 0 8px ${MINDSET_COLOR}80, inset 0 0 0 0.5px rgba(0,5,10,0.6)`,
         }}
       />
     </Link>
   );
 }
 
+// Goal stars are rings, not filled dots. The visual cue says "this
+// is a container — a practice you keep returning to" rather than a
+// moment-in-time event.
 function GoalStar({ dot }: { dot: Positioned<GoalDot> }) {
   return (
     <Link
       href="/goals"
       aria-label={`Goal: ${dot.title}`}
-      className="absolute -translate-x-1/2 -translate-y-1/2"
+      title={`Goal — ${dot.title}`}
+      className={`absolute -translate-x-1/2 -translate-y-1/2 ${TAP_PADDING}`}
       style={{
         left: `${dot.x * 100}%`,
         top: `${dot.y * 100}%`,
@@ -209,22 +250,45 @@ function GoalStar({ dot }: { dot: Positioned<GoalDot> }) {
       }}
     >
       <span
-        className="block h-2.5 w-2.5 rounded-full transition hover:scale-150"
+        className="block h-3.5 w-3.5 rounded-full transition hover:scale-125"
         style={{
-          background: GOAL_COLOR,
-          boxShadow: `0 0 5px ${GOAL_COLOR}, 0 0 12px ${GOAL_COLOR}80`,
+          background: `${GOAL_COLOR}26`,
+          border: `1.5px solid ${GOAL_COLOR}`,
+          boxShadow: `0 0 5px ${GOAL_COLOR}80, 0 0 12px ${GOAL_COLOR}40`,
         }}
       />
     </Link>
   );
 }
 
-function Legend({ color, label }: { color: string; label: string }) {
+function Legend({
+  color,
+  label,
+  outlined = false,
+  filled = false,
+}: {
+  color: string;
+  label: string;
+  outlined?: boolean;
+  filled?: boolean;
+}) {
   return (
     <span className="inline-flex items-center gap-1.5">
       <span
         className="inline-block h-2 w-2 rounded-full"
-        style={{ background: color, boxShadow: `0 0 4px ${color}` }}
+        style={
+          outlined
+            ? {
+                background: `${color}26`,
+                border: `1.5px solid ${color}`,
+              }
+            : filled
+              ? {
+                  background: color,
+                  boxShadow: `0 0 4px ${color}, 0 0 8px ${color}80`,
+                }
+              : { background: color, boxShadow: `0 0 4px ${color}` }
+        }
         aria-hidden
       />
       {label}
