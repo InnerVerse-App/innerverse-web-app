@@ -527,12 +527,19 @@ const PROGRESS_SHORTS = [
   "Boundaries with warmth.",
   "Disagreement without disconnection.",
 ];
+// Derive a realistic started_at by subtracting a 25-55min duration
+// from ended_at. Stable per session id.
+function startedAtFor(id: string, endedAtIso: string): string {
+  const durationMin = 25 + Math.floor(hashFloat(`dur_${id}`) * 31); // 25-55
+  return new Date(Date.parse(endedAtIso) - durationMin * 60_000).toISOString();
+}
+
 export const DEMO_SESSIONS_LIST = [..._DEMO.sessions]
   .sort((a, b) => Date.parse(b.endedAt) - Date.parse(a.endedAt))
   .slice(0, 50)
   .map((s) => ({
     id: s.id,
-    started_at: s.endedAt, // use ended_at as a proxy in demo
+    started_at: startedAtFor(s.id, s.endedAt),
     ended_at: s.endedAt,
     summary: pickIdx(SESSION_SUMMARIES, `summ${s.id}`),
     progress_summary_short: pickIdx(PROGRESS_SHORTS, `prog${s.id}`),

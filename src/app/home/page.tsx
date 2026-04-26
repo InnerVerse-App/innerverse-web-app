@@ -316,7 +316,10 @@ export default async function HomePage({
         <TopGoalCard topGoal={topGoal} />
       </div>
 
-      <PersonalGrowthProgressCard items={recentGrowth} />
+      <PersonalGrowthProgressCard
+        items={recentGrowth}
+        sessionsBase={isDemo ? "/sessions?demo=1" : "/sessions"}
+      />
       <RecentBreakthroughsCard
         items={recentBreakthroughs}
         progressBase={isDemo ? "/progress?demo=1" : "/progress"}

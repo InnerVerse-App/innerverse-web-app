@@ -15,9 +15,17 @@ export type RecentGrowthItem = {
 
 type Props = {
   items: RecentGrowthItem[];
+  // Demo mode passes "/sessions?demo=1"; real passes "/sessions".
+  // Each item links to that base + &session=<id>#s-<id> so tapping
+  // a growth theme on Home jumps to the Sessions tab with that
+  // session highlighted + auto-expanded.
+  sessionsBase?: string;
 };
 
-export function PersonalGrowthProgressCard({ items }: Props) {
+export function PersonalGrowthProgressCard({
+  items,
+  sessionsBase = "/sessions",
+}: Props) {
   return (
     <section className="mt-6 rounded-xl border border-white/10 bg-white/[0.02] p-5">
       <div className="flex items-center gap-3">
@@ -51,20 +59,24 @@ export function PersonalGrowthProgressCard({ items }: Props) {
       ) : (
         <>
           <ul className="mt-4 flex flex-col gap-2">
-            {items.map((item) => (
-              <li key={item.sessionId}>
-                <Link
-                  href={`/sessions/${item.sessionId}`}
-                  className="block rounded-lg border border-transparent px-2 py-2 transition hover:border-brand-primary/30 hover:bg-white/5"
-                >
-                  <p className="text-sm font-medium text-white">{item.title}</p>
-                  <RecencyBar lastEngagedAt={item.endedAt} color="#59A4C0" />
-                  {item.note ? (
-                    <p className="mt-2 text-sm text-neutral-400">{item.note}</p>
-                  ) : null}
-                </Link>
-              </li>
-            ))}
+            {items.map((item) => {
+              const sep = sessionsBase.includes("?") ? "&" : "?";
+              const href = `${sessionsBase}${sep}session=${item.sessionId}#s-${item.sessionId}`;
+              return (
+                <li key={item.sessionId}>
+                  <Link
+                    href={href}
+                    className="block rounded-lg border border-transparent px-2 py-2 transition hover:border-brand-primary/30 hover:bg-white/5"
+                  >
+                    <p className="text-sm font-medium text-white">{item.title}</p>
+                    <RecencyBar lastEngagedAt={item.endedAt} color="#59A4C0" />
+                    {item.note ? (
+                      <p className="mt-2 text-sm text-neutral-400">{item.note}</p>
+                    ) : null}
+                  </Link>
+                </li>
+              );
+            })}
           </ul>
           <Link
             href="/progress"
