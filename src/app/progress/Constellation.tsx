@@ -1,43 +1,48 @@
+"use client";
+
 import Link from "next/link";
+import { TransformComponent, TransformWrapper } from "react-zoom-pan-pinch";
 
 import { formatDateCompact } from "@/lib/format";
 
 import { ConstellationRename } from "./ConstellationRename";
 import {
+  type BreakthroughDot,
   type ConstellationLayout,
+  type GoalDot,
+  type MindsetShiftDot,
   type Positioned,
   type SessionDot,
-  type BreakthroughDot,
-  type MindsetShiftDot,
-  type GoalDot,
 } from "./constellation-layout";
+
+type ConstellationLinkRow = {
+  name: string;
+  sessionIds: string[];
+  shiftIds: string[];
+  goalIds: string[];
+};
+
+type CurrentParams = {
+  demo?: string;
+  constellation?: string;
+  window?: string;
+};
 
 type Props = {
   layout: ConstellationLayout;
   hasGoals: boolean;
-  // Optional URL prefix for the goals link target. Demo mode passes
-  // "/goals?demo=1" so navigation stays in demo. Real mode uses
-  // "/goals" (default).
+  // /goals link target. Demo mode passes "/goals?demo=1".
   goalsHref?: string;
   // Map of breakthrough_id → constellation name + contributing star
   // ids. When a breakthrough is selected, lines are drawn from it to
-  // those stars and the pill row labels it with `name`.
-  constellationLinks?: Map<
-    string,
-    {
-      name: string;
-      sessionIds: string[];
-      shiftIds: string[];
-      goalIds: string[];
-    }
-  >;
-  // The currently-selected breakthrough id (from the URL query param).
-  // null when no constellation is selected.
+  // those stars.
+  constellationLinks?: Map<string, ConstellationLinkRow>;
+  // The currently-selected breakthrough id (URL query param).
   selectedBreakthroughId?: string | null;
-  // URL prefix for selecting a breakthrough — appended with
-  // `&constellation=<id>` (or `?constellation=<id>`). Demo passes
-  // "/progress?demo=1"; real passes "/progress".
-  selectHrefBase?: string;
+  // URL helper inputs — current page params + base path. Constellation
+  // builds its own toggle URLs from these so all params are preserved.
+  basePath?: string;
+  currentParams?: CurrentParams;
 };
 
 const SESSION_COLOR = "#59A4C0";
@@ -62,10 +67,25 @@ const FAR_STARS: Array<{ x: number; y: number; size: number }> = [
   { x: 88, y: 18, size: 1 },
 ];
 
-// Each Link wrapper carries this padding so the touch target reaches
-// ~44px even though the visible star is small. Matches Apple HIG
-// minimum tap target (44pt).
+// 8-pointed compass-rose star polygon (viewBox 0..24, outer r=10,
+// inner r=4). Distinct shape from circles so breakthroughs read as
+// the rare, hard-won, "shining" moments.
+const STAR_POINTS =
+  "12,2 13.53,8.30 19.07,4.93 15.70,10.47 22,12 15.70,13.53 19.07,19.07 13.53,15.70 12,22 10.47,15.70 4.93,19.07 8.30,13.53 2,12 8.30,10.47 4.93,4.93 10.47,8.30";
+
+// Tap-zone padding around each star — keeps the visible dot small
+// while making the touch target reach ~44pt (Apple HIG minimum).
 const TAP_PADDING = "p-3";
+
+// Time-window options shown in the toggle pill row above the panel.
+// Value is what gets written to ?window=<value>; the layout-level
+// ageWindowDays parsing happens server-side in the page.
+const WINDOW_OPTIONS: Array<{ value: string; label: string }> = [
+  { value: "30", label: "30d" },
+  { value: "90", label: "90d" },
+  { value: "365", label: "1yr" },
+  { value: "all", label: "All" },
+];
 
 export function Constellation({
   layout,
@@ -73,7 +93,8 @@ export function Constellation({
   goalsHref = "/goals",
   constellationLinks,
   selectedBreakthroughId = null,
-  selectHrefBase = "/progress",
+  basePath = "/progress",
+  currentParams = {},
 }: Props) {
   const isEmpty =
     layout.sessions.length === 0 &&
@@ -83,9 +104,7 @@ export function Constellation({
 
   // Build a chronological "path of progression" through the
   // constellation — each contributing star ordered by when it
-  // happened, with the breakthrough as the final point. The user
-  // reads the line as their journey leading up to the breakthrough,
-  // not as a hub-and-spoke radiating from it.
+  // happened, with the breakthrough as the final point.
   const selectedLinks =
     selectedBreakthroughId && constellationLinks
       ? constellationLinks.get(selectedBreakthroughId)
@@ -120,9 +139,6 @@ export function Constellation({
     }
     for (const id of selectedLinks.goalIds) {
       const g = goalById.get(id);
-      // Goals without lastEngagedAt have no time-position in the
-      // journey — skip them from the chain. They still appear as
-      // green rings on the panel.
       if (g && g.lastEngagedAt) {
         chainPoints.push({
           x: g.x * 100,
@@ -131,9 +147,6 @@ export function Constellation({
         });
       }
     }
-    // Sort oldest → newest, then append the breakthrough as the
-    // terminal point. The chain visually leads the eye from the
-    // earliest contributor to the breakthrough.
     chainPoints.sort((a, b) => a.t - b.t);
     chainPoints.push({
       x: selectedBreakthrough.x * 100,
@@ -142,36 +155,67 @@ export function Constellation({
     });
   }
 
-  // Pill-row helper: build the URL for "select breakthrough X". The
-  // base is "/progress" or "/progress?demo=1"; we append the right
-  // separator.
-  const buildSelectUrl = (breakthroughId: string | null) => {
-    const sep = selectHrefBase.includes("?") ? "&" : "?";
-    if (breakthroughId === null) return selectHrefBase;
-    return `${selectHrefBase}${sep}constellation=${breakthroughId}`;
-  };
+  // URL helper — merge overrides into currentParams, then back into a
+  // query string. Pass null to clear a param. Used by every toggle
+  // pill so the user can switch one knob without losing the others.
+  function buildUrl(overrides: Partial<Record<keyof CurrentParams, string | null>>): string {
+    const merged: Record<string, string> = {};
+    for (const [k, v] of Object.entries(currentParams)) {
+      if (typeof v === "string") merged[k] = v;
+    }
+    for (const [k, v] of Object.entries(overrides)) {
+      if (v === null) delete merged[k];
+      else if (v !== undefined) merged[k] = v;
+    }
+    const qs = new URLSearchParams(merged).toString();
+    return qs ? `${basePath}?${qs}#constellation-map` : `${basePath}#constellation-map`;
+  }
+
+  const currentWindow = currentParams.window ?? "30";
 
   return (
-    <section className="mt-6">
+    <section id="constellation-map" className="mt-6 scroll-mt-4">
       <h2 className="text-base font-semibold text-white">Your Constellation</h2>
       <p className="mt-1 text-xs text-neutral-500">
         Your growth radiating outward. The center is now; older stars
-        sit farther out. Bright stars are recent; faded stars are
-        waiting for you to return.
+        sit farther out. Pinch to zoom in on a busy area.
       </p>
+
+      {/* Time-window pill row */}
+      <div className="mt-3 flex items-center gap-2">
+        <span className="text-[11px] uppercase tracking-wide text-neutral-500">
+          Window
+        </span>
+        <div className="flex gap-1">
+          {WINDOW_OPTIONS.map((opt) => {
+            const isActive = currentWindow === opt.value;
+            return (
+              <Link
+                key={opt.value}
+                href={buildUrl({ window: opt.value })}
+                className={
+                  "rounded-full border px-2.5 py-0.5 text-[11px] transition " +
+                  (isActive
+                    ? "border-white/40 bg-white/10 text-white"
+                    : "border-white/10 text-neutral-400 hover:text-neutral-200")
+                }
+              >
+                {opt.label}
+              </Link>
+            );
+          })}
+        </div>
+      </div>
 
       {constellationLinks && layout.breakthroughs.length > 0 ? (
         <div className="mt-4">
           <p className="mb-2 text-[11px] uppercase tracking-wide text-neutral-500">
             Constellations
           </p>
-          {/* Horizontal scrollable pill row. Each pill links to a
-              breakthrough's constellation; the lines draw on the
-              server-rendered next page. */}
           <div className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
             <div className="flex w-max gap-2">
               <Link
-                href={buildSelectUrl(null)}
+                href={buildUrl({ constellation: null })}
                 className={
                   "shrink-0 rounded-full border px-3 py-1 text-xs transition " +
                   (selectedBreakthroughId === null
@@ -184,13 +228,11 @@ export function Constellation({
               {layout.breakthroughs.map((b) => {
                 const isActive = selectedBreakthroughId === b.id;
                 const links = constellationLinks?.get(b.id);
-                // Pill label = constellation name when one exists,
-                // otherwise the breakthrough's content as a fallback.
                 const pillLabel = links?.name ?? b.content;
                 return (
                   <Link
                     key={b.id}
-                    href={buildSelectUrl(b.id)}
+                    href={buildUrl({ constellation: b.id })}
                     title={`${pillLabel} — ${b.content}`}
                     className={
                       "shrink-0 rounded-full border px-3 py-1 text-xs transition " +
@@ -228,114 +270,151 @@ export function Constellation({
         style={{
           background:
             "radial-gradient(circle at center, rgba(89,164,192,0.12) 0%, transparent 35%), radial-gradient(ellipse at 75% 25%, rgba(89,164,192,0.06) 0%, transparent 50%), radial-gradient(ellipse at 25% 75%, rgba(89,164,192,0.05) 0%, transparent 50%), radial-gradient(circle at center, #02101c 0%, #00050a 80%)",
+          touchAction: "none",
         }}
       >
-        {FAR_STARS.map((s, i) => (
-          <span
-            key={`bg-${i}`}
-            className="absolute rounded-full bg-white/30"
-            style={{
-              left: `${s.x}%`,
-              top: `${s.y}%`,
-              width: `${s.size}px`,
-              height: `${s.size}px`,
-            }}
-            aria-hidden
-          />
-        ))}
+        <TransformWrapper
+          initialScale={1}
+          minScale={1}
+          maxScale={4}
+          // Pinch-zoom is the primary mobile gesture. Wheel zoom on
+          // desktop uses ctrl+wheel by default; we leave that off so
+          // ordinary page scroll still works when the cursor is over
+          // the panel. Desktop users can use the +/- buttons.
+          wheel={{ disabled: true }}
+          pinch={{ disabled: false, step: 5 }}
+          panning={{ disabled: false, velocityDisabled: true }}
+          doubleClick={{ disabled: false, mode: "toggle", step: 1 }}
+          limitToBounds={true}
+        >
+          {({ zoomIn, zoomOut, resetTransform }) => (
+            <>
+              <TransformComponent
+                wrapperStyle={{ width: "100%", height: "100%" }}
+                contentStyle={{ width: "100%", height: "100%" }}
+              >
+                <div className="relative h-full w-full">
+                  {FAR_STARS.map((s, i) => (
+                    <span
+                      key={`bg-${i}`}
+                      className="absolute rounded-full bg-white/30"
+                      style={{
+                        left: `${s.x}%`,
+                        top: `${s.y}%`,
+                        width: `${s.size}px`,
+                        height: `${s.size}px`,
+                      }}
+                      aria-hidden
+                    />
+                  ))}
 
-        {/* White constellation polyline — chronological chain through
-            the contributing stars to the breakthrough. Drawn behind
-            stars. Visible only when a constellation is selected. */}
-        {chainPoints.length >= 2 ? (
-          <svg
-            className="pointer-events-none absolute inset-0 h-full w-full"
-            viewBox="0 0 100 100"
-            preserveAspectRatio="none"
-            aria-hidden
-          >
-            <polyline
-              points={chainPoints
-                .map((p) => `${p.x},${p.y}`)
-                .join(" ")}
-              fill="none"
-              stroke="white"
-              strokeWidth={0.3}
-              strokeOpacity={0.5}
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              vectorEffect="non-scaling-stroke"
-              style={{ filter: "drop-shadow(0 0 1px rgba(255,255,255,0.5))" }}
-            />
-          </svg>
-        ) : null}
+                  {chainPoints.length >= 2 ? (
+                    <svg
+                      className="pointer-events-none absolute inset-0 h-full w-full"
+                      viewBox="0 0 100 100"
+                      preserveAspectRatio="none"
+                      aria-hidden
+                    >
+                      <polyline
+                        points={chainPoints.map((p) => `${p.x},${p.y}`).join(" ")}
+                        fill="none"
+                        stroke="white"
+                        strokeWidth={0.3}
+                        strokeOpacity={0.5}
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        vectorEffect="non-scaling-stroke"
+                        style={{
+                          filter: "drop-shadow(0 0 1px rgba(255,255,255,0.5))",
+                        }}
+                      />
+                    </svg>
+                  ) : null}
 
-        {/* Center "now" reference — small dim white dot with a hint
-            of halo. Visible but not a glaring beacon. */}
-        <span
-          className="pointer-events-none absolute left-1/2 top-1/2 h-1 w-1 -translate-x-1/2 -translate-y-1/2 rounded-full"
-          style={{
-            background: "rgba(255,255,255,0.5)",
-            boxShadow: "0 0 3px rgba(255,255,255,0.35)",
-          }}
-          aria-hidden
-        />
+                  <span
+                    className="pointer-events-none absolute left-1/2 top-1/2 h-1 w-1 -translate-x-1/2 -translate-y-1/2 rounded-full"
+                    style={{
+                      background: "rgba(255,255,255,0.5)",
+                      boxShadow: "0 0 3px rgba(255,255,255,0.35)",
+                    }}
+                    aria-hidden
+                  />
 
-        {/* Render order = z-stack from bottom to top. Most-prominent
-            and most-tap-likely items render last so their hit zone
-            wins on overlap. Goals are rings (semi-transparent) so
-            they sit lower than the filled session/breakthrough dots. */}
-        {layout.mindsetShifts.map((m) => (
-          <MindsetShiftStar key={m.id} dot={m} />
-        ))}
-        {layout.goals.map((g) => (
-          <GoalStar key={g.id} dot={g} goalsHref={goalsHref} />
-        ))}
-        {layout.sessions.map((s) => (
-          <SessionStar key={s.id} dot={s} />
-        ))}
-        {layout.breakthroughs.map((b) => (
-          <BreakthroughStar key={b.id} dot={b} />
-        ))}
+                  {layout.mindsetShifts.map((m) => (
+                    <MindsetShiftStar key={m.id} dot={m} />
+                  ))}
+                  {layout.goals.map((g) => (
+                    <GoalStar key={g.id} dot={g} goalsHref={goalsHref} />
+                  ))}
+                  {layout.sessions.map((s) => (
+                    <SessionStar key={s.id} dot={s} />
+                  ))}
+                  {layout.breakthroughs.map((b) => (
+                    <BreakthroughStar key={b.id} dot={b} />
+                  ))}
 
-        {isEmpty ? (
-          <div className="absolute inset-0 flex items-center justify-center px-8 text-center">
-            <p className="text-sm text-neutral-400">
-              {hasGoals
-                ? "Your constellation will form as you complete coaching sessions."
-                : "Start a coaching session and your constellation will begin to form."}
-            </p>
-          </div>
-        ) : null}
+                  {isEmpty ? (
+                    <div className="absolute inset-0 flex items-center justify-center px-8 text-center">
+                      <p className="text-sm text-neutral-400">
+                        {hasGoals
+                          ? "Your constellation will form as you complete coaching sessions."
+                          : "Start a coaching session and your constellation will begin to form."}
+                      </p>
+                    </div>
+                  ) : null}
+                </div>
+              </TransformComponent>
+
+              {/* Zoom controls — overlayed in the panel's bottom-right
+                  corner. + zoom in, − zoom out, ◯ reset. Click targets
+                  are large enough for thumb taps; on mobile pinch is
+                  the primary gesture and these are a fallback. */}
+              <div className="pointer-events-none absolute inset-0 flex items-end justify-end p-3">
+                <div className="pointer-events-auto flex flex-col gap-1.5 rounded-md border border-white/10 bg-black/40 p-1 backdrop-blur-sm">
+                  <ZoomButton onClick={() => zoomIn()} ariaLabel="Zoom in">
+                    +
+                  </ZoomButton>
+                  <ZoomButton onClick={() => zoomOut()} ariaLabel="Zoom out">
+                    −
+                  </ZoomButton>
+                  <ZoomButton onClick={() => resetTransform()} ariaLabel="Reset zoom">
+                    <span className="text-[10px]">⟲</span>
+                  </ZoomButton>
+                </div>
+              </div>
+            </>
+          )}
+        </TransformWrapper>
       </div>
 
       <div className="mt-3 flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-[11px] text-neutral-500">
-        <Legend
-          color={SESSION_COLOR}
-          label="Session"
-          shape="dot"
-          size={6}
-        />
-        <Legend
-          color={GOAL_COLOR}
-          label="Goal"
-          shape="ring"
-          size={10}
-        />
-        <Legend
-          color={MINDSET_COLOR}
-          label="Mindset shift"
-          shape="dot"
-          size={14}
-        />
-        <Legend
-          color={BREAKTHROUGH_COLOR}
-          label="Breakthrough"
-          shape="star"
-          size={16}
-        />
+        <Legend color={SESSION_COLOR} label="Session" shape="dot" size={6} />
+        <Legend color={GOAL_COLOR} label="Goal" shape="ring" size={10} />
+        <Legend color={MINDSET_COLOR} label="Mindset shift" shape="dot" size={14} />
+        <Legend color={BREAKTHROUGH_COLOR} label="Breakthrough" shape="star" size={16} />
       </div>
     </section>
+  );
+}
+
+function ZoomButton({
+  onClick,
+  ariaLabel,
+  children,
+}: {
+  onClick: () => void;
+  ariaLabel: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={ariaLabel}
+      className="flex h-7 w-7 items-center justify-center rounded text-sm text-neutral-300 transition hover:bg-white/10 hover:text-white"
+    >
+      {children}
+    </button>
   );
 }
 
@@ -363,13 +442,6 @@ function SessionStar({ dot }: { dot: Positioned<SessionDot> }) {
     </Link>
   );
 }
-
-// 8-pointed compass-rose star polygon centered in viewBox 0..24.
-// Outer radius 10, inner radius 4. Long cardinal + diagonal rays.
-// Distinct shape from circles so breakthroughs read as the rare,
-// hard-won, "shining" moments.
-const STAR_POINTS =
-  "12,2 13.53,8.30 19.07,4.93 15.70,10.47 22,12 15.70,13.53 19.07,19.07 13.53,15.70 12,22 10.47,15.70 4.93,19.07 8.30,13.53 2,12 8.30,10.47 4.93,4.93 10.47,8.30";
 
 function BreakthroughStar({ dot }: { dot: Positioned<BreakthroughDot> }) {
   return (
@@ -399,9 +471,6 @@ function BreakthroughStar({ dot }: { dot: Positioned<BreakthroughDot> }) {
   );
 }
 
-// Mindset shifts render as the LARGEST circles. They represent
-// persistent evolving entities — the most "work" of any non-
-// breakthrough star.
 function MindsetShiftStar({ dot }: { dot: Positioned<MindsetShiftDot> }) {
   return (
     <a
@@ -426,9 +495,6 @@ function MindsetShiftStar({ dot }: { dot: Positioned<MindsetShiftDot> }) {
   );
 }
 
-// Goal stars are MEDIUM circles rendered as rings. The ring cue
-// says "this is a container — a practice you keep returning to"
-// rather than a moment-in-time event.
 function GoalStar({
   dot,
   goalsHref,
@@ -468,9 +534,7 @@ function Legend({
 }: {
   color: string;
   label: string;
-  // Visual shape — matches the in-panel rendering for that category.
   shape: "dot" | "ring" | "star";
-  // Pixel size of the swatch.
   size: number;
 }) {
   const swatch =

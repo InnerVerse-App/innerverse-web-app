@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@clerk/nextjs/server";
 
@@ -21,6 +22,16 @@ import { buildDemoData, DEMO_LEGACY_SECTIONS } from "./demo-data";
 export const dynamic = "force-dynamic";
 
 const CONSTELLATION_SESSION_LIMIT = 10;
+
+// Convert the ?window= query value into the layout's ageWindowDays
+// parameter. "all" maps to 10 years — effectively no clamping for any
+// realistic data set.
+function parseAgeWindowDays(windowParam: string | undefined): number {
+  if (windowParam === "all") return 365 * 10;
+  if (windowParam === "365") return 365;
+  if (windowParam === "90") return 90;
+  return 30;
+}
 
 type TextRow = {
   id: string;
@@ -73,7 +84,10 @@ async function loadLegacySections(
   };
 }
 
-async function loadConstellation(ctx: UserSupabase): Promise<{
+async function loadConstellation(
+  ctx: UserSupabase,
+  ageWindowDays: number,
+): Promise<{
   layout: ConstellationLayout;
   hasGoals: boolean;
 }> {
@@ -105,8 +119,6 @@ async function loadConstellation(ctx: UserSupabase): Promise<{
   if (breakthroughsRes.error) throw breakthroughsRes.error;
   if (insightsRes.error) throw insightsRes.error;
 
-  // Goals carry only last_session_id; fetch ended_at for those that
-  // aren't already in the recent-sessions set.
   const goalLastSessionIds = activeGoals
     .map((g) => g.last_session_id)
     .filter((id): id is string => !!id && !sessionIds.includes(id));
@@ -132,6 +144,7 @@ async function loadConstellation(ctx: UserSupabase): Promise<{
   }
 
   const layout = computeLayout({
+    ageWindowDays,
     sessions: sessionRows.map((s) => ({ id: s.id, endedAt: s.ended_at })),
     breakthroughs: ((breakthroughsRes.data ?? []) as BreakthroughRow[]).map(
       (b) => ({
@@ -162,17 +175,18 @@ async function loadConstellation(ctx: UserSupabase): Promise<{
 export default async function ProgressPage({
   searchParams,
 }: {
-  searchParams: Promise<{ demo?: string; constellation?: string }>;
+  searchParams: Promise<{
+    demo?: string;
+    constellation?: string;
+    window?: string;
+  }>;
 }) {
-  // Demo escape hatch runs BEFORE the auth gate so the redirect to
-  // /sign-in doesn't strip the `?demo=1` query param. Demo data is
-  // entirely hardcoded — no PII, no DB read — so skipping auth here
-  // is acceptable for a preview-only branch (this commit is reverted
-  // before merging V.1).
   const params = await searchParams;
+  const ageWindowDays = parseAgeWindowDays(params.window);
+
   if (params.demo === "1") {
     const demo = buildDemoData();
-    const layout = computeLayout(demo);
+    const layout = computeLayout({ ...demo, ageWindowDays });
     const selectedBreakthroughId = params.constellation ?? null;
     return (
       <PageShell active="progress" navHrefSuffix="?demo=1">
@@ -187,13 +201,25 @@ export default async function ProgressPage({
           goalsHref="/goals?demo=1"
           constellationLinks={demo.constellationLinks}
           selectedBreakthroughId={selectedBreakthroughId}
-          selectHrefBase="/progress?demo=1"
+          basePath="/progress"
+          currentParams={{
+            demo: "1",
+            constellation: selectedBreakthroughId ?? undefined,
+            window: params.window,
+          }}
         />
         <Section
           title="Breakthroughs"
           items={DEMO_LEGACY_SECTIONS.breakthroughs}
           recencyColor="#DCA114"
           idPrefix="bt"
+          selectableConstellationFor={(item) =>
+            buildSelectUrl({
+              demo: "1",
+              constellation: item.id,
+              window: params.window,
+            })
+          }
         />
         <Section
           title="Insights"
@@ -215,9 +241,10 @@ export default async function ProgressPage({
   if (!ctx) redirect("/sign-in");
 
   const [{ layout, hasGoals }, { breakthroughs, insights }] = await Promise.all([
-    loadConstellation(ctx),
+    loadConstellation(ctx, ageWindowDays),
     loadLegacySections(ctx),
   ]);
+  const selectedBreakthroughId = params.constellation ?? null;
 
   return (
     <PageShell active="progress">
@@ -226,13 +253,29 @@ export default async function ProgressPage({
         Track your personal growth development.
       </p>
 
-      <Constellation layout={layout} hasGoals={hasGoals} />
+      <Constellation
+        layout={layout}
+        hasGoals={hasGoals}
+        constellationLinks={undefined}
+        selectedBreakthroughId={selectedBreakthroughId}
+        basePath="/progress"
+        currentParams={{
+          constellation: selectedBreakthroughId ?? undefined,
+          window: params.window,
+        }}
+      />
 
       <Section
         title="Breakthroughs"
         items={breakthroughs}
         recencyColor="#DCA114"
         idPrefix="bt"
+        selectableConstellationFor={(item) =>
+          buildSelectUrl({
+            constellation: item.id,
+            window: params.window,
+          })
+        }
       />
       <Section
         title="Insights"
@@ -244,19 +287,37 @@ export default async function ProgressPage({
   );
 }
 
+// Build a /progress URL with the given params, preserving any others
+// that are passed in. Tail anchor `#constellation-map` makes the
+// browser scroll back up to the star map after navigating.
+function buildSelectUrl(params: {
+  demo?: string;
+  constellation?: string;
+  window?: string;
+}): string {
+  const sp = new URLSearchParams();
+  if (params.demo) sp.set("demo", params.demo);
+  if (params.constellation) sp.set("constellation", params.constellation);
+  if (params.window) sp.set("window", params.window);
+  const qs = sp.toString();
+  return qs ? `/progress?${qs}#constellation-map` : `/progress#constellation-map`;
+}
+
 function Section({
   title,
   items,
   recencyColor,
   idPrefix,
+  selectableConstellationFor,
 }: {
   title: string;
   items: TextRow[];
   recencyColor: string;
-  // Each list item gets `id="${idPrefix}-${item.id}"` so constellation
-  // stars can anchor-scroll to a specific entry. "bt" for
-  // breakthroughs, "ms" for mindset shifts.
   idPrefix: string;
+  // Optional: when provided, each card becomes a Link that selects
+  // that item's constellation on the star map (and anchor-scrolls
+  // back up). Used for the Breakthroughs section.
+  selectableConstellationFor?: (item: TextRow) => string;
 }) {
   return (
     <section className="mt-6 rounded-xl border border-white/10 bg-white/[0.02] p-5">
@@ -268,22 +329,38 @@ function Section({
         </p>
       ) : (
         <ul className="mt-3 flex flex-col gap-3">
-          {items.map((item) => (
-            <li
-              key={item.id}
-              id={`${idPrefix}-${item.id}`}
-              className="scroll-mt-20 rounded-lg border border-white/10 bg-white/[0.02] px-4 py-3 target:border-brand-primary target:bg-brand-primary/10 target:shadow-[0_0_0_1px_var(--tw-shadow-color)] target:shadow-brand-primary/40"
-            >
-              <p className="text-sm text-neutral-200">{item.content}</p>
-              <p className="mt-1 text-[11px] text-neutral-500">
-                {formatDateCompact(item.created_at)}
-              </p>
-              <RecencyBar
-                lastEngagedAt={item.created_at}
-                color={recencyColor}
-              />
-            </li>
-          ))}
+          {items.map((item) => {
+            const cardClass =
+              "scroll-mt-20 block rounded-lg border border-white/10 bg-white/[0.02] px-4 py-3 transition target:border-brand-primary target:bg-brand-primary/10 target:shadow-[0_0_0_1px_var(--tw-shadow-color)] target:shadow-brand-primary/40";
+            const inner = (
+              <>
+                <p className="text-sm text-neutral-200">{item.content}</p>
+                <p className="mt-1 text-[11px] text-neutral-500">
+                  {formatDateCompact(item.created_at)}
+                </p>
+                <RecencyBar
+                  lastEngagedAt={item.created_at}
+                  color={recencyColor}
+                />
+              </>
+            );
+            const href = selectableConstellationFor?.(item);
+            return (
+              <li key={item.id} id={`${idPrefix}-${item.id}`}>
+                {href ? (
+                  <Link
+                    href={href}
+                    className={cardClass + " hover:border-brand-primary/40"}
+                    title="View this constellation on the star map"
+                  >
+                    {inner}
+                  </Link>
+                ) : (
+                  <div className={cardClass}>{inner}</div>
+                )}
+              </li>
+            );
+          })}
         </ul>
       )}
     </section>

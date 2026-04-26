@@ -70,21 +70,25 @@ export function hashFloat(input: string, seed = 0): number {
   return (h % 10000) / 10000;
 }
 
-// Recency curve: 0 days → 1.0; ≥30 days → 0.15 floor; linear between.
-// Floor exists so neglected items stay visible (the "fading gauge").
+// Default time window (days) used by both distance-from-center and
+// recency-opacity curves. Today = 0 days = at the inner ring (and
+// full brightness); ageWindowDays+ = at the outer ring (and floor
+// brightness). Configurable per-render so the user can toggle 30d /
+// 90d / 1yr / All-time views.
+export const DEFAULT_AGE_WINDOW_DAYS = 30;
+
+// Recency curve: 0 days → 1.0; ≥ageWindowDays → 0.15 floor; linear
+// between. Floor exists so neglected items stay visible (the
+// "fading gauge").
 export function recencyOpacity(
   whenIso: string | null,
   nowMs: number = Date.now(),
+  ageWindowDays: number = DEFAULT_AGE_WINDOW_DAYS,
 ): number {
   if (!whenIso) return 0.15;
   const ageDays = Math.max(0, (nowMs - Date.parse(whenIso)) / 86_400_000);
-  return Math.max(0.15, 1 - (ageDays / 30) * 0.85);
+  return Math.max(0.15, 1 - (ageDays / ageWindowDays) * 0.85);
 }
-
-// Window for distance-from-center mapping. Today = 0 days = at the
-// inner ring; ageWindowDays+ = at the outer ring. Items older than
-// the window clamp to the outer edge.
-const AGE_WINDOW_DAYS = 30;
 
 // Inner / outer ring radii as fractions of the panel's half-width.
 // Stars are positioned in the annulus between these. Inner ring is
@@ -96,10 +100,11 @@ const OUTER_RING_FRAC = 0.46;
 function distanceFromCenter(
   whenIso: string | null,
   nowMs: number,
+  ageWindowDays: number,
 ): number {
   if (!whenIso) return OUTER_RING_FRAC;
   const ageDays = Math.max(0, (nowMs - Date.parse(whenIso)) / 86_400_000);
-  const t = Math.min(1, ageDays / AGE_WINDOW_DAYS);
+  const t = Math.min(1, ageDays / ageWindowDays);
   return INNER_RING_FRAC + t * (OUTER_RING_FRAC - INNER_RING_FRAC);
 }
 
@@ -127,21 +132,26 @@ export function computeLayout(input: {
   mindsetShifts: MindsetShiftDot[];
   goals: GoalDot[];
   nowMs?: number;
+  // Time window for distance + opacity. Today → inner ring +
+  // brightest. ageWindowDays old → outer ring + floor opacity.
+  // User-toggleable via the constellation panel's window pills.
+  ageWindowDays?: number;
 }): ConstellationLayout {
   const nowMs = input.nowMs ?? Date.now();
+  const ageWindowDays = input.ageWindowDays ?? DEFAULT_AGE_WINDOW_DAYS;
 
   // Goals: angle = hash by goal id (each goal is a stable direction).
   const positionedGoals: Positioned<GoalDot>[] = input.goals.map((g) => {
     const angle = hashFloat(g.id, 41) * Math.PI * 2;
     const distance =
-      distanceFromCenter(g.lastEngagedAt, nowMs) +
+      distanceFromCenter(g.lastEngagedAt, nowMs, ageWindowDays) +
       jitter(g.id, 43, 0.015);
     const { x, y } = polarToXY(angle, distance);
     return {
       ...g,
       x: clampPanel(x),
       y: clampPanel(y),
-      opacity: recencyOpacity(g.lastEngagedAt, nowMs),
+      opacity: recencyOpacity(g.lastEngagedAt, nowMs, ageWindowDays),
     };
   });
 
@@ -150,13 +160,14 @@ export function computeLayout(input: {
     (s) => {
       const angle = hashFloat(s.id, 11) * Math.PI * 2;
       const distance =
-        distanceFromCenter(s.endedAt, nowMs) + jitter(s.id, 19, 0.015);
+        distanceFromCenter(s.endedAt, nowMs, ageWindowDays) +
+        jitter(s.id, 19, 0.015);
       const { x, y } = polarToXY(angle, distance);
       return {
         ...s,
         x: clampPanel(x),
         y: clampPanel(y),
-        opacity: recencyOpacity(s.endedAt, nowMs),
+        opacity: recencyOpacity(s.endedAt, nowMs, ageWindowDays),
       };
     },
   );
@@ -168,13 +179,14 @@ export function computeLayout(input: {
     input.breakthroughs.map((b) => {
       const angle = hashFloat(b.id, 7) * Math.PI * 2;
       const distance =
-        distanceFromCenter(b.createdAt, nowMs) + jitter(b.id, 23, 0.02);
+        distanceFromCenter(b.createdAt, nowMs, ageWindowDays) +
+        jitter(b.id, 23, 0.02);
       const { x, y } = polarToXY(angle, distance);
       return {
         ...b,
         x: clampPanel(x),
         y: clampPanel(y),
-        opacity: recencyOpacity(b.createdAt, nowMs),
+        opacity: recencyOpacity(b.createdAt, nowMs, ageWindowDays),
       };
     });
 
@@ -185,13 +197,14 @@ export function computeLayout(input: {
     input.mindsetShifts.map((m) => {
       const angle = hashFloat(m.id, 13) * Math.PI * 2;
       const distance =
-        distanceFromCenter(m.createdAt, nowMs) + jitter(m.id, 29, 0.02);
+        distanceFromCenter(m.createdAt, nowMs, ageWindowDays) +
+        jitter(m.id, 29, 0.02);
       const { x, y } = polarToXY(angle, distance);
       return {
         ...m,
         x: clampPanel(x),
         y: clampPanel(y),
-        opacity: recencyOpacity(m.createdAt, nowMs),
+        opacity: recencyOpacity(m.createdAt, nowMs, ageWindowDays),
       };
     });
 
