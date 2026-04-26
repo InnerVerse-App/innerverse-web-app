@@ -192,6 +192,98 @@ const GOAL_TITLES = [
   "Stay in conflict without leaving",
 ];
 
+// Snippet pools — for demo only. In production these would be
+// LLM-generated at session-end and stored alongside each
+// contributor link. Each (parent, contributor) pair gets a
+// deterministic snippet pulled from one of these pools so the
+// expanded detail view feels narrative without needing real
+// AI generation.
+
+const SESSION_SNIPPETS = [
+  "Tracked the body's no during a recurring conversation.",
+  "Surfaced the cost of staying small in this dynamic.",
+  "Named the fear behind a long-standing avoidance.",
+  "Returned to the body when the spinning started.",
+  "Met your anger without collapsing into apology.",
+  "Distinguished real harm from ordinary discomfort.",
+  "Allowed disagreement without disconnecting.",
+  "Honored what doesn't fit anymore.",
+  "Noticed the rescuer urge and stayed in your seat.",
+  "Felt the pull to over-explain and chose silence.",
+  "Spoke the no you'd been swallowing.",
+  "Recognized the inner critic as a borrowed voice.",
+  "Practiced direct communication with someone difficult.",
+  "Met your discomfort as data, not a problem.",
+  "Sat with a feeling without solving it.",
+  "Trusted your slow yes.",
+  "Identified people-pleasing as self-erasure in this case.",
+  "Held people without saving them.",
+  "Released a quiet permission you'd been seeking.",
+  "Practiced staying when you usually leave.",
+  "Caught the preemptive apology before it landed.",
+  "Walked back from over-functioning mid-conversation.",
+  "Let yourself be misunderstood without rushing to clarify.",
+  "Noticed the moment your body went still.",
+  "Said the second sentence you usually swallow.",
+];
+
+const SHIFT_SNIPPETS = [
+  "Cleared space for a new way of meeting yourself.",
+  "Made room for direction without certainty.",
+  "Loosened the grip of perfectionist striving.",
+  "Reframed an old reflex as a learned response.",
+  "Untethered comfort from alignment.",
+  "Helped you stop performing connection.",
+  "Made disagreement feel survivable.",
+  "Showed your slowness as a kind of intelligence.",
+  "Gave permission to be in process rather than arrived.",
+  "Quieted the inner monitor for the first time.",
+  "Unlocked direct communication where you'd been hedging.",
+  "Made boundaries feel like care instead of punishment.",
+];
+
+const BREAKTHROUGH_SNIPPETS = [
+  "Crystallized a long-held question into action.",
+  "Anchored a new pattern in the body, not just the mind.",
+  "Made the abstract concrete for the first time.",
+  "Marked the threshold between old and new identity.",
+  "Carried forward into how you show up now.",
+  "Set the foundation everything since has built on.",
+];
+
+const NOTICED_SNIPPETS = [
+  "Your language changed from 'should' to 'choose.'",
+  "You held disagreement without scrambling to fix it.",
+  "Anger arrived as information rather than threat.",
+  "Your body relaxed before your mind agreed.",
+  "You stopped translating yourself mid-sentence.",
+  "Slowness landed as enough.",
+  "You named a pattern instead of repeating it.",
+  "A new word for an old pattern.",
+  "You stopped seeking permission mid-conversation.",
+  "The reflexive 'sorry' fell out of your speech.",
+  "You sat with the discomfort without explaining it away.",
+  "Your direction-of-attention shifted before you noticed.",
+];
+
+// Deterministic snippet picker — same (parent, contributor, pool)
+// always returns the same snippet across renders.
+export function snippetFor(
+  parentId: string,
+  contributorId: string,
+  kind: "session" | "shift" | "breakthrough" | "noticed",
+): string {
+  const pool =
+    kind === "session"
+      ? SESSION_SNIPPETS
+      : kind === "shift"
+        ? SHIFT_SNIPPETS
+        : kind === "breakthrough"
+          ? BREAKTHROUGH_SNIPPETS
+          : NOTICED_SNIPPETS;
+  return pickIdx(pool, `${kind}_${parentId}_${contributorId}`);
+}
+
 // Deterministic pick from an array using a hash key — stable across
 // renders so the demo dataset never shuffles.
 function pickIdx<T>(arr: T[], key: string, salt = 0): T {

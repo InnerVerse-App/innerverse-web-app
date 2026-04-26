@@ -17,7 +17,7 @@ import {
   type ConstellationLayout,
   computeLayout,
 } from "./constellation-layout";
-import { buildDemoData, DEMO_LEGACY_SECTIONS } from "./demo-data";
+import { buildDemoData, DEMO_LEGACY_SECTIONS, snippetFor } from "./demo-data";
 
 export const dynamic = "force-dynamic";
 
@@ -225,12 +225,20 @@ export default async function ProgressPage({
       const sessions = links.sessionIds
         .map((id) => sessionById.get(id))
         .filter((s): s is NonNullable<typeof s> => !!s)
-        .map((s) => ({ id: s.id, endedAt: s.endedAt }))
+        .map((s) => ({
+          id: s.id,
+          endedAt: s.endedAt,
+          snippet: snippetFor(item.id, s.id, "session"),
+        }))
         .sort((a, b) => Date.parse(b.endedAt) - Date.parse(a.endedAt));
       const shifts = links.shiftIds
         .map((id) => shiftById.get(id))
         .filter((m): m is NonNullable<typeof m> => !!m)
-        .map((m) => ({ id: m.id, content: m.content }));
+        .map((m) => ({
+          id: m.id,
+          content: m.content,
+          snippet: snippetFor(item.id, m.id, "shift"),
+        }));
       const narrative =
         sessions.length > 0
           ? `This breakthrough emerged from ${sessions.length} coaching session${sessions.length === 1 ? "" : "s"} and ${shifts.length} mindset shift${shifts.length === 1 ? "" : "s"} of practice. The constellation "${links.name}" traces the path.`
@@ -244,13 +252,24 @@ export default async function ProgressPage({
       const sessions = links.sessionIds
         .map((id) => sessionById.get(id))
         .filter((s): s is NonNullable<typeof s> => !!s)
-        .map((s) => ({ id: s.id, endedAt: s.endedAt }))
+        .map((s) => ({
+          id: s.id,
+          endedAt: s.endedAt,
+          snippet: snippetFor(item.id, s.id, "session"),
+        }))
         .sort((a, b) => Date.parse(b.endedAt) - Date.parse(a.endedAt));
       const narrative =
         sessions.length > 0
           ? `This shift emerged across ${sessions.length} coaching session${sessions.length === 1 ? "" : "s"} of practice.`
           : "This shift is still settling in.";
-      return { narrative, sessions, shifts: [], breakthroughs: [] };
+      const noticedAt = snippetFor(item.id, item.id, "noticed");
+      return {
+        narrative,
+        noticedAt,
+        sessions,
+        shifts: [],
+        breakthroughs: [],
+      };
     };
 
     return (
@@ -408,21 +427,26 @@ function buildSelectUrl(params: {
   return qs ? `/progress?${qs}#constellation-map` : `/progress#constellation-map`;
 }
 
-// Structured detail for the expanded card body. Sessions become
-// clickable chips linking to /sessions/{id}; shifts and breakthroughs
-// render as a bulleted list of their content.
+// Structured detail for the expanded card body. Each contributor
+// (session, shift, breakthrough) carries a per-relationship snippet
+// describing how it contributed to the parent item — not just a
+// list of links. For real data this snippet will be LLM-generated at
+// session-end; demo derives it deterministically from a pool.
 type ExpandedDetail = {
-  // One-line human summary that frames the lists.
+  // One-line human framing for the body.
   narrative: string;
-  // Sessions that contributed, with date for the chip label.
-  sessions: { id: string; endedAt: string }[];
-  // Mindset shifts that contributed (only relevant for breakthroughs
-  // and goals — shifts themselves don't list sub-shifts).
-  shifts: { id: string; content: string }[];
-  // Breakthroughs that contributed (only relevant for goals — both
-  // breakthroughs and shifts ignore goals as contributors per the
-  // influence model).
-  breakthroughs: { id: string; content: string }[];
+  // For mindset shifts only: a short line about what was noticed
+  // that flagged this as a shift (the moment the user's pattern
+  // visibly changed).
+  noticedAt?: string;
+  // Sessions that contributed, each with a per-relationship snippet
+  // describing what happened in that session relative to this item.
+  sessions: { id: string; endedAt: string; snippet: string }[];
+  // Mindset shifts that contributed (relevant for breakthroughs and
+  // goals — shifts themselves don't list sub-shifts).
+  shifts: { id: string; content: string; snippet: string }[];
+  // Breakthroughs that contributed (relevant for goals only).
+  breakthroughs: { id: string; content: string; snippet: string }[];
 };
 
 // Expandable list — caps to ~5 items visible; older content scrolls.
@@ -515,22 +539,39 @@ function ExpandableList({
                           <p className="text-xs leading-relaxed text-neutral-300">
                             {detail.narrative}
                           </p>
+                          {detail.noticedAt ? (
+                            <div>
+                              <p className="mb-1 text-[10px] font-medium uppercase tracking-wide text-neutral-500">
+                                What was noticed
+                              </p>
+                              <p className="text-xs italic leading-relaxed text-neutral-300">
+                                &ldquo;{detail.noticedAt}&rdquo;
+                              </p>
+                            </div>
+                          ) : null}
                           {detail.sessions.length > 0 ? (
                             <div>
                               <p className="mb-1.5 text-[10px] font-medium uppercase tracking-wide text-neutral-500">
                                 Sessions
                               </p>
-                              <div className="flex flex-wrap gap-1.5">
+                              <ul className="flex flex-col gap-2">
                                 {detail.sessions.map((s) => (
-                                  <Link
+                                  <li
                                     key={s.id}
-                                    href={`/sessions/${s.id}`}
-                                    className="inline-flex items-center rounded-full border border-white/10 bg-white/[0.03] px-2.5 py-0.5 text-[11px] text-neutral-300 transition hover:border-brand-primary/40 hover:text-brand-primary"
+                                    className="flex items-start gap-2"
                                   >
-                                    {formatDateCompact(s.endedAt)}
-                                  </Link>
+                                    <Link
+                                      href={`/sessions/${s.id}`}
+                                      className="inline-flex shrink-0 items-center rounded-full border border-white/10 bg-white/[0.03] px-2 py-0.5 text-[11px] text-neutral-300 transition hover:border-brand-primary/40 hover:text-brand-primary"
+                                    >
+                                      {formatDateCompact(s.endedAt)}
+                                    </Link>
+                                    <span className="text-xs text-neutral-300">
+                                      {s.snippet}
+                                    </span>
+                                  </li>
                                 ))}
-                              </div>
+                              </ul>
                             </div>
                           ) : null}
                           {detail.shifts.length > 0 ? (
@@ -538,18 +579,25 @@ function ExpandableList({
                               <p className="mb-1.5 text-[10px] font-medium uppercase tracking-wide text-neutral-500">
                                 Mindset shifts that paved the way
                               </p>
-                              <ul className="flex flex-col gap-1 text-xs text-neutral-300">
+                              <ul className="flex flex-col gap-2 text-xs">
                                 {detail.shifts.map((s) => (
                                   <li
                                     key={s.id}
-                                    className="flex items-start gap-1.5"
+                                    className="flex items-start gap-2"
                                   >
                                     <span
                                       className="mt-1.5 inline-block h-1.5 w-1.5 shrink-0 rounded-full"
                                       style={{ background: "#A78BFA" }}
                                       aria-hidden
                                     />
-                                    <span>{s.content}</span>
+                                    <div className="flex-1">
+                                      <p className="font-medium text-neutral-200">
+                                        {s.content}
+                                      </p>
+                                      <p className="mt-0.5 text-neutral-400">
+                                        {s.snippet}
+                                      </p>
+                                    </div>
                                   </li>
                                 ))}
                               </ul>
@@ -560,11 +608,11 @@ function ExpandableList({
                               <p className="mb-1.5 text-[10px] font-medium uppercase tracking-wide text-neutral-500">
                                 Breakthroughs along the way
                               </p>
-                              <ul className="flex flex-col gap-1 text-xs text-neutral-300">
+                              <ul className="flex flex-col gap-2 text-xs">
                                 {detail.breakthroughs.map((b) => (
                                   <li
                                     key={b.id}
-                                    className="flex items-start gap-1.5"
+                                    className="flex items-start gap-2"
                                   >
                                     <span
                                       className="mt-1 inline-block h-2 w-2 shrink-0"
@@ -575,7 +623,14 @@ function ExpandableList({
                                       }}
                                       aria-hidden
                                     />
-                                    <span>{b.content}</span>
+                                    <div className="flex-1">
+                                      <p className="font-medium text-neutral-200">
+                                        {b.content}
+                                      </p>
+                                      <p className="mt-0.5 text-neutral-400">
+                                        {b.snippet}
+                                      </p>
+                                    </div>
                                   </li>
                                 ))}
                               </ul>
