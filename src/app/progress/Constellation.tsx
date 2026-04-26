@@ -2,7 +2,11 @@
 
 import Link from "next/link";
 import { useEffect, useRef } from "react";
-import { TransformComponent, TransformWrapper } from "react-zoom-pan-pinch";
+import {
+  type ReactZoomPanPinchRef,
+  TransformComponent,
+  TransformWrapper,
+} from "react-zoom-pan-pinch";
 
 import { formatDateCompact } from "@/lib/format";
 
@@ -135,6 +139,10 @@ export function Constellation({
       inline: "center",
     });
   }, [selectedBreakthroughId]);
+
+  const panelRef = useRef<HTMLDivElement | null>(null);
+  const transformRef = useRef<ReactZoomPanPinchRef | null>(null);
+
   const isEmpty =
     layout.sessions.length === 0 &&
     layout.breakthroughs.length === 0 &&
@@ -252,6 +260,54 @@ export function Constellation({
   // Keep the old name for the rename-component reference below.
   const selectedLinks = selectedConstellationLinks;
 
+  // Auto-zoom the constellation panel to fit the selected constellation.
+  // Measure chainPoints' bounding box (in 0–100 viewBox space), convert
+  // to pixel space using the panel's actual size, then call
+  // setTransform on react-zoom-pan-pinch to pan + zoom. Stable string
+  // key prevents the effect from firing every render with the same data.
+  const chainKey = chainPoints
+    .map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`)
+    .join("|");
+  useEffect(() => {
+    const ctrl = transformRef.current;
+    const panel = panelRef.current;
+    if (!ctrl) return;
+    if (!selectedAnchor || chainPoints.length < 2 || !panel) {
+      ctrl.resetTransform(450);
+      return;
+    }
+    const rect = panel.getBoundingClientRect();
+    const w = rect.width;
+    const h = rect.height;
+    if (w === 0 || h === 0) return;
+    let minX = Infinity;
+    let maxX = -Infinity;
+    let minY = Infinity;
+    let maxY = -Infinity;
+    for (const p of chainPoints) {
+      if (p.x < minX) minX = p.x;
+      if (p.x > maxX) maxX = p.x;
+      if (p.y < minY) minY = p.y;
+      if (p.y > maxY) maxY = p.y;
+    }
+    const bboxWPx = ((maxX - minX) / 100) * w;
+    const bboxHPx = ((maxY - minY) / 100) * h;
+    const padding = 1.6;
+    const desiredScale = Math.min(
+      4,
+      Math.max(
+        1,
+        Math.min(w, h) / Math.max(bboxWPx * padding, bboxHPx * padding, 1),
+      ),
+    );
+    const centerXFrac = (minX + maxX) / 200;
+    const centerYFrac = (minY + maxY) / 200;
+    const translateX = w / 2 - centerXFrac * w * desiredScale;
+    const translateY = h / 2 - centerYFrac * h * desiredScale;
+    ctrl.setTransform(translateX, translateY, desiredScale, 450);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedAnchor?.type, selectedAnchor?.id, chainKey]);
+
   // URL helper — merge overrides into currentParams, then back into a
   // query string. Pass null to clear a param. Used by every toggle
   // pill so the user can switch one knob without losing the others.
@@ -364,6 +420,7 @@ export function Constellation({
       ) : null}
 
       <div
+        ref={panelRef}
         className="relative mt-4 aspect-square w-full overflow-hidden rounded-xl"
         style={{
           background:
@@ -372,6 +429,7 @@ export function Constellation({
         }}
       >
         <TransformWrapper
+          ref={transformRef}
           initialScale={1}
           minScale={1}
           maxScale={4}
