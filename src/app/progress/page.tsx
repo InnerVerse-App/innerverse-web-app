@@ -412,8 +412,12 @@ function ExpandableList({
         </p>
       ) : (
         <div
-          className="mt-3 overflow-y-auto pr-1"
-          style={{ maxHeight: `${visibleHeightPx}px` }}
+          className="mt-3 overflow-y-auto pr-1 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-white/15 [&::-webkit-scrollbar-track]:bg-transparent"
+          style={{
+            maxHeight: `${visibleHeightPx}px`,
+            scrollbarWidth: "thin",
+            scrollbarColor: "rgba(255,255,255,0.15) transparent",
+          }}
         >
           <ul className="flex flex-col gap-3">
             {items.map((item) => {
