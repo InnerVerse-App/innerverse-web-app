@@ -18,11 +18,17 @@ type Props = {
   // "/goals?demo=1" so navigation stays in demo. Real mode uses
   // "/goals" (default).
   goalsHref?: string;
-  // Map of breakthrough_id → contributing star ids. When a breakthrough
-  // is selected, lines are drawn from it to those stars.
+  // Map of breakthrough_id → constellation name + contributing star
+  // ids. When a breakthrough is selected, lines are drawn from it to
+  // those stars and the pill row labels it with `name`.
   constellationLinks?: Map<
     string,
-    { sessionIds: string[]; shiftIds: string[]; goalIds: string[] }
+    {
+      name: string;
+      sessionIds: string[];
+      shiftIds: string[];
+      goalIds: string[];
+    }
   >;
   // The currently-selected breakthrough id (from the URL query param).
   // null when no constellation is selected.
@@ -145,10 +151,15 @@ export function Constellation({
               </Link>
               {layout.breakthroughs.map((b) => {
                 const isActive = selectedBreakthroughId === b.id;
+                const links = constellationLinks?.get(b.id);
+                // Pill label = constellation name when one exists,
+                // otherwise the breakthrough's content as a fallback.
+                const pillLabel = links?.name ?? b.content;
                 return (
                   <Link
                     key={b.id}
                     href={buildSelectUrl(b.id)}
+                    title={`${pillLabel} — ${b.content}`}
                     className={
                       "shrink-0 rounded-full border px-3 py-1 text-xs transition " +
                       (isActive
@@ -165,7 +176,7 @@ export function Constellation({
                         : undefined
                     }
                   >
-                    {b.content}
+                    {pillLabel}
                   </Link>
                 );
               })}
@@ -263,10 +274,30 @@ export function Constellation({
       </div>
 
       <div className="mt-3 flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-[11px] text-neutral-500">
-        <Legend color={SESSION_COLOR} label="Session" />
-        <Legend color={BREAKTHROUGH_COLOR} label="Breakthrough" filled />
-        <Legend color={MINDSET_COLOR} label="Mindset shift" />
-        <Legend color={GOAL_COLOR} label="Goal" outlined />
+        <Legend
+          color={SESSION_COLOR}
+          label="Session"
+          shape="dot"
+          size={6}
+        />
+        <Legend
+          color={GOAL_COLOR}
+          label="Goal"
+          shape="ring"
+          size={10}
+        />
+        <Legend
+          color={MINDSET_COLOR}
+          label="Mindset shift"
+          shape="dot"
+          size={14}
+        />
+        <Legend
+          color={BREAKTHROUGH_COLOR}
+          label="Breakthrough"
+          shape="star"
+          size={16}
+        />
       </div>
     </section>
   );
@@ -287,15 +318,21 @@ function SessionStar({ dot }: { dot: Positioned<SessionDot> }) {
       }}
     >
       <span
-        className="block h-2.5 w-2.5 rounded-full transition hover:scale-125"
+        className="block h-1.5 w-1.5 rounded-full transition hover:scale-150"
         style={{
           background: SESSION_COLOR,
-          boxShadow: `0 0 4px ${SESSION_COLOR}, 0 0 10px ${SESSION_COLOR}80, inset 0 0 0 0.5px rgba(0,5,10,0.6)`,
+          boxShadow: `0 0 3px ${SESSION_COLOR}, 0 0 8px ${SESSION_COLOR}80, inset 0 0 0 0.5px rgba(0,5,10,0.6)`,
         }}
       />
     </Link>
   );
 }
+
+// 5-pointed star polygon centered in viewBox 0..24. Outer radius 10,
+// inner radius 4. Distinct shape from circles so breakthroughs read
+// as the rare, hard-won moments.
+const STAR_POINTS =
+  "12,2 14.35,8.76 21.51,8.91 15.80,13.24 17.88,20.09 12,16 6.12,20.09 8.20,13.24 2.49,8.91 9.65,8.76";
 
 function BreakthroughStar({ dot }: { dot: Positioned<BreakthroughDot> }) {
   return (
@@ -310,17 +347,24 @@ function BreakthroughStar({ dot }: { dot: Positioned<BreakthroughDot> }) {
         opacity: dot.opacity,
       }}
     >
-      <span
-        className="block h-4 w-4 rounded-full transition hover:scale-125"
+      <svg
+        viewBox="0 0 24 24"
+        className="block h-5 w-5 transition hover:scale-125"
         style={{
-          background: BREAKTHROUGH_COLOR,
-          boxShadow: `0 0 10px ${BREAKTHROUGH_COLOR}, 0 0 22px ${BREAKTHROUGH_COLOR}cc, 0 0 36px ${BREAKTHROUGH_COLOR}66, inset 0 0 0 0.5px rgba(0,5,10,0.7)`,
+          filter: `drop-shadow(0 0 4px ${BREAKTHROUGH_COLOR}) drop-shadow(0 0 10px ${BREAKTHROUGH_COLOR}cc) drop-shadow(0 0 18px ${BREAKTHROUGH_COLOR}66)`,
+          overflow: "visible",
         }}
-      />
+        aria-hidden
+      >
+        <polygon points={STAR_POINTS} fill={BREAKTHROUGH_COLOR} />
+      </svg>
     </a>
   );
 }
 
+// Mindset shifts render as the LARGEST circles. They represent
+// persistent evolving entities — the most "work" of any non-
+// breakthrough star.
 function MindsetShiftStar({ dot }: { dot: Positioned<MindsetShiftDot> }) {
   return (
     <a
@@ -335,19 +379,19 @@ function MindsetShiftStar({ dot }: { dot: Positioned<MindsetShiftDot> }) {
       }}
     >
       <span
-        className="block h-2 w-2 rounded-full transition hover:scale-150"
+        className="block h-3.5 w-3.5 rounded-full transition hover:scale-125"
         style={{
           background: MINDSET_COLOR,
-          boxShadow: `0 0 3px ${MINDSET_COLOR}, 0 0 8px ${MINDSET_COLOR}80, inset 0 0 0 0.5px rgba(0,5,10,0.6)`,
+          boxShadow: `0 0 6px ${MINDSET_COLOR}, 0 0 14px ${MINDSET_COLOR}80, inset 0 0 0 0.5px rgba(0,5,10,0.6)`,
         }}
       />
     </a>
   );
 }
 
-// Goal stars are rings, not filled dots. The visual cue says "this
-// is a container — a practice you keep returning to" rather than a
-// moment-in-time event.
+// Goal stars are MEDIUM circles rendered as rings. The ring cue
+// says "this is a container — a practice you keep returning to"
+// rather than a moment-in-time event.
 function GoalStar({
   dot,
   goalsHref,
@@ -355,9 +399,6 @@ function GoalStar({
   dot: Positioned<GoalDot>;
   goalsHref: string;
 }) {
-  // Append the per-goal anchor onto the goalsHref base. Both demo
-  // and real /goals add `id="g-${id}"` to each goal card, so the
-  // browser scrolls there on click.
   return (
     <Link
       href={`${goalsHref}#g-${dot.id}`}
@@ -371,11 +412,11 @@ function GoalStar({
       }}
     >
       <span
-        className="block h-3.5 w-3.5 rounded-full transition hover:scale-125"
+        className="block h-2.5 w-2.5 rounded-full transition hover:scale-125"
         style={{
           background: `${GOAL_COLOR}26`,
           border: `1.5px solid ${GOAL_COLOR}`,
-          boxShadow: `0 0 5px ${GOAL_COLOR}80, 0 0 12px ${GOAL_COLOR}40`,
+          boxShadow: `0 0 4px ${GOAL_COLOR}80, 0 0 10px ${GOAL_COLOR}40`,
         }}
       />
     </Link>
@@ -385,33 +426,56 @@ function GoalStar({
 function Legend({
   color,
   label,
-  outlined = false,
-  filled = false,
+  shape,
+  size,
 }: {
   color: string;
   label: string;
-  outlined?: boolean;
-  filled?: boolean;
+  // Visual shape — matches the in-panel rendering for that category.
+  shape: "dot" | "ring" | "star";
+  // Pixel size of the swatch.
+  size: number;
 }) {
-  return (
-    <span className="inline-flex items-center gap-1.5">
+  const swatch =
+    shape === "star" ? (
+      <svg
+        viewBox="0 0 24 24"
+        width={size}
+        height={size}
+        style={{
+          filter: `drop-shadow(0 0 2px ${color}) drop-shadow(0 0 5px ${color}88)`,
+          overflow: "visible",
+        }}
+        aria-hidden
+      >
+        <polygon points={STAR_POINTS} fill={color} />
+      </svg>
+    ) : shape === "ring" ? (
       <span
-        className="inline-block h-2 w-2 rounded-full"
-        style={
-          outlined
-            ? {
-                background: `${color}26`,
-                border: `1.5px solid ${color}`,
-              }
-            : filled
-              ? {
-                  background: color,
-                  boxShadow: `0 0 4px ${color}, 0 0 8px ${color}80`,
-                }
-              : { background: color, boxShadow: `0 0 4px ${color}` }
-        }
+        className="inline-block rounded-full"
+        style={{
+          width: size,
+          height: size,
+          background: `${color}26`,
+          border: `1.5px solid ${color}`,
+        }}
         aria-hidden
       />
+    ) : (
+      <span
+        className="inline-block rounded-full"
+        style={{
+          width: size,
+          height: size,
+          background: color,
+          boxShadow: `0 0 3px ${color}, 0 0 6px ${color}80`,
+        }}
+        aria-hidden
+      />
+    );
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      {swatch}
       {label}
     </span>
   );

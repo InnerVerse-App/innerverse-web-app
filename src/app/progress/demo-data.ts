@@ -21,10 +21,14 @@ function daysAgoIso(days: number, hours = 10): string {
   return d.toISOString();
 }
 
-// A breakthrough's constellation — which stars led to it. Demo only;
-// real data needs a schema chunk to add contributing_*_ids columns
-// to the breakthroughs table and an LLM session-end tagging step.
+// A breakthrough's constellation — which stars led to it, plus a
+// distinct evocative name for the constellation (separate from the
+// breakthrough's content). Demo only; real data needs a schema chunk
+// to add contributing_*_ids + constellation_name columns to the
+// breakthroughs table and an LLM session-end tagging step that
+// names + populates them.
 export type ConstellationLinks = {
+  name: string;
   sessionIds: string[];
   shiftIds: string[];
   goalIds: string[];
@@ -79,13 +83,11 @@ export function buildDemoData(): {
   // to it. Demo only; real data needs a schema chunk that adds
   // contributing_*_ids columns to the breakthroughs table and an LLM
   // session-end tagging step that populates them.
-  const constellationLinks = new Map<
-    string,
-    { sessionIds: string[]; shiftIds: string[]; goalIds: string[] }
-  >([
+  const constellationLinks = new Map<string, ConstellationLinks>([
     [
       "demo-b1",
       {
+        name: "Belonging Without Bargaining",
         sessionIds: ["demo-s1", "demo-s2"],
         shiftIds: ["demo-m1", "demo-m2"],
         goalIds: ["demo-g1"],
@@ -94,6 +96,7 @@ export function buildDemoData(): {
     [
       "demo-b2",
       {
+        name: "The Honored Edge",
         sessionIds: ["demo-s2", "demo-s3", "demo-s4"],
         shiftIds: ["demo-m2", "demo-m3", "demo-m4"],
         goalIds: ["demo-g2"],
@@ -102,6 +105,7 @@ export function buildDemoData(): {
     [
       "demo-b3",
       {
+        name: "The Sovereign",
         sessionIds: ["demo-s3", "demo-s4"],
         shiftIds: ["demo-m3", "demo-m4"],
         goalIds: ["demo-g1", "demo-g2"],
@@ -110,6 +114,7 @@ export function buildDemoData(): {
     [
       "demo-b4",
       {
+        name: "True North",
         sessionIds: ["demo-s5", "demo-s6"],
         shiftIds: ["demo-m1", "demo-m3", "demo-m5"],
         goalIds: ["demo-g3"],
