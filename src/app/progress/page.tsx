@@ -331,7 +331,7 @@ function Section({
         <ul className="mt-3 flex flex-col gap-3">
           {items.map((item) => {
             const cardClass =
-              "scroll-mt-20 block rounded-lg border border-white/10 bg-white/[0.02] px-4 py-3 transition target:border-brand-primary target:bg-brand-primary/10 target:shadow-[0_0_0_1px_var(--tw-shadow-color)] target:shadow-brand-primary/40";
+              "scroll-mt-20 block rounded-lg border border-white/10 bg-white/[0.02] px-4 py-3 transition target:border-brand-primary target:bg-brand-primary/10 target:shadow-[0_0_18px_rgba(89,164,192,0.35)]";
             const inner = (
               <>
                 <p className="text-sm text-neutral-200">{item.content}</p>
@@ -345,10 +345,17 @@ function Section({
               </>
             );
             const href = selectableConstellationFor?.(item);
+            // The `id` must live on the same element the target:
+            // classes are applied to — CSS :target only matches the
+            // element whose id is the URL fragment. Putting id on the
+            // wrapper <li> with target: styles on the inner card was
+            // the bug that hid the highlight.
+            const targetId = `${idPrefix}-${item.id}`;
             return (
-              <li key={item.id} id={`${idPrefix}-${item.id}`}>
+              <li key={item.id}>
                 {href ? (
                   <Link
+                    id={targetId}
                     href={href}
                     className={cardClass + " hover:border-brand-primary/40"}
                     title="View this constellation on the star map"
@@ -356,7 +363,9 @@ function Section({
                     {inner}
                   </Link>
                 ) : (
-                  <div className={cardClass}>{inner}</div>
+                  <div id={targetId} className={cardClass}>
+                    {inner}
+                  </div>
                 )}
               </li>
             );
