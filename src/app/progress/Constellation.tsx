@@ -224,7 +224,7 @@ export function Constellation({
       ) : null}
 
       <div
-        className="relative mt-4 aspect-square w-full overflow-hidden rounded-xl border border-white/10"
+        className="relative mt-4 aspect-square w-full overflow-hidden rounded-xl"
         style={{
           background:
             "radial-gradient(circle at center, rgba(89,164,192,0.12) 0%, transparent 35%), radial-gradient(ellipse at 75% 25%, rgba(89,164,192,0.06) 0%, transparent 50%), radial-gradient(ellipse at 25% 75%, rgba(89,164,192,0.05) 0%, transparent 50%), radial-gradient(circle at center, #02101c 0%, #00050a 80%)",
