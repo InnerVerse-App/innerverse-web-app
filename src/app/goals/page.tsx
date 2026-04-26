@@ -114,7 +114,8 @@ export default async function GoalsPage({
           {DEMO_GOALS.map((g) => (
             <li
               key={g.id}
-              className="rounded-xl border border-white/10 bg-white/[0.02] p-5"
+              id={`g-${g.id}`}
+              className="scroll-mt-20 rounded-xl border border-white/10 bg-white/[0.02] p-5 target:border-brand-primary/40"
             >
               <h2 className="break-words text-lg font-semibold text-white">
                 {g.title}
@@ -209,7 +210,11 @@ export default async function GoalsPage({
       ) : (
         <ul className="mt-6 flex flex-col gap-4">
           {cards.map((card) => (
-            <li key={card.id}>
+            <li
+              key={card.id}
+              id={`g-${card.id}`}
+              className="scroll-mt-20 target:rounded-xl target:outline target:outline-1 target:outline-brand-primary/40"
+            >
               <GoalCard goal={card} />
             </li>
           ))}

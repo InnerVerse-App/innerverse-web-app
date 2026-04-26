@@ -128,12 +128,33 @@ export function computeLayout(input: {
 
   // Breakthroughs: small offset from their parent session, deterministic
   // angle from the breakthrough id.
+  // Group breakthroughs by session and sort deterministically so we
+  // can assign even-angle positions around the parent session. Even
+  // distribution prevents two breakthroughs in the same session from
+  // landing at the same angle and stacking on top of each other.
+  const rawBreakthroughsBySession = new Map<string, BreakthroughDot[]>();
+  for (const b of input.breakthroughs) {
+    const arr = rawBreakthroughsBySession.get(b.sessionId) ?? [];
+    arr.push(b);
+    rawBreakthroughsBySession.set(b.sessionId, arr);
+  }
+  for (const arr of rawBreakthroughsBySession.values()) {
+    arr.sort((a, b) => a.id.localeCompare(b.id));
+  }
+
   const positionedBreakthroughs: Positioned<BreakthroughDot>[] =
     input.breakthroughs.map((b) => {
       const parent = sessionById.get(b.sessionId);
-      const angle = hashFloat(b.id, 7) * Math.PI * 2;
-      const radiusX = 0.075;
-      const radiusY = 0.10;
+      const peers = rawBreakthroughsBySession.get(b.sessionId) ?? [b];
+      const indexInSession = peers.findIndex((p) => p.id === b.id);
+      // Even-angle distribution around the parent session, with a
+      // hash-based per-session rotation so different sessions don't
+      // all line their breakthroughs up the same way.
+      const baseAngle = (indexInSession / peers.length) * Math.PI * 2;
+      const sessionRotation = hashFloat(b.sessionId, 13) * Math.PI * 2;
+      const angle = baseAngle + sessionRotation;
+      const radiusX = 0.085;
+      const radiusY = 0.115;
       const px = parent?.x ?? 0.5;
       const py = parent?.y ?? 0.5;
       return {
@@ -151,29 +172,51 @@ export function computeLayout(input: {
     breakthroughsBySession.set(b.sessionId, arr);
   }
 
+  // Group mindset shifts by session and sort deterministically so we
+  // can distribute angles evenly around the anchor. Same anti-overlap
+  // strategy as breakthroughs.
+  const rawShiftsBySession = new Map<string, MindsetShiftDot[]>();
+  for (const m of input.mindsetShifts) {
+    const arr = rawShiftsBySession.get(m.sessionId) ?? [];
+    arr.push(m);
+    rawShiftsBySession.set(m.sessionId, arr);
+  }
+  for (const arr of rawShiftsBySession.values()) {
+    arr.sort((a, b) => a.id.localeCompare(b.id));
+  }
+
   // Mindset shifts: orbit their parent breakthrough if one exists in
   // the same session, else orbit the session at a slightly larger
   // radius than breakthroughs use.
   const positionedShifts: Positioned<MindsetShiftDot>[] = input.mindsetShifts.map(
     (m) => {
       const sessionPeers = breakthroughsBySession.get(m.sessionId) ?? [];
-      const angle = hashFloat(m.id, 13) * Math.PI * 2;
+      const peerShifts = rawShiftsBySession.get(m.sessionId) ?? [m];
+      const indexInSession = peerShifts.findIndex((p) => p.id === m.id);
+      const baseAngle = (indexInSession / peerShifts.length) * Math.PI * 2;
+      // Different rotation salt than breakthroughs (17 vs 13) so
+      // shifts and breakthroughs in the same session don't share the
+      // same rotation pattern.
+      const sessionRotation = hashFloat(m.sessionId, 17) * Math.PI * 2;
+      const angle = baseAngle + sessionRotation;
       let anchorX: number;
       let anchorY: number;
       let radiusX: number;
       let radiusY: number;
       if (sessionPeers.length > 0) {
-        const peer = sessionPeers[Math.floor(hashFloat(m.id, 17) * sessionPeers.length)];
+        // Pick a parent breakthrough deterministically by index ratio.
+        const peer =
+          sessionPeers[indexInSession % sessionPeers.length];
         anchorX = peer.x;
         anchorY = peer.y;
-        radiusX = 0.04;
-        radiusY = 0.055;
+        radiusX = 0.05;
+        radiusY = 0.07;
       } else {
         const parent = sessionById.get(m.sessionId);
         anchorX = parent?.x ?? 0.5;
         anchorY = parent?.y ?? 0.5;
-        radiusX = 0.085;
-        radiusY = 0.115;
+        radiusX = 0.095;
+        radiusY = 0.13;
       }
       return {
         ...m,

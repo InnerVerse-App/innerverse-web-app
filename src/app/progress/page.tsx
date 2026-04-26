@@ -179,16 +179,22 @@ export default async function ProgressPage({
           Track your personal growth development.{" "}
           <span className="text-amber-400">(demo mode)</span>
         </p>
-        <Constellation layout={layout} hasGoals={true} />
+        <Constellation
+          layout={layout}
+          hasGoals={true}
+          goalsHref="/goals?demo=1"
+        />
         <Section
           title="Breakthroughs"
           items={DEMO_LEGACY_SECTIONS.breakthroughs}
           recencyColor="#DCA114"
+          idPrefix="bt"
         />
         <Section
           title="Insights"
           items={DEMO_LEGACY_SECTIONS.insights}
           recencyColor="#A78BFA"
+          idPrefix="ms"
         />
       </PageShell>
     );
@@ -221,11 +227,13 @@ export default async function ProgressPage({
         title="Breakthroughs"
         items={breakthroughs}
         recencyColor="#DCA114"
+        idPrefix="bt"
       />
       <Section
         title="Insights"
         items={insights}
         recencyColor="#A78BFA"
+        idPrefix="ms"
       />
     </PageShell>
   );
@@ -235,10 +243,15 @@ function Section({
   title,
   items,
   recencyColor,
+  idPrefix,
 }: {
   title: string;
   items: TextRow[];
   recencyColor: string;
+  // Each list item gets `id="${idPrefix}-${item.id}"` so constellation
+  // stars can anchor-scroll to a specific entry. "bt" for
+  // breakthroughs, "ms" for mindset shifts.
+  idPrefix: string;
 }) {
   return (
     <section className="mt-6 rounded-xl border border-white/10 bg-white/[0.02] p-5">
@@ -253,7 +266,8 @@ function Section({
           {items.map((item) => (
             <li
               key={item.id}
-              className="rounded-lg border border-white/10 bg-white/[0.02] px-4 py-3"
+              id={`${idPrefix}-${item.id}`}
+              className="scroll-mt-20 rounded-lg border border-white/10 bg-white/[0.02] px-4 py-3 target:border-brand-primary/40"
             >
               <p className="text-sm text-neutral-200">{item.content}</p>
               <p className="mt-1 text-[11px] text-neutral-500">

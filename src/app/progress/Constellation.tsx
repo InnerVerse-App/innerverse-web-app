@@ -14,6 +14,10 @@ import {
 type Props = {
   layout: ConstellationLayout;
   hasGoals: boolean;
+  // Optional URL prefix for the goals link target. Demo mode passes
+  // "/goals?demo=1" so navigation stays in demo. Real mode uses
+  // "/goals" (default).
+  goalsHref?: string;
 };
 
 const SESSION_COLOR = "#59A4C0";
@@ -43,7 +47,7 @@ const FAR_STARS: Array<{ x: number; y: number; size: number }> = [
 // minimum tap target (44pt).
 const TAP_PADDING = "p-3";
 
-export function Constellation({ layout, hasGoals }: Props) {
+export function Constellation({ layout, hasGoals, goalsHref = "/goals" }: Props) {
   const isEmpty =
     layout.sessions.length === 0 &&
     layout.breakthroughs.length === 0 &&
@@ -108,6 +112,16 @@ export function Constellation({ layout, hasGoals }: Props) {
           </svg>
         ) : null}
 
+        {/* Render order = z-stack from bottom to top. Most-prominent
+            and most-tap-likely items render last so their hit zone
+            wins on overlap. Goals are rings (semi-transparent) so
+            they sit lower than the filled session/breakthrough dots. */}
+        {layout.mindsetShifts.map((m) => (
+          <MindsetShiftStar key={m.id} dot={m} />
+        ))}
+        {layout.goals.map((g) => (
+          <GoalStar key={g.id} dot={g} goalsHref={goalsHref} />
+        ))}
         {layout.sessions.map((s) => (
           <SessionStar
             key={s.id}
@@ -115,14 +129,8 @@ export function Constellation({ layout, hasGoals }: Props) {
             isLatest={s.id === latestSessionId}
           />
         ))}
-        {layout.mindsetShifts.map((m) => (
-          <MindsetShiftStar key={m.id} dot={m} />
-        ))}
         {layout.breakthroughs.map((b) => (
           <BreakthroughStar key={b.id} dot={b} />
-        ))}
-        {layout.goals.map((g) => (
-          <GoalStar key={g.id} dot={g} />
         ))}
 
         {isEmpty ? (
@@ -187,8 +195,8 @@ function SessionStar({
 
 function BreakthroughStar({ dot }: { dot: Positioned<BreakthroughDot> }) {
   return (
-    <Link
-      href={`/sessions/${dot.sessionId}`}
+    <a
+      href={`#bt-${dot.id}`}
       aria-label={`Breakthrough: ${dot.content}`}
       title={`Breakthrough — ${dot.content}`}
       className={`absolute -translate-x-1/2 -translate-y-1/2 ${TAP_PADDING}`}
@@ -205,14 +213,14 @@ function BreakthroughStar({ dot }: { dot: Positioned<BreakthroughDot> }) {
           boxShadow: `0 0 10px ${BREAKTHROUGH_COLOR}, 0 0 22px ${BREAKTHROUGH_COLOR}cc, 0 0 36px ${BREAKTHROUGH_COLOR}66, inset 0 0 0 0.5px rgba(0,5,10,0.7)`,
         }}
       />
-    </Link>
+    </a>
   );
 }
 
 function MindsetShiftStar({ dot }: { dot: Positioned<MindsetShiftDot> }) {
   return (
-    <Link
-      href={`/sessions/${dot.sessionId}`}
+    <a
+      href={`#ms-${dot.id}`}
       aria-label={`Mindset shift: ${dot.content}`}
       title={`Mindset shift — ${dot.content}`}
       className={`absolute -translate-x-1/2 -translate-y-1/2 ${TAP_PADDING}`}
@@ -229,17 +237,26 @@ function MindsetShiftStar({ dot }: { dot: Positioned<MindsetShiftDot> }) {
           boxShadow: `0 0 3px ${MINDSET_COLOR}, 0 0 8px ${MINDSET_COLOR}80, inset 0 0 0 0.5px rgba(0,5,10,0.6)`,
         }}
       />
-    </Link>
+    </a>
   );
 }
 
 // Goal stars are rings, not filled dots. The visual cue says "this
 // is a container — a practice you keep returning to" rather than a
 // moment-in-time event.
-function GoalStar({ dot }: { dot: Positioned<GoalDot> }) {
+function GoalStar({
+  dot,
+  goalsHref,
+}: {
+  dot: Positioned<GoalDot>;
+  goalsHref: string;
+}) {
+  // Append the per-goal anchor onto the goalsHref base. Both demo
+  // and real /goals add `id="g-${id}"` to each goal card, so the
+  // browser scrolls there on click.
   return (
     <Link
-      href="/goals"
+      href={`${goalsHref}#g-${dot.id}`}
       aria-label={`Goal: ${dot.title}`}
       title={`Goal — ${dot.title}`}
       className={`absolute -translate-x-1/2 -translate-y-1/2 ${TAP_PADDING}`}
