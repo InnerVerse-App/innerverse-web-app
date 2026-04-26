@@ -2,14 +2,23 @@ import { redirect } from "next/navigation";
 import { auth } from "@clerk/nextjs/server";
 
 import { PageShell } from "@/app/_components/PageShell";
+import { loadActiveGoalsWithLazySeed } from "@/lib/goals";
 import { formatDateCompact } from "@/lib/format";
 import {
   getOnboardingState,
   isOnboardingComplete,
 } from "@/lib/onboarding";
-import { supabaseForUser } from "@/lib/supabase";
+import { supabaseForUser, type UserSupabase } from "@/lib/supabase";
+
+import { Constellation } from "./Constellation";
+import {
+  type ConstellationLayout,
+  computeLayout,
+} from "./constellation-layout";
 
 export const dynamic = "force-dynamic";
+
+const CONSTELLATION_SESSION_LIMIT = 10;
 
 type TextRow = {
   id: string;
@@ -17,12 +26,33 @@ type TextRow = {
   created_at: string;
 };
 
-async function loadProgress(): Promise<{
+type LegacySectionData = {
   breakthroughs: TextRow[];
   insights: TextRow[];
-}> {
-  const ctx = await supabaseForUser();
-  if (!ctx) return { breakthroughs: [], insights: [] };
+};
+
+type SessionRow = {
+  id: string;
+  ended_at: string;
+};
+
+type BreakthroughRow = {
+  id: string;
+  session_id: string;
+  content: string;
+  created_at: string;
+};
+
+type InsightRow = {
+  id: string;
+  session_id: string;
+  content: string;
+  created_at: string;
+};
+
+async function loadLegacySections(
+  ctx: UserSupabase,
+): Promise<LegacySectionData> {
   const [brRes, inRes] = await Promise.all([
     ctx.client
       .from("breakthroughs")
@@ -41,6 +71,92 @@ async function loadProgress(): Promise<{
   };
 }
 
+async function loadConstellation(ctx: UserSupabase): Promise<{
+  layout: ConstellationLayout;
+  hasGoals: boolean;
+}> {
+  const sessionsRes = await ctx.client
+    .from("sessions")
+    .select("id, ended_at")
+    .not("ended_at", "is", null)
+    .order("ended_at", { ascending: false })
+    .limit(CONSTELLATION_SESSION_LIMIT);
+  if (sessionsRes.error) throw sessionsRes.error;
+  const sessionRows = (sessionsRes.data ?? []) as SessionRow[];
+  const sessionIds = sessionRows.map((s) => s.id);
+
+  const [breakthroughsRes, insightsRes, activeGoals] = await Promise.all([
+    sessionIds.length > 0
+      ? ctx.client
+          .from("breakthroughs")
+          .select("id, session_id, content, created_at")
+          .in("session_id", sessionIds)
+      : Promise.resolve({ data: [], error: null as null | Error }),
+    sessionIds.length > 0
+      ? ctx.client
+          .from("insights")
+          .select("id, session_id, content, created_at")
+          .in("session_id", sessionIds)
+      : Promise.resolve({ data: [], error: null as null | Error }),
+    loadActiveGoalsWithLazySeed(ctx),
+  ]);
+  if (breakthroughsRes.error) throw breakthroughsRes.error;
+  if (insightsRes.error) throw insightsRes.error;
+
+  // Goals carry only last_session_id; fetch ended_at for those that
+  // aren't already in the recent-sessions set.
+  const goalLastSessionIds = activeGoals
+    .map((g) => g.last_session_id)
+    .filter((id): id is string => !!id && !sessionIds.includes(id));
+  const extraSessionEndedById = new Map<string, string>();
+  if (goalLastSessionIds.length > 0) {
+    const extraRes = await ctx.client
+      .from("sessions")
+      .select("id, ended_at")
+      .in("id", goalLastSessionIds);
+    if (extraRes.error) throw extraRes.error;
+    for (const row of (extraRes.data ?? []) as Array<{
+      id: string;
+      ended_at: string | null;
+    }>) {
+      if (row.ended_at) extraSessionEndedById.set(row.id, row.ended_at);
+    }
+  }
+  const sessionEndedById = new Map<string, string>(
+    sessionRows.map((s) => [s.id, s.ended_at]),
+  );
+  for (const [id, endedAt] of extraSessionEndedById) {
+    sessionEndedById.set(id, endedAt);
+  }
+
+  const layout = computeLayout({
+    sessions: sessionRows.map((s) => ({ id: s.id, endedAt: s.ended_at })),
+    breakthroughs: ((breakthroughsRes.data ?? []) as BreakthroughRow[]).map(
+      (b) => ({
+        id: b.id,
+        sessionId: b.session_id,
+        content: b.content,
+        createdAt: b.created_at,
+      }),
+    ),
+    mindsetShifts: ((insightsRes.data ?? []) as InsightRow[]).map((m) => ({
+      id: m.id,
+      sessionId: m.session_id,
+      content: m.content,
+      createdAt: m.created_at,
+    })),
+    goals: activeGoals.map((g) => ({
+      id: g.id,
+      title: g.title,
+      lastEngagedAt: g.last_session_id
+        ? sessionEndedById.get(g.last_session_id) ?? null
+        : null,
+    })),
+  });
+
+  return { layout, hasGoals: activeGoals.length > 0 };
+}
+
 export default async function ProgressPage() {
   const session = await auth();
   if (!session?.userId) redirect("/sign-in");
@@ -48,7 +164,13 @@ export default async function ProgressPage() {
   const onboarding = await getOnboardingState();
   if (!isOnboardingComplete(onboarding)) redirect("/onboarding");
 
-  const { breakthroughs, insights } = await loadProgress();
+  const ctx = await supabaseForUser();
+  if (!ctx) redirect("/sign-in");
+
+  const [{ layout, hasGoals }, { breakthroughs, insights }] = await Promise.all([
+    loadConstellation(ctx),
+    loadLegacySections(ctx),
+  ]);
 
   return (
     <PageShell active="progress">
@@ -56,6 +178,8 @@ export default async function ProgressPage() {
       <p className="mt-1 text-sm text-neutral-400">
         Track your personal growth development.
       </p>
+
+      <Constellation layout={layout} hasGoals={hasGoals} />
 
       <Section title="Breakthroughs" items={breakthroughs} />
       <Section title="Insights" items={insights} />
