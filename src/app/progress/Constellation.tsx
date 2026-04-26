@@ -433,6 +433,19 @@ export function Constellation({
           initialScale={1}
           minScale={1}
           maxScale={4}
+          // Update --zoom-counter on the panel so each star's
+          // visual element can counter-scale itself by 1/zoom and
+          // stay crisp at any zoom level. Box-shadow halos and SVG
+          // drop-shadows otherwise grow proportionally to zoom and
+          // turn into fuzzy blobs.
+          onTransform={(_ref, state) => {
+            if (panelRef.current) {
+              panelRef.current.style.setProperty(
+                "--zoom-counter",
+                String(1 / state.scale),
+              );
+            }
+          }}
           // Pinch-zoom is the primary mobile gesture. Wheel zoom on
           // desktop uses ctrl+wheel by default; we leave that off so
           // ordinary page scroll still works when the cursor is over
@@ -488,10 +501,12 @@ export function Constellation({
                   ) : null}
 
                   <span
-                    className="pointer-events-none absolute left-1/2 top-1/2 h-1 w-1 -translate-x-1/2 -translate-y-1/2 rounded-full"
+                    className="pointer-events-none absolute left-1/2 top-1/2 h-1 w-1 rounded-full"
                     style={{
                       background: "rgba(255,255,255,0.5)",
                       boxShadow: "0 0 3px rgba(255,255,255,0.35)",
+                      transform:
+                        "translate(-50%, -50%) scale(var(--zoom-counter, 1))",
                     }}
                     aria-hidden
                   />
@@ -605,6 +620,7 @@ function SessionStar({ dot }: { dot: Positioned<SessionDot> }) {
         style={{
           background: SESSION_COLOR,
           boxShadow: `0 0 3px ${SESSION_COLOR}, 0 0 8px ${SESSION_COLOR}80, inset 0 0 0 0.5px rgba(0,5,10,0.6)`,
+          transform: "scale(var(--zoom-counter, 1))",
         }}
       />
     </Link>
@@ -636,6 +652,7 @@ function BreakthroughStar({
         style={{
           filter: `drop-shadow(0 0 4px ${BREAKTHROUGH_COLOR}) drop-shadow(0 0 10px ${BREAKTHROUGH_COLOR}cc) drop-shadow(0 0 18px ${BREAKTHROUGH_COLOR}66)`,
           overflow: "visible",
+          transform: "scale(var(--zoom-counter, 1))",
         }}
         aria-hidden
       >
@@ -669,6 +686,7 @@ function MindsetShiftStar({
         style={{
           background: MINDSET_COLOR,
           boxShadow: `0 0 5px ${MINDSET_COLOR}, 0 0 11px ${MINDSET_COLOR}80, inset 0 0 0 0.5px rgba(0,5,10,0.6)`,
+          transform: "scale(var(--zoom-counter, 1))",
         }}
       />
     </Link>
@@ -706,6 +724,7 @@ function GoalStar({
           background: `${GOAL_COLOR}26`,
           border: `1.5px solid ${GOAL_COLOR}`,
           boxShadow: `0 0 3px ${GOAL_COLOR}80, 0 0 8px ${GOAL_COLOR}40`,
+          transform: "scale(var(--zoom-counter, 1))",
         }}
       />
     </Link>
