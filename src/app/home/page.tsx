@@ -92,10 +92,7 @@ function buildGrowthItems(rows: GrowthRow[]): RecentGrowthItem[] {
 // Six parallel Supabase reads. All are RLS-scoped so the
 // supabaseForUser context is required; an unauthenticated caller
 // short-circuits to empty counts (though HomePage's auth gate above
-// should prevent that). loadActiveGoalsWithLazySeed handles the
-// onboarding → public.goals seed lazily on first call (idempotent
-// across surfaces — same helper is also called from /goals and the
-// session-start prompt assembly).
+// should prevent that).
 async function loadHomeData(): Promise<HomeData> {
   const ctx = await supabaseForUser();
   if (!ctx) {
@@ -207,16 +204,7 @@ export default async function HomePage() {
     activeGoals,
   } = await loadHomeData();
   const goalCount = activeGoals.length;
-  // Top Goal: first active goal (ordered by created_at desc by
-  // loadActiveGoalsWithLazySeed). v1 picks "newest" as Top; a future
-  // chunk may add an explicit Top flag if user feedback warrants.
-  const topGoalCardData = activeGoals[0]
-    ? {
-        title: activeGoals[0].title,
-        progress_percent: activeGoals[0].progress_percent,
-        progress_rationale: activeGoals[0].progress_rationale,
-      }
-    : null;
+  const topGoal = activeGoals[0] ?? null;
 
   return (
     <PageShell active="home">
@@ -241,7 +229,7 @@ export default async function HomePage() {
           goalCount={goalCount}
           endedTimestamps={endedTimestamps}
         />
-        <TopGoalCard topGoal={topGoalCardData} />
+        <TopGoalCard topGoal={topGoal} />
       </div>
 
       <PersonalGrowthProgressCard items={recentGrowth} />

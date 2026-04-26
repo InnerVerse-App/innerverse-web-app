@@ -1,23 +1,13 @@
 import Link from "next/link";
 
-// Top Goal card on Home — first active goal from public.goals (ordered
-// by created_at desc, which loadActiveGoalsWithLazySeed enforces).
-//
-// As of G.3 the card now renders the richer shape from the canonical
-// (homescreen-5): title, progress %, progress bar, truncated rationale.
-// progress_percent is hidden when null (goal hasn't been touched by an
-// analyzed session yet); rationale is hidden when null/empty.
+import { ProgressBar } from "@/app/_components/ProgressBar";
+import type { ActiveGoal } from "@/lib/goals";
 
 type Props = {
-  topGoal: {
-    title: string;
-    progress_percent: number | null;
-    progress_rationale: string | null;
-  } | null;
+  topGoal: ActiveGoal | null;
 };
 
-// Truncate the rationale shown on the narrow Home card. Goals tab shows
-// the full rationale; this is a glance-view, so cap at 2 lines worth.
+// Glance view — Goals tab shows the full rationale.
 const RATIONALE_HOME_MAX = 120;
 
 export function TopGoalCard({ topGoal }: Props) {
@@ -53,13 +43,7 @@ export function TopGoalCard({ topGoal }: Props) {
             ) : null}
           </div>
           {topGoal.progress_percent !== null ? (
-            <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-white/10">
-              <div
-                className="h-full bg-brand-primary"
-                style={{ width: `${topGoal.progress_percent}%` }}
-                aria-hidden
-              />
-            </div>
+            <ProgressBar percent={topGoal.progress_percent} />
           ) : null}
           {topGoal.progress_rationale ? (
             <p className="mt-2 text-xs text-neutral-400">

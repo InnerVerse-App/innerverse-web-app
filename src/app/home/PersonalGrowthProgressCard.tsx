@@ -1,5 +1,7 @@
 import Link from "next/link";
 
+import { ProgressBar } from "@/app/_components/ProgressBar";
+
 // Title falls back from first breakthrough's content → session's
 // progress_summary_short → "Growth session" — our schema has no
 // first-class "growth theme" field.
@@ -53,13 +55,7 @@ export function PersonalGrowthProgressCard({ items }: Props) {
                     {item.progressPercent}%
                   </span>
                 </div>
-                <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-white/10">
-                  <div
-                    className="h-full bg-brand-primary"
-                    style={{ width: `${item.progressPercent}%` }}
-                    aria-hidden
-                  />
-                </div>
+                <ProgressBar percent={item.progressPercent} />
                 {item.note ? (
                   <p className="mt-2 text-sm text-neutral-400">{item.note}</p>
                 ) : null}
