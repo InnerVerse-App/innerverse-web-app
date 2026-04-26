@@ -163,15 +163,11 @@ export default async function ProgressPage({
 }: {
   searchParams: Promise<{ demo?: string }>;
 }) {
-  const session = await auth();
-  if (!session?.userId) redirect("/sign-in");
-
-  const onboarding = await getOnboardingState();
-  if (!isOnboardingComplete(onboarding)) redirect("/onboarding");
-
-  // Demo escape hatch — `?demo=1` swaps the DB read for a hardcoded
-  // realistic dataset so the operator can preview the constellation
-  // visually without seeding rows. Auth still required.
+  // Demo escape hatch runs BEFORE the auth gate so the redirect to
+  // /sign-in doesn't strip the `?demo=1` query param. Demo data is
+  // entirely hardcoded — no PII, no DB read — so skipping auth here
+  // is acceptable for a preview-only branch (this commit is reverted
+  // before merging V.1).
   const params = await searchParams;
   if (params.demo === "1") {
     const layout = computeLayout(buildDemoData());
@@ -188,6 +184,12 @@ export default async function ProgressPage({
       </PageShell>
     );
   }
+
+  const session = await auth();
+  if (!session?.userId) redirect("/sign-in");
+
+  const onboarding = await getOnboardingState();
+  if (!isOnboardingComplete(onboarding)) redirect("/onboarding");
 
   const ctx = await supabaseForUser();
   if (!ctx) redirect("/sign-in");
