@@ -61,7 +61,15 @@ async function readUserName(ctx: UserSupabase): Promise<string> {
 // The OpenAI call is non-streaming — the opening response is short
 // enough that waiting ~2–5s with a form-pending state is fine UX.
 // Subsequent user turns stream (see /api/sessions/[id]/messages).
-export async function startSession(): Promise<void> {
+//
+// Optional formData fields:
+//   focus_kind: "goal" | "shift" — what the user wants to focus on
+//   focus_id:   the corresponding goal.id or insights.id
+// When both present and the row belongs to the caller, the focus
+// title is injected into the session-start prompt so the coach can
+// open with "I see you want to work on <title> today" instead of a
+// blank-slate greeting.
+export async function startSession(formData?: FormData): Promise<void> {
   const session = await auth();
   if (!session?.userId) redirect("/sign-in");
 
@@ -73,7 +81,9 @@ export async function startSession(): Promise<void> {
     ensureCoachingState(ctx),
   ]);
 
-  const input = await buildSessionStartInput({ userName });
+  const focus = await resolveFocus(ctx, formData);
+
+  const input = await buildSessionStartInput({ userName, focus });
 
   // Call OpenAI BEFORE inserting any rows. If the call fails (network,
   // auth, quota, missing env), we leave no orphan `sessions` row. Once
@@ -199,4 +209,38 @@ function parseRating(value: FormDataEntryValue | null): number | null {
   if (typeof value !== "string" || value.length === 0) return null;
   const n = Number.parseInt(value, 10);
   return Number.isFinite(n) && n >= 1 && n <= 5 ? n : null;
+}
+
+// Validates the focus form fields against the caller's own rows so a
+// crafted focus_id can't pull another user's goal/shift title into the
+// prompt. Returns null when no focus is set, malformed, or the row
+// isn't visible to this user.
+async function resolveFocus(
+  ctx: UserSupabase,
+  formData: FormData | undefined,
+): Promise<{ kind: "goal" | "shift"; title: string } | null> {
+  if (!formData) return null;
+  const kindRaw = formData.get("focus_kind");
+  const idRaw = formData.get("focus_id");
+  if (typeof kindRaw !== "string" || typeof idRaw !== "string") return null;
+  if (kindRaw !== "goal" && kindRaw !== "shift") return null;
+  if (idRaw.length === 0) return null;
+
+  if (kindRaw === "goal") {
+    const { data, error } = await ctx.client
+      .from("goals")
+      .select("title")
+      .eq("id", idRaw)
+      .maybeSingle();
+    if (error || !data?.title) return null;
+    return { kind: "goal", title: data.title };
+  }
+  // shift
+  const { data, error } = await ctx.client
+    .from("insights")
+    .select("content")
+    .eq("id", idRaw)
+    .maybeSingle();
+  if (error || !data?.content) return null;
+  return { kind: "shift", title: data.content };
 }

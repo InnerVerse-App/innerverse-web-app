@@ -38,6 +38,14 @@ export type CoachingState = {
   recent_style_feedback: string | null;
 };
 
+export type SessionFocus = {
+  // "goal" | "shift" — surfaces in the prompt as
+  // "Today's focus (goal): ..." / "Today's focus (mindset shift): ..."
+  // so the coach can open with the right framing.
+  kind: "goal" | "shift";
+  title: string;
+};
+
 type ProfileSource = {
   user_name: string;
   ai_persona: string;
@@ -45,6 +53,7 @@ type ProfileSource = {
   recent_breakthroughs: string[];
   last_session_summary: string | null;
   goals: ActiveGoal[];
+  focus: SessionFocus | null;
 };
 
 // Render arrays as "\n\t- item1\n\t- item2" to match the example
@@ -60,6 +69,9 @@ function formatClientProfile(src: ProfileSource): string {
     warmth: src.style_calibration.warmth,
     challenge: src.style_calibration.challenge,
   });
+  const focusLine = src.focus
+    ? `Today's focus (${src.focus.kind === "goal" ? "goal" : "mindset shift"}): ${src.focus.title}`
+    : "";
   return [
     `Client: ${src.user_name}`,
     `Persona: ${src.ai_persona}`,
@@ -68,7 +80,10 @@ function formatClientProfile(src: ProfileSource): string {
     `Active goals: ${formatGoalsForPrompt(src.goals)}`,
     `Recent breakthroughs/milestones: ${bulletList(src.recent_breakthroughs)}`,
     `Continuity note (last session summary): ${src.last_session_summary ?? ""}`,
-  ].join("\n");
+    focusLine,
+  ]
+    .filter((line) => line.length > 0)
+    .join("\n");
 }
 
 // Loads every variable the session-start prompt needs for the signed-in
@@ -78,6 +93,7 @@ function formatClientProfile(src: ProfileSource): string {
 // defense-in-depth).
 export async function buildSessionStartInput(args: {
   userName: string;
+  focus?: SessionFocus | null;
 }): Promise<SessionStartInput> {
   const ctx = await supabaseForUser();
   if (!ctx) throw new Error("buildSessionStartInput: no Clerk session");
@@ -141,6 +157,7 @@ export async function buildSessionStartInput(args: {
     recent_breakthroughs: (breakthroughsRes.data ?? []).map((r) => r.content),
     last_session_summary: lastSessionRes.data?.summary ?? null,
     goals,
+    focus: args.focus ?? null,
   });
 
   return [

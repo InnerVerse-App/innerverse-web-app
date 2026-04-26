@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { ProgressBar } from "@/app/_components/ProgressBar";
+import { startSession } from "@/app/sessions/actions";
 import { formatDateCompact } from "@/lib/format";
 import type { ActiveGoal } from "@/lib/goals";
 
@@ -155,6 +156,18 @@ export function GoalCard({ goal }: Props) {
           </p>
         </div>
       ) : null}
+
+      <form action={startSession} className="mt-4 border-t border-white/5 pt-4">
+        <input type="hidden" name="focus_kind" value="goal" />
+        <input type="hidden" name="focus_id" value={goal.id} />
+        <button
+          type="submit"
+          className="flex w-full items-center justify-center gap-2 rounded-md border border-brand-primary/40 bg-brand-primary/10 px-4 py-2 text-sm font-medium text-brand-primary transition hover:bg-brand-primary/20"
+        >
+          <span aria-hidden>⚡</span>
+          Start a session for this goal
+        </button>
+      </form>
     </section>
   );
 }
