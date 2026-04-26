@@ -4,30 +4,31 @@ import { useState } from "react";
 import { OnboardingShell } from "./OnboardingShell";
 import { TipCallout } from "./TipCallout";
 import { saveStep5 } from "./actions";
-import { COACHING_STYLES } from "./data";
+import { COACHES } from "./data";
 
-export function Step5Style({ initialStyle }: { initialStyle: string | null }) {
-  const [selected, setSelected] = useState<string | null>(initialStyle);
+export function Step5Coach({ initialCoach }: { initialCoach: string | null }) {
+  const [selected, setSelected] = useState<string | null>(initialCoach);
 
   return (
     <OnboardingShell
       step={5}
-      title="Choose your coaching style"
-      subtitle="How would you like your coach to interact with you? You can always change this later."
+      title="Choose your coach"
+      subtitle="Give your coach a name that resonates with you. Each name comes with its own personality style."
+      continueLabel="Complete Setup"
       canContinue={selected !== null}
       onContinue={() => saveStep5(selected ?? "")}
     >
-      <div className="space-y-3">
-        {COACHING_STYLES.map((style) => {
-          const isOn = selected === style.value;
+      <div className="space-y-2.5">
+        {COACHES.map((coach) => {
+          const isOn = selected === coach.value;
           return (
             <button
-              key={style.value}
+              key={coach.value}
               type="button"
-              onClick={() => setSelected(style.value)}
+              onClick={() => setSelected(coach.value)}
               aria-pressed={isOn}
               className={
-                "block w-full rounded-lg border p-4 text-left transition " +
+                "block w-full rounded-lg border p-3.5 text-left transition " +
                 (isOn
                   ? "border-brand-primary bg-brand-primary/10"
                   : "border-white/10 bg-white/[0.02] hover:bg-white/5")
@@ -35,9 +36,9 @@ export function Step5Style({ initialStyle }: { initialStyle: string | null }) {
             >
               <div className="flex items-center gap-2">
                 <h3 className="text-base font-semibold text-white">
-                  {style.label}
+                  {coach.label}
                 </h3>
-                {style.recommended ? (
+                {coach.recommended ? (
                   <span className="rounded-full bg-brand-primary/20 px-2 py-0.5 text-xs font-medium text-brand-primary">
                     Recommended
                   </span>
@@ -50,20 +51,15 @@ export function Step5Style({ initialStyle }: { initialStyle: string | null }) {
                 />
               </div>
               <p className="mt-1 text-sm text-neutral-300">
-                {style.description}
+                {coach.description}
               </p>
-              <div className="mt-3 rounded-md bg-white/5 p-3">
-                <p className="text-xs text-neutral-400">Example question:</p>
-                <p className="mt-1 text-sm italic text-neutral-200">
-                  &ldquo;{style.exampleQuestion}&rdquo;
-                </p>
-              </div>
             </button>
           );
         })}
-        <TipCallout label="Don't worry!">
-          Your coach will adapt it&apos;s style based on your responses and
-          preferences. You can always adjust this in your settings later.
+        <TipCallout label="Remember">
+          This is just a name and personality style. Your coach will always
+          adapt to your needs and preferences. You can change this anytime
+          in your settings.
         </TipCallout>
       </div>
     </OnboardingShell>

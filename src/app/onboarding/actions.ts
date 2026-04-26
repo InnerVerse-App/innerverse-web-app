@@ -9,7 +9,6 @@ import {
 import {
   THEMES,
   GOAL_CATEGORIES,
-  COACHING_STYLES,
   COACHES,
   COACH_NOTES_MAX,
   TOP_GOALS_INPUT_MAX,
@@ -21,7 +20,6 @@ const THEME_VALUES = new Set(THEMES.map((t) => t.value));
 const GOAL_VALUES = new Set(
   GOAL_CATEGORIES.flatMap((c) => c.goals.map((g) => g.value)),
 );
-const STYLE_VALUES = new Set(COACHING_STYLES.map((s) => s.value));
 const COACH_VALUES = new Set(COACHES.map((c) => c.value));
 
 function intersectAllowed(input: unknown, allowed: Set<string>): string[] {
@@ -83,15 +81,7 @@ export async function saveStep4(notes: string): Promise<ActionResult> {
   return { ok: true };
 }
 
-export async function saveStep5(style: string): Promise<ActionResult> {
-  if (!STYLE_VALUES.has(style)) {
-    return { ok: false, error: "Pick a coaching style to continue." };
-  }
-  await saveOnboardingStep({ coaching_style: style });
-  return { ok: true };
-}
-
-export async function saveStep6(coach: string): Promise<ActionResult> {
+export async function saveStep5(coach: string): Promise<ActionResult> {
   if (!COACH_VALUES.has(coach)) {
     return { ok: false, error: "Pick a coach name to continue." };
   }

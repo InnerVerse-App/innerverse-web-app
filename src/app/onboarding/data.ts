@@ -268,36 +268,6 @@ export const SATISFACTION_LABELS: Record<number, string> = {
   5: "Very Satisfied",
 };
 
-export type CoachingStyleOption = {
-  value: string;
-  label: string;
-  description: string;
-  exampleQuestion: string;
-  recommended?: boolean;
-};
-
-export const COACHING_STYLES: CoachingStyleOption[] = [
-  {
-    value: "direct",
-    label: "Direct",
-    description: "Straightforward, challenging questions that push you to think deeper",
-    exampleQuestion: "What are you avoiding that's holding you back?",
-  },
-  {
-    value: "gentle",
-    label: "Gentle",
-    description: "Supportive, nurturing approach with encouraging questions",
-    exampleQuestion: "Is there a step you're hesitant to take even though you know it matters?",
-  },
-  {
-    value: "centered",
-    label: "Centered",
-    description: "Mix of supportive and challenging, adapting to your needs",
-    exampleQuestion: "What's one truth you have been avoiding that could actually set things in motion?",
-    recommended: true,
-  },
-];
-
 export type CoachOption = {
   value: string;
   label: string;
@@ -308,16 +278,13 @@ export type CoachOption = {
 export const COACHES: CoachOption[] = [
   { value: "buddy", label: "Buddy", description: "Friendly and encouraging, like having a supportive friend" },
   { value: "dante", label: "Dante", description: "Wise and thoughtful, guides you through deep reflections" },
-  { value: "edith", label: "Edith", description: "Nurturing and patient, creates a safe space for growth" },
   { value: "kelly", label: "Kelly", description: "Energetic and motivating, helps you take action" },
-  { value: "lulu", label: "Lulu", description: "Creative and intuitive, brings fresh perspectives" },
   { value: "maya", label: "Maya", description: "Calm and centered, helps you find inner peace" },
   { value: "orion", label: "Orion", description: "Adventurous and bold, encourages you to explore new paths" },
   { value: "pierre", label: "Pierre", description: "Sophisticated and insightful, offers elegant solutions" },
-  { value: "riley", label: "Riley", description: "Playful and optimistic, makes growth feel fun" },
   { value: "sigmund", label: "Sigmund", description: "Analytical and deep, helps you understand yourself better" },
 ];
 
-export const TOTAL_STEPS = 6;
+export const TOTAL_STEPS = 5;
 export const COACH_NOTES_MAX = 500;
 export const TOP_GOALS_INPUT_MAX = 500;
