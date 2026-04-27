@@ -937,19 +937,17 @@ function SessionStar({
 }) {
   const router = useRouter();
   const dateLabel = formatDateCompact(dot.endedAt);
-  // Single-click: select-on-map (Link href). Double-click: navigate
-  // to the full session detail page. Mirrors BreakthroughSun's
-  // double-click pattern but lands on /sessions/[id] instead of
-  // scrolling to an in-page detail card. preventDefault on the
-  // dblclick keeps the second click's no-op selection from
-  // re-running; stopPropagation keeps the TransformWrapper from
-  // intercepting (it has its own doubleClick={{disabled:true}} but
-  // be defensive in case that ever changes).
+  // Single-click: highlight on the constellation map (Link href).
+  // Double-click: jump to the Sessions tab with this session
+  // highlighted in the list, NOT to the full session chat. Symmetric
+  // with BreakthroughSun (scroll to detail card) and GoalComet
+  // (jump to Goals tab) — every star's double-click takes you to
+  // the item's "home" with it highlighted, never to its raw chat.
   return (
     <Link
       href={buildSessionHref(dot.id)}
-      aria-label={`Open session from ${dateLabel}`}
-      title={`Session — ${dateLabel} (double-click to open)`}
+      aria-label={`Session from ${dateLabel} (double-click to view in Sessions tab)`}
+      title={`Session — ${dateLabel} (double-click to view in Sessions tab)`}
       className={`absolute -translate-x-1/2 -translate-y-1/2 ${TAP_PADDING}`}
       style={{
         left: `${dot.x * 100}%`,
@@ -959,7 +957,7 @@ function SessionStar({
       onDoubleClick={(e) => {
         e.preventDefault();
         e.stopPropagation();
-        router.push(`/sessions/${dot.id}`);
+        router.push(`/sessions?session=${dot.id}#s-${dot.id}`);
       }}
     >
       <svg
@@ -1098,16 +1096,29 @@ function MindsetShiftStar({
   dot: Positioned<MindsetShiftDot>;
   buildHref: (id: string) => string;
 }) {
+  // Single-click highlights on the map (Link href); double-click
+  // scrolls to the matching card in the Mindset Shifts list below.
+  // Mirrors BreakthroughSun. The list lives on /progress so no
+  // navigation needed — just scroll.
   return (
     <Link
       href={buildHref(dot.id)}
-      aria-label={`Mindset shift: ${dot.content}`}
-      title={`Mindset shift — ${dot.content}`}
+      scroll={false}
+      aria-label={`Mindset shift: ${dot.content} (double-click to view in list)`}
+      title={`Mindset shift — ${dot.content} (double-click to view in list)`}
       className={`absolute -translate-x-1/2 -translate-y-1/2 ${TAP_PADDING}`}
       style={{
         left: `${dot.x * 100}%`,
         top: `${dot.y * 100}%`,
         opacity: dot.opacity,
+      }}
+      onDoubleClick={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const target = document.getElementById(`ms-${dot.id}`);
+        if (target) {
+          target.scrollIntoView({ behavior: "smooth", block: "center" });
+        }
       }}
     >
       <svg
@@ -1135,6 +1146,7 @@ function GoalComet({
   dot: PositionedGoal;
   buildGoalHref: (id: string) => string;
 }) {
+  const router = useRouter();
   const href = buildGoalHref(dot.id);
   const headX = dot.x * 100;
   const headY = dot.y * 100;
@@ -1186,16 +1198,23 @@ function GoalComet({
         />
       </svg>
       {/* Head: same shape language as session/shift — halo + solid
-          colored disc — just green. */}
+          colored disc — just green. Double-click jumps to the Goals
+          tab with this goal highlighted, matching the SessionStar
+          pattern. */}
       <Link
         href={href}
-        aria-label={`Goal: ${dot.title}`}
-        title={`Goal — ${dot.title}`}
+        aria-label={`Goal: ${dot.title} (double-click to view in Goals tab)`}
+        title={`Goal — ${dot.title} (double-click to view in Goals tab)`}
         className={`absolute -translate-x-1/2 -translate-y-1/2 ${TAP_PADDING}`}
         style={{
           left: `${headX}%`,
           top: `${headY}%`,
           opacity: dot.opacity,
+        }}
+        onDoubleClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          router.push(`/goals?goal=${dot.id}#g-${dot.id}`);
         }}
       >
         <svg

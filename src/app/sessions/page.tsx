@@ -113,6 +113,9 @@ export default async function SessionsListPage({
       sessions.length === 0 ? await loadEmptyStateMenuData() : null;
     return (
       <PageShell active="sessions">
+        <AutoScrollToTarget
+          targetId={highlightedSessionId ? `s-${highlightedSessionId}` : null}
+        />
         <h1 className="text-3xl font-bold text-white">Sessions</h1>
         <p className="mt-1 text-sm text-neutral-400">
           A log of your coaching sessions.
@@ -133,36 +136,44 @@ export default async function SessionsListPage({
           </div>
         ) : (
           <ul className="mt-6 flex flex-col gap-3">
-            {sessions.map((s) => (
-              <li key={s.id}>
-                <Link
-                  href={`/sessions/${s.id}`}
-                  className="block rounded-xl border border-white/10 bg-white/[0.02] p-5 transition hover:border-brand-primary/40"
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <p className="text-xs text-neutral-400">
-                      {formatDateShort(s.started_at)}
+            {sessions.map((s) => {
+              const isHighlighted = highlightedSessionId === s.id;
+              return (
+                <li key={s.id} id={`s-${s.id}`}>
+                  <Link
+                    href={`/sessions/${s.id}`}
+                    className={
+                      "block rounded-xl border bg-white/[0.02] p-5 transition scroll-mt-20 " +
+                      (isHighlighted
+                        ? "border-brand-primary bg-brand-primary/10 shadow-[0_0_18px_rgba(89,164,192,0.35)]"
+                        : "border-white/10 hover:border-brand-primary/40")
+                    }
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <p className="text-xs text-neutral-400">
+                        {formatDateShort(s.started_at)}
+                      </p>
+                      <span
+                        className={
+                          s.ended_at
+                            ? "text-[11px] text-neutral-500"
+                            : "text-[11px] text-brand-primary"
+                        }
+                      >
+                        {s.ended_at ? "Completed" : "In progress"}
+                      </span>
+                    </div>
+                    <p className="mt-2 text-sm text-neutral-200">
+                      {s.summary ??
+                        s.progress_summary_short ??
+                        (s.ended_at
+                          ? "Summary pending — analysis may still be running."
+                          : "Open session — tap to continue.")}
                     </p>
-                    <span
-                      className={
-                        s.ended_at
-                          ? "text-[11px] text-neutral-500"
-                          : "text-[11px] text-brand-primary"
-                      }
-                    >
-                      {s.ended_at ? "Completed" : "In progress"}
-                    </span>
-                  </div>
-                  <p className="mt-2 text-sm text-neutral-200">
-                    {s.summary ??
-                      s.progress_summary_short ??
-                      (s.ended_at
-                        ? "Summary pending — analysis may still be running."
-                        : "Open session — tap to continue.")}
-                  </p>
-                </Link>
-              </li>
-            ))}
+                  </Link>
+                </li>
+              );
+            })}
           </ul>
         )}
       </PageShell>
