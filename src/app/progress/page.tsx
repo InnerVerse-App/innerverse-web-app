@@ -26,7 +26,14 @@ import { buildDemoData, DEMO_LEGACY_SECTIONS, snippetFor } from "./demo-data";
 
 export const dynamic = "force-dynamic";
 
-const CONSTELLATION_SESSION_LIMIT = 10;
+// How many sessions to pull into the universe view. Galaxy V3 needs
+// enough history for breakthroughs (rare — ~one per 6 weeks per the
+// session-end prompt) to actually appear, so we reach back across
+// roughly a year of weekly cadence. Older sessions referenced as
+// contributors render as empty positions (no visible star) which is
+// acceptable — galaxies still display, just without their oldest
+// contributor stars.
+const CONSTELLATION_SESSION_LIMIT = 200;
 
 // Convert the ?window= query value into the layout's ageWindowDays
 // parameter. "all" maps to 10 years — effectively no clamping for
@@ -56,11 +63,20 @@ type SessionRow = {
   ended_at: string;
 };
 
+// V.5a contributor arrays come straight from public.breakthroughs.
+// `direct_session_ids` is the subset of `contributing_session_ids`
+// that fed the breakthrough WITHOUT routing through a mindset shift
+// — the layered tree renderer needs both lists.
 type BreakthroughRow = {
   id: string;
   session_id: string;
   content: string;
   created_at: string;
+  contributing_session_ids: string[] | null;
+  contributing_shift_ids: string[] | null;
+  direct_session_ids: string[] | null;
+  evidence_quote: string | null;
+  galaxy_name: string | null;
 };
 
 type InsightRow = {
@@ -68,6 +84,18 @@ type InsightRow = {
   session_id: string;
   content: string;
   created_at: string;
+  contributing_session_ids: string[] | null;
+  evidence_quote: string | null;
+};
+
+// Goal contributor arrays read from public.goals. Only fetched for
+// goals returned by loadActiveGoalsWithLazySeed — keeps the read
+// scoped without changing the shared ActiveGoal shape.
+type GoalContributorRow = {
+  id: string;
+  contributing_session_ids: string[] | null;
+  contributing_shift_ids: string[] | null;
+  contributing_breakthrough_ids: string[] | null;
 };
 
 async function loadLegacySections(
@@ -91,12 +119,34 @@ async function loadLegacySections(
   };
 }
 
+// Same shape the demo path constructs in demo-data.ts. The layout
+// + line layer in Constellation.tsx don't care whether the entries
+// are demo-generated or read from V.5a contributor columns.
+type ConstellationLinks = {
+  name: string;
+  sessionIds: string[];
+  shiftIds: string[];
+  directSessionIds: string[];
+};
+type MindsetShiftLinks = { sessionIds: string[] };
+type GoalLinks = {
+  sessionIds: string[];
+  shiftIds: string[];
+  breakthroughIds: string[];
+};
+
 async function loadConstellation(
   ctx: UserSupabase,
   ageWindowDays: number,
 ): Promise<{
   layout: ConstellationLayout;
   hasGoals: boolean;
+  breakthroughById: Map<string, BreakthroughRow>;
+  insightById: Map<string, InsightRow>;
+  sessionEndedById: Map<string, string>;
+  constellationLinks: Map<string, ConstellationLinks>;
+  mindsetShiftLinks: Map<string, MindsetShiftLinks>;
+  goalLinks: Map<string, GoalLinks>;
 }> {
   const sessionsRes = await ctx.client
     .from("sessions")
@@ -108,23 +158,38 @@ async function loadConstellation(
   const sessionRows = (sessionsRes.data ?? []) as SessionRow[];
   const sessionIds = sessionRows.map((s) => s.id);
 
-  const [breakthroughsRes, insightsRes, activeGoals] = await Promise.all([
-    sessionIds.length > 0
-      ? ctx.client
-          .from("breakthroughs")
-          .select("id, session_id, content, created_at")
-          .in("session_id", sessionIds)
-      : Promise.resolve({ data: [], error: null as null | Error }),
-    sessionIds.length > 0
-      ? ctx.client
-          .from("insights")
-          .select("id, session_id, content, created_at")
-          .in("session_id", sessionIds)
-      : Promise.resolve({ data: [], error: null as null | Error }),
-    loadActiveGoalsWithLazySeed(ctx),
-  ]);
+  const [breakthroughsRes, insightsRes, activeGoals, goalContribRes] =
+    await Promise.all([
+      sessionIds.length > 0
+        ? ctx.client
+            .from("breakthroughs")
+            .select(
+              "id, session_id, content, created_at, contributing_session_ids, contributing_shift_ids, direct_session_ids, evidence_quote, galaxy_name",
+            )
+            .in("session_id", sessionIds)
+        : Promise.resolve({ data: [], error: null as null | Error }),
+      sessionIds.length > 0
+        ? ctx.client
+            .from("insights")
+            .select(
+              "id, session_id, content, created_at, contributing_session_ids, evidence_quote",
+            )
+            .in("session_id", sessionIds)
+        : Promise.resolve({ data: [], error: null as null | Error }),
+      loadActiveGoalsWithLazySeed(ctx),
+      // Goal contributor arrays. Loaded for every active goal — V.5a
+      // session-end writes these on every analyzed session, so even
+      // recently-seeded predefined goals get filled in over time.
+      ctx.client
+        .from("goals")
+        .select(
+          "id, contributing_session_ids, contributing_shift_ids, contributing_breakthrough_ids",
+        )
+        .is("archived_at", null),
+    ]);
   if (breakthroughsRes.error) throw breakthroughsRes.error;
   if (insightsRes.error) throw insightsRes.error;
+  if (goalContribRes.error) throw goalContribRes.error;
 
   const goalLastSessionIds = activeGoals
     .map((g) => g.last_session_id)
@@ -150,18 +215,52 @@ async function loadConstellation(
     sessionEndedById.set(id, endedAt);
   }
 
+  const breakthroughRows = (breakthroughsRes.data ?? []) as BreakthroughRow[];
+  const insightRows = (insightsRes.data ?? []) as InsightRow[];
+  const goalContribRows = (goalContribRes.data ?? []) as GoalContributorRow[];
+
+  // V.5a contributor maps. The LLM emits these arrays directly from
+  // session-end analysis (after the prompt-v6 evidence rubric); the
+  // RPC stores them on the row. No heuristic derivation here — what
+  // the constellation draws is what the model claimed contributed.
+  // `galaxy_name` is the LLM-emitted constellation label; falls back
+  // to the first words of the breakthrough content if missing.
+  const constellationLinks = new Map<string, ConstellationLinks>();
+  for (const b of breakthroughRows) {
+    constellationLinks.set(b.id, {
+      name: b.galaxy_name?.trim() || fallbackGalaxyName(b.content),
+      sessionIds: b.contributing_session_ids ?? [],
+      shiftIds: b.contributing_shift_ids ?? [],
+      directSessionIds: b.direct_session_ids ?? [],
+    });
+  }
+
+  const mindsetShiftLinks = new Map<string, MindsetShiftLinks>();
+  for (const m of insightRows) {
+    mindsetShiftLinks.set(m.id, {
+      sessionIds: m.contributing_session_ids ?? [],
+    });
+  }
+
+  const goalLinks = new Map<string, GoalLinks>();
+  for (const g of goalContribRows) {
+    goalLinks.set(g.id, {
+      sessionIds: g.contributing_session_ids ?? [],
+      shiftIds: g.contributing_shift_ids ?? [],
+      breakthroughIds: g.contributing_breakthrough_ids ?? [],
+    });
+  }
+
   const layout = computeLayout({
     ageWindowDays,
     sessions: sessionRows.map((s) => ({ id: s.id, endedAt: s.ended_at })),
-    breakthroughs: ((breakthroughsRes.data ?? []) as BreakthroughRow[]).map(
-      (b) => ({
-        id: b.id,
-        sessionId: b.session_id,
-        content: b.content,
-        createdAt: b.created_at,
-      }),
-    ),
-    mindsetShifts: ((insightsRes.data ?? []) as InsightRow[]).map((m) => ({
+    breakthroughs: breakthroughRows.map((b) => ({
+      id: b.id,
+      sessionId: b.session_id,
+      content: b.content,
+      createdAt: b.created_at,
+    })),
+    mindsetShifts: insightRows.map((m) => ({
       id: m.id,
       sessionId: m.session_id,
       content: m.content,
@@ -174,9 +273,30 @@ async function loadConstellation(
         ? sessionEndedById.get(g.last_session_id) ?? null
         : null,
     })),
+    constellationLinks,
   });
 
-  return { layout, hasGoals: activeGoals.length > 0 };
+  const breakthroughById = new Map(breakthroughRows.map((b) => [b.id, b]));
+  const insightById = new Map(insightRows.map((m) => [m.id, m]));
+
+  return {
+    layout,
+    hasGoals: activeGoals.length > 0,
+    breakthroughById,
+    insightById,
+    sessionEndedById,
+    constellationLinks,
+    mindsetShiftLinks,
+    goalLinks,
+  };
+}
+
+// Stripped-down galaxy name when the model didn't emit one. First
+// few content words, title-cased — readable but obviously a fallback
+// (no flourish like "The Sovereign" or "Belonging Without Bargaining").
+function fallbackGalaxyName(content: string): string {
+  const words = content.trim().split(/\s+/).slice(0, 4).join(" ");
+  return words || "Untitled Galaxy";
 }
 
 type SearchParamsShape = {
@@ -377,10 +497,81 @@ export default async function ProgressPage({
   const ctx = await supabaseForUser();
   if (!ctx) redirect("/sign-in");
 
-  const [{ layout, hasGoals }, { breakthroughs, insights }] = await Promise.all([
+  const [
+    {
+      layout,
+      hasGoals,
+      breakthroughById,
+      insightById,
+      sessionEndedById,
+      constellationLinks,
+      mindsetShiftLinks,
+      goalLinks,
+    },
+    { breakthroughs, insights },
+  ] = await Promise.all([
     loadConstellation(ctx, ageWindowDays),
     loadLegacySections(ctx),
   ]);
+
+  // Real-data expanded-detail builders. Mirror the demo path's shape
+  // but use V.5a evidence_quote in place of demo's per-(parent,
+  // contributor) snippet pool. Per-row snippet is empty — the date
+  // pill carries its own meaning and we don't have a per-relationship
+  // narrative to fill in. The breakthrough/shift evidence_quote
+  // surfaces once, in the noticedAt row.
+  const breakthroughDetailFor = (item: TextRow): ExpandedDetail | null => {
+    const links = constellationLinks.get(item.id);
+    if (!links) return null;
+    const row = breakthroughById.get(item.id);
+    const sessions = links.sessionIds
+      .map((id) => {
+        const endedAt = sessionEndedById.get(id);
+        if (!endedAt) return null;
+        return { id, endedAt, snippet: "" };
+      })
+      .filter((s): s is { id: string; endedAt: string; snippet: string } => !!s)
+      .sort((a, b) => Date.parse(b.endedAt) - Date.parse(a.endedAt));
+    const shifts = links.shiftIds
+      .map((id) => {
+        const m = insightById.get(id);
+        if (!m) return null;
+        return { id, content: m.content, snippet: "" };
+      })
+      .filter(
+        (s): s is { id: string; content: string; snippet: string } => !!s,
+      );
+    const sCount = sessions.length;
+    const shCount = shifts.length;
+    const namePart = links.name ? ` "${links.name}"` : "";
+    const narrative =
+      sCount > 0
+        ? `This breakthrough emerged from ${sCount} coaching session${sCount === 1 ? "" : "s"} and ${shCount} mindset shift${shCount === 1 ? "" : "s"} of practice. The constellation${namePart} traces the path.`
+        : `The constellation${namePart} traces the path to this breakthrough.`;
+    const noticedAt = row?.evidence_quote?.trim() || undefined;
+    return { narrative, noticedAt, sessions, shifts, breakthroughs: [] };
+  };
+
+  const shiftDetailFor = (item: TextRow): ExpandedDetail | null => {
+    const links = mindsetShiftLinks.get(item.id);
+    const row = insightById.get(item.id);
+    if (!links && !row) return null;
+    const sessions = (links?.sessionIds ?? [])
+      .map((id) => {
+        const endedAt = sessionEndedById.get(id);
+        if (!endedAt) return null;
+        return { id, endedAt, snippet: "" };
+      })
+      .filter((s): s is { id: string; endedAt: string; snippet: string } => !!s)
+      .sort((a, b) => Date.parse(b.endedAt) - Date.parse(a.endedAt));
+    const sCount = sessions.length;
+    const narrative =
+      sCount > 0
+        ? `This shift emerged across ${sCount} coaching session${sCount === 1 ? "" : "s"} of practice.`
+        : "This shift is still settling in.";
+    const noticedAt = row?.evidence_quote?.trim() || undefined;
+    return { narrative, noticedAt, sessions, shifts: [], breakthroughs: [] };
+  };
 
   return (
     <PageShell active="progress">
@@ -392,9 +583,9 @@ export default async function ProgressPage({
       <Constellation
         layout={layout}
         hasGoals={hasGoals}
-        constellationLinks={undefined}
-        mindsetShiftLinks={undefined}
-        goalLinks={undefined}
+        constellationLinks={constellationLinks}
+        mindsetShiftLinks={mindsetShiftLinks}
+        goalLinks={goalLinks}
         selectedAnchor={selectedAnchor}
         basePath="/progress"
         currentParams={{
@@ -419,6 +610,7 @@ export default async function ProgressPage({
         items={breakthroughs}
         recencyColor="#DCA114"
         idPrefix="bt"
+        expandedDetailFor={breakthroughDetailFor}
         buildStarMapHref={(item) =>
           buildSelectUrl({
             constellation: item.id,
@@ -437,6 +629,7 @@ export default async function ProgressPage({
         items={insights}
         recencyColor="#A78BFA"
         idPrefix="ms"
+        expandedDetailFor={shiftDetailFor}
         buildStarMapHref={(item) =>
           buildSelectUrl({
             shift: item.id,
