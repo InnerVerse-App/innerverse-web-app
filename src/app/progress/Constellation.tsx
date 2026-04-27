@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useRef } from "react";
 import {
   type ReactZoomPanPinchRef,
@@ -934,19 +935,31 @@ function SessionStar({
   dot: Positioned<SessionDot>;
   buildSessionHref: (id: string) => string;
 }) {
+  const router = useRouter();
   const dateLabel = formatDateCompact(dot.endedAt);
-  // Crisp pinpoint — bright solid core, thin hard-edged ring. No
-  // soft outer halo (those turn into bokeh when zoomed in).
+  // Single-click: select-on-map (Link href). Double-click: navigate
+  // to the full session detail page. Mirrors BreakthroughSun's
+  // double-click pattern but lands on /sessions/[id] instead of
+  // scrolling to an in-page detail card. preventDefault on the
+  // dblclick keeps the second click's no-op selection from
+  // re-running; stopPropagation keeps the TransformWrapper from
+  // intercepting (it has its own doubleClick={{disabled:true}} but
+  // be defensive in case that ever changes).
   return (
     <Link
       href={buildSessionHref(dot.id)}
       aria-label={`Open session from ${dateLabel}`}
-      title={`Session — ${dateLabel}`}
+      title={`Session — ${dateLabel} (double-click to open)`}
       className={`absolute -translate-x-1/2 -translate-y-1/2 ${TAP_PADDING}`}
       style={{
         left: `${dot.x * 100}%`,
         top: `${dot.y * 100}%`,
         opacity: dot.opacity,
+      }}
+      onDoubleClick={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        router.push(`/sessions/${dot.id}`);
       }}
     >
       <svg
