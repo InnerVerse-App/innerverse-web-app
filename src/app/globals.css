@@ -37,3 +37,61 @@ html {
 .constellation-zoom-fade-in {
   opacity: clamp(0.75, calc(0.75 + (var(--zoom-scale, 1) - 1) * 0.2), 1);
 }
+
+/* Feedback survey slider — yellow thumb on a teal track. Default
+   accent-color can only color the thumb+filled-track together; we
+   need them to differ to match the canonical session-complete UI
+   (see reference/screenshots/app-ui/app-screenshot-session-complete-*).
+*/
+.feedback-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+  cursor: pointer;
+}
+/* Webkit (Chrome/Safari) — appearance:none disables the user-agent fill
+   layer, so we paint the split track ourselves via a gradient driven by
+   --fill-pct (set inline from the current slider value). */
+.feedback-slider::-webkit-slider-runnable-track {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 4px;
+  border: none;
+  border-radius: 9999px;
+  background: linear-gradient(
+    to right,
+    #59A4C0 0%,
+    #59A4C0 var(--fill-pct, 50%),
+    rgba(89, 164, 192, 0.2) var(--fill-pct, 50%),
+    rgba(89, 164, 192, 0.2) 100%
+  );
+}
+/* Firefox — track + range-progress give us the split natively. */
+.feedback-slider::-moz-range-track {
+  height: 4px;
+  border: none;
+  border-radius: 9999px;
+  background: rgba(89, 164, 192, 0.2);
+}
+.feedback-slider::-moz-range-progress {
+  height: 4px;
+  border-radius: 9999px;
+  background: #59A4C0;
+}
+.feedback-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 18px;
+  width: 18px;
+  border-radius: 9999px;
+  background: #DCA114;
+  border: 2px solid rgba(0, 0, 0, 0.4);
+  margin-top: -7px;
+}
+.feedback-slider::-moz-range-thumb {
+  height: 18px;
+  width: 18px;
+  border-radius: 9999px;
+  background: #DCA114;
+  border: 2px solid rgba(0, 0, 0, 0.4);
+}

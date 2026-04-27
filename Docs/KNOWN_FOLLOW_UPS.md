@@ -1271,3 +1271,18 @@ Root cause: The standard goals-action prelude — `auth()` → `getOnboardingSta
 Blast radius: One extra Clerk round-trip per server-action invocation. Negligible at 1 user / ≤10 testers; would be material at scale.
 Suggested fix: Wrap `auth()` once at the lib layer with React's `cache()` (request-scoped memoization). `supabaseForUser` already documents the round-trip-avoidance pattern in its docstring (`src/lib/supabase.ts:36`) — this is finishing that work, not a new pattern. Single edit; no action-file changes.
 Status: OPEN (deferred; revisit before Phase 10 pre-launch gate or if Clerk per-call latency becomes user-visible).
+
+## 2026-04-26 — Process gap: PRs with migrations briefly break prod
+
+FINDING 1
+Severity: MED
+Lens: operator
+Location: Workflow gap between `gh pr merge` and `supabase db push --project-ref <prod>`
+Root cause: Code on main is auto-deployed by Vercel to innerverse-prod the moment a PR with a schema migration merges. The migration itself is not auto-applied — it has to be pushed manually via Supabase CLI. Until that happens, prod runs new code against the old schema. Any code path that writes to a renamed/added column 500s in production.
+Blast radius: User-visible failures on the affected code path for the duration of the gap (typically minutes if the operator is paying attention; longer if the merge happens unattended). Hit on PR #89 — `session_feedback.tone_rating` was missing in prod for ~3 minutes between merge and prod push. No real-user impact at current scale (1 operator, <10 testers); would be a Sev 1 at launch.
+Suggested fix: Two options worth weighing —
+  (a) **Branch convention + reviewer rule**: any PR touching `supabase/migrations/` requires the operator to have already prepared the prod push command. Document in the PR template. Cheap; relies on discipline.
+  (b) **Automated post-merge hook**: a GitHub Action that runs `supabase db push` against prod when a PR landing on main contains a new migration file. Requires a Supabase service-role secret + careful handling of confirm-before-prod. More resilient; more setup.
+  Until a decision is made, the operator should run `npx supabase link --project-ref <prod-ref> && npx supabase db push` immediately after merging any migration PR, then re-link to dev.
+Status: OPEN (revisit before opening to >10 testers; the current pattern is acceptable while the operator is the only writer of the prod DB).
+

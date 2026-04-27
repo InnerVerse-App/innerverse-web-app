@@ -157,7 +157,7 @@ export async function submitSessionFeedback(
   if (!ctx) redirect("/sign-in");
 
   const reflection = trimOrNull(formData.get(FEEDBACK_FIELDS.REFLECTION));
-  const supportive = parseRating(formData.get(FEEDBACK_FIELDS.SUPPORTIVE_RATING));
+  const tone = parseRating(formData.get(FEEDBACK_FIELDS.TONE_RATING));
   const helpful = parseRating(formData.get(FEEDBACK_FIELDS.HELPFUL_RATING));
   const aligned = parseRating(formData.get(FEEDBACK_FIELDS.ALIGNED_RATING));
   const additional = trimOrNull(formData.get(FEEDBACK_FIELDS.ADDITIONAL_FEEDBACK));
@@ -167,7 +167,7 @@ export async function submitSessionFeedback(
   // a row.
   const hasContent =
     reflection !== null ||
-    supportive !== null ||
+    tone !== null ||
     helpful !== null ||
     aligned !== null ||
     additional !== null;
@@ -177,7 +177,7 @@ export async function submitSessionFeedback(
     user_id: ctx.userId,
     session_id: sessionId,
     reflection,
-    supportive_rating: supportive,
+    tone_rating: tone,
     helpful_rating: helpful,
     aligned_rating: aligned,
     additional_feedback: additional,

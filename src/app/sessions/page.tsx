@@ -4,6 +4,8 @@ import { auth } from "@clerk/nextjs/server";
 
 import { AutoScrollToTarget } from "@/app/_components/AutoScrollToTarget";
 import { PageShell } from "@/app/_components/PageShell";
+import { StartSessionButton } from "@/app/home/StartSessionButton";
+import { startSession } from "@/app/sessions/actions";
 import { formatDateShort } from "@/lib/format";
 import {
   getOnboardingState,
@@ -170,9 +172,15 @@ export default async function SessionsListPage({
       </p>
 
       {sessions.length === 0 ? (
-        <p className="mt-8 rounded-xl border border-white/10 bg-white/[0.02] p-5 text-sm text-neutral-400">
-          No sessions yet. Start one from the Home tab.
-        </p>
+        <div className="mt-8 rounded-xl border border-white/10 bg-white/[0.02] p-5">
+          <p className="text-sm text-neutral-400">
+            No sessions yet. Begin your first coaching session to start
+            building your log.
+          </p>
+          <form action={startSession} className="mt-4">
+            <StartSessionButton label="Start Your First Session" />
+          </form>
+        </div>
       ) : (
         <ul className="mt-6 flex flex-col gap-3">
           {sessions.map((s) => {
