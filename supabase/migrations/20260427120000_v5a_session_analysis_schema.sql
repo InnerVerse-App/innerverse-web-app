@@ -30,7 +30,7 @@
 -- description the AI sets when first inventing the theme; later
 -- analyses see this and stay consistent in how they use the label.
 
-create table public.themes (
+create table if not exists public.themes (
   id uuid primary key default gen_random_uuid(),
   user_id text not null references public.users(id) on delete cascade,
   label text not null,
@@ -39,9 +39,9 @@ create table public.themes (
   last_used_at timestamptz not null default now()
 );
 
-create unique index themes_user_label_unique
+create unique index if not exists themes_user_label_unique
   on public.themes (user_id, lower(label));
-create index themes_user_last_used_idx
+create index if not exists themes_user_last_used_idx
   on public.themes (user_id, last_used_at desc);
 
 -- ---------------------------------------------------------------
@@ -56,7 +56,7 @@ create index themes_user_last_used_idx
 -- quote is required for intensity > 6 (enforced in the prompt, not
 -- the schema).
 
-create table public.session_themes (
+create table if not exists public.session_themes (
   id uuid primary key default gen_random_uuid(),
   session_id uuid not null references public.sessions(id) on delete cascade,
   theme_id uuid not null references public.themes(id) on delete cascade,
@@ -72,11 +72,11 @@ create table public.session_themes (
   unique (session_id, theme_id)
 );
 
-create index session_themes_session_idx
+create index if not exists session_themes_session_idx
   on public.session_themes (session_id);
-create index session_themes_user_intensity_idx
+create index if not exists session_themes_user_intensity_idx
   on public.session_themes (user_id, intensity desc);
-create index session_themes_theme_idx
+create index if not exists session_themes_theme_idx
   on public.session_themes (theme_id);
 
 -- ---------------------------------------------------------------
@@ -98,19 +98,19 @@ create index session_themes_theme_idx
 -- back to the underlying claims.
 
 alter table public.sessions
-  add column self_disclosure_score smallint
+  add column if not exists self_disclosure_score smallint
     check (self_disclosure_score between 0 and 10),
-  add column cognitive_shift_score smallint
+  add column if not exists cognitive_shift_score smallint
     check (cognitive_shift_score between 0 and 10),
-  add column emotional_integration_score smallint
+  add column if not exists emotional_integration_score smallint
     check (emotional_integration_score between 0 and 10),
-  add column novelty_score smallint
+  add column if not exists novelty_score smallint
     check (novelty_score between 0 and 10),
-  add column coach_narrative text,
-  add column narrative_reflection_prompt text,
-  add column user_response_text text,
-  add column user_responded_at timestamptz,
-  add column response_parsed_at timestamptz;
+  add column if not exists coach_narrative text,
+  add column if not exists narrative_reflection_prompt text,
+  add column if not exists user_response_text text,
+  add column if not exists user_responded_at timestamptz,
+  add column if not exists response_parsed_at timestamptz;
 
 -- ---------------------------------------------------------------
 -- 4. insights (mindset shifts) — evidence trail
@@ -134,18 +134,18 @@ alter table public.sessions
 -- shift) but the row stays for audit.
 
 alter table public.insights
-  add column contributing_session_ids uuid[] not null default '{}',
-  add column evidence_quote text,
-  add column influence_scores jsonb not null default '{}'::jsonb,
-  add column combined_score smallint
+  add column if not exists contributing_session_ids uuid[] not null default '{}',
+  add column if not exists evidence_quote text,
+  add column if not exists influence_scores jsonb not null default '{}'::jsonb,
+  add column if not exists combined_score smallint
     check (combined_score between 0 and 10),
-  add column linked_theme_id uuid references public.themes(id) on delete set null,
-  add column user_disagreed_at timestamptz,
-  add column user_disagreement_note text;
+  add column if not exists linked_theme_id uuid references public.themes(id) on delete set null,
+  add column if not exists user_disagreed_at timestamptz,
+  add column if not exists user_disagreement_note text;
 
-create index insights_contributing_session_ids_gin
+create index if not exists insights_contributing_session_ids_gin
   on public.insights using gin (contributing_session_ids);
-create index insights_linked_theme_idx
+create index if not exists insights_linked_theme_idx
   on public.insights (linked_theme_id);
 
 -- ---------------------------------------------------------------
@@ -167,25 +167,25 @@ create index insights_linked_theme_idx
 -- Default empty so the UI can fall back to deriving from content.
 
 alter table public.breakthroughs
-  add column direct_session_ids uuid[] not null default '{}',
-  add column contributing_shift_ids uuid[] not null default '{}',
-  add column contributing_session_ids uuid[] not null default '{}',
-  add column evidence_quote text,
-  add column influence_scores jsonb not null default '{}'::jsonb,
-  add column combined_score smallint
+  add column if not exists direct_session_ids uuid[] not null default '{}',
+  add column if not exists contributing_shift_ids uuid[] not null default '{}',
+  add column if not exists contributing_session_ids uuid[] not null default '{}',
+  add column if not exists evidence_quote text,
+  add column if not exists influence_scores jsonb not null default '{}'::jsonb,
+  add column if not exists combined_score smallint
     check (combined_score between 0 and 10),
-  add column linked_theme_id uuid references public.themes(id) on delete set null,
-  add column user_disagreed_at timestamptz,
-  add column user_disagreement_note text,
-  add column galaxy_name text not null default '';
+  add column if not exists linked_theme_id uuid references public.themes(id) on delete set null,
+  add column if not exists user_disagreed_at timestamptz,
+  add column if not exists user_disagreement_note text,
+  add column if not exists galaxy_name text not null default '';
 
-create index breakthroughs_direct_session_ids_gin
+create index if not exists breakthroughs_direct_session_ids_gin
   on public.breakthroughs using gin (direct_session_ids);
-create index breakthroughs_contributing_shift_ids_gin
+create index if not exists breakthroughs_contributing_shift_ids_gin
   on public.breakthroughs using gin (contributing_shift_ids);
-create index breakthroughs_contributing_session_ids_gin
+create index if not exists breakthroughs_contributing_session_ids_gin
   on public.breakthroughs using gin (contributing_session_ids);
-create index breakthroughs_linked_theme_idx
+create index if not exists breakthroughs_linked_theme_idx
   on public.breakthroughs (linked_theme_id);
 
 -- ---------------------------------------------------------------
@@ -207,24 +207,27 @@ create index breakthroughs_linked_theme_idx
 -- matches how the predefined onboarding goals work today; custom
 -- user-added goals can be either.
 
+-- archived_at already exists from the goals_table migration
+-- (PR #78 added the goal-archive feature). The other columns are
+-- new in V.5a. `add column if not exists` makes this idempotent.
 alter table public.goals
-  add column contributing_session_ids uuid[] not null default '{}',
-  add column contributing_shift_ids uuid[] not null default '{}',
-  add column contributing_breakthrough_ids uuid[] not null default '{}',
-  add column completed_at timestamptz,
-  add column archived_at timestamptz,
-  add column completion_type text not null default 'milestone'
+  add column if not exists contributing_session_ids uuid[] not null default '{}',
+  add column if not exists contributing_shift_ids uuid[] not null default '{}',
+  add column if not exists contributing_breakthrough_ids uuid[] not null default '{}',
+  add column if not exists completed_at timestamptz,
+  add column if not exists archived_at timestamptz,
+  add column if not exists completion_type text not null default 'milestone'
     check (completion_type in ('milestone', 'practice'));
 
-create index goals_contributing_session_ids_gin
+create index if not exists goals_contributing_session_ids_gin
   on public.goals using gin (contributing_session_ids);
-create index goals_contributing_shift_ids_gin
+create index if not exists goals_contributing_shift_ids_gin
   on public.goals using gin (contributing_shift_ids);
-create index goals_contributing_breakthrough_ids_gin
+create index if not exists goals_contributing_breakthrough_ids_gin
   on public.goals using gin (contributing_breakthrough_ids);
-create index goals_completed_at_idx
+create index if not exists goals_completed_at_idx
   on public.goals (user_id, completed_at desc) where completed_at is not null;
-create index goals_archived_at_idx
+create index if not exists goals_archived_at_idx
   on public.goals (user_id, archived_at desc) where archived_at is not null;
 
 -- ---------------------------------------------------------------
@@ -243,20 +246,25 @@ alter table public.themes force row level security;
 alter table public.session_themes enable row level security;
 alter table public.session_themes force row level security;
 
+drop policy if exists "themes_select_own" on public.themes;
 create policy "themes_select_own"
   on public.themes for select to authenticated
   using (user_id = (auth.jwt() ->> 'sub'));
+drop policy if exists "themes_insert_own" on public.themes;
 create policy "themes_insert_own"
   on public.themes for insert to authenticated
   with check (user_id = (auth.jwt() ->> 'sub'));
+drop policy if exists "themes_update_own" on public.themes;
 create policy "themes_update_own"
   on public.themes for update to authenticated
   using (user_id = (auth.jwt() ->> 'sub'))
   with check (user_id = (auth.jwt() ->> 'sub'));
 
+drop policy if exists "session_themes_select_own" on public.session_themes;
 create policy "session_themes_select_own"
   on public.session_themes for select to authenticated
   using (user_id = (auth.jwt() ->> 'sub'));
+drop policy if exists "session_themes_insert_own" on public.session_themes;
 create policy "session_themes_insert_own"
   on public.session_themes for insert to authenticated
   with check (
@@ -267,6 +275,7 @@ create policy "session_themes_insert_own"
         and s.user_id = (auth.jwt() ->> 'sub')
     )
   );
+drop policy if exists "session_themes_update_own" on public.session_themes;
 create policy "session_themes_update_own"
   on public.session_themes for update to authenticated
   using (user_id = (auth.jwt() ->> 'sub'))
