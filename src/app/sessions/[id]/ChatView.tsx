@@ -230,6 +230,11 @@ export function ChatView({
 
 function MessageBubble({ message }: { message: Message }) {
   const fromAi = message.fromAi;
+  // An AI message with empty content is the brief window between
+  // "user just hit send" and "first streamed chunk arrived." Show
+  // typing dots there so the bubble doesn't render as an empty
+  // shell during the model's first-token latency.
+  const isThinking = fromAi && message.content.length === 0;
   // max-w on the flex item (outer div) so the alignment is
   // unambiguous: user bubbles can be no wider than 80% of the
   // column, and self-end pins them to the right edge with the
@@ -248,17 +253,42 @@ function MessageBubble({ message }: { message: Message }) {
             : "rounded-br-sm bg-brand-primary text-brand-primary-contrast"
         }`}
       >
-        {message.content}
+        {isThinking ? <TypingDots /> : message.content}
       </div>
-      <p
-        className={
-          fromAi
-            ? "mt-1 pl-2 text-xs text-neutral-500"
-            : "mt-1 pr-2 text-right text-xs text-neutral-500"
-        }
-      >
-        {formatTime(message.createdAt)}
-      </p>
+      {/* Hide the timestamp while thinking — the bubble appears
+          immediately on send, so a "now" timestamp would be
+          misleading until the response actually arrives. */}
+      {!isThinking ? (
+        <p
+          className={
+            fromAi
+              ? "mt-1 pl-2 text-xs text-neutral-500"
+              : "mt-1 pr-2 text-right text-xs text-neutral-500"
+          }
+        >
+          {formatTime(message.createdAt)}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+// Three dots that pulse with a staggered delay, sized to fit the
+// AI bubble's vertical rhythm. animation-delay is set inline because
+// Tailwind's animate-pulse utility doesn't accept per-instance
+// delay variants.
+function TypingDots() {
+  return (
+    <div className="flex items-center gap-1.5 py-1" aria-label="Coach is typing">
+      <span className="block h-2 w-2 animate-pulse rounded-full bg-neutral-400" />
+      <span
+        className="block h-2 w-2 animate-pulse rounded-full bg-neutral-400"
+        style={{ animationDelay: "0.2s" }}
+      />
+      <span
+        className="block h-2 w-2 animate-pulse rounded-full bg-neutral-400"
+        style={{ animationDelay: "0.4s" }}
+      />
     </div>
   );
 }
