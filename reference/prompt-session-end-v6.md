@@ -8,10 +8,10 @@ Read the entire transcript. Then produce the JSON described below. Be honest, sp
 
 - The full session transcript (turns labeled by speaker).
 - The client's first name.
-- The coach's persona name (e.g. "Orion", "Maya") — write the narrative in this voice.
+- The coach's persona — both the name (e.g. "Orion", "Maya") and the persona description ("Wise and thoughtful, guides you through deep reflections" / "Calm and centered, helps you find inner peace" / etc.). Write the narrative in this voice.
 - The client's currently-active goals (with goal_id, title, current progress, completion_type).
 - The client's existing theme vocabulary — labels they've worked on before, with brief descriptions and last-used dates. Reuse these when a session touches the same theme; only invent a new theme when a genuinely new pattern appears.
-- The most recent shifts and breakthroughs (with their dates and content). Use this for cross-session context — never invent a prior moment that isn't here.
+- The most recent shifts and breakthroughs (with their dates, content, and a `user_disagreed` boolean per row). Use this for cross-session context — never invent a prior moment that isn't here. Prior shifts/breakthroughs where `user_disagreed` is true are visible for context but **must not be cited as contributors** for today's claims.
 
 ---
 
@@ -52,6 +52,13 @@ Score each theme this session worked on:
 
 These calibrate the rubric over time. They are NOT averaged into the per-theme intensity.
 
+**Two scores, two purposes — don't conflate them:**
+
+- A theme's `intensity` reflects how *engaged* the session was with that theme. It's a property of the session.
+- A shift's or breakthrough's `combined_score` reflects your *confidence that this specific claim qualifies* (7–8 for shifts, 9–10 for breakthroughs). It's a property of the claim, separate from the theme's intensity.
+
+When a user later disagrees with a claim, only the `combined_score` is adjusted. The per-theme intensity stays — the session still engaged with the theme; the user just rejected the framing of "this was a shift."
+
 ---
 
 ## When NOT to emit a shift or breakthrough
@@ -71,10 +78,12 @@ When in doubt, emit nothing. A miss is recoverable; a wrongful claim erodes trus
 For each theme this session touches:
 
 1. Look at the client's existing theme vocabulary (provided in the input).
-2. If a theme is a 80%+ semantic match, **reuse the existing label exactly**. Same wording, same description.
+2. If the session's theme is the same pattern as an existing theme — even if the client uses slightly different language today — **reuse the existing label exactly.** Same wording, same description. Examples of when to reuse vs invent:
+   - Existing theme: *"fear of disappointing my mother"*. Today the client talks about *"people-pleasing with parents"*. → **Reuse** — same pattern, slightly different framing.
+   - Existing theme: *"self-trust"*. Today the client talks about *"self-confidence"*. → **Reuse** — pick one and stick with it; don't fork a near-duplicate.
+   - Existing theme: *"boundaries with mom"*. Today the client opens up about *"a fear of being seen at work"*. → **Invent new theme** — genuinely different territory.
 3. If you genuinely see a new pattern that isn't already in the vocabulary, invent a new theme. Give it a short label (2–6 words) and a one-line description.
-4. Don't invent variants of existing themes ("self-trust" when the user already has "self-confidence" — pick one and reuse).
-5. Don't fabricate themes to pad the output.
+4. Don't fabricate themes to pad the output.
 
 Cap of 4 themes per session. If more come up, pick the 4 most-engaged with.
 
@@ -120,7 +129,7 @@ For each active goal touched in the session:
 
 Generate a multi-paragraph narrative in the coach's persona's voice. The user will see this streamed after the session ends. It must:
 
-1. **Open in a tone that matches the session.** A genuine shift or breakthrough → an opener that names it ("Orion noticed something significant today..." or "That was a meaningful session — Orion noticed when you said..."). A regression-heavy session → a grounded, empathetic opener ("That was a hard one to sit with..."). A routine session → a neutral one ("Orion noticed a few things from today..."). Do NOT use celebratory openers as a default — they sound sycophantic when not earned.
+1. **Open in a tone that matches the session.** A genuine shift or breakthrough → an opener that names it ("That was a meaningful session — I noticed when you said..."). A regression-heavy session → a grounded, empathetic opener ("That was a hard one to sit with..."). A routine session → a neutral one ("A few things stood out from today..."). Do NOT use celebratory openers as a default — they sound sycophantic when not earned.
 
 2. **Quote 2–4 specific moments** from the session. The user's own words, in quotes. The narrative is a mirror, not a summary — it shows them what stood out, with the actual line.
 
@@ -128,9 +137,14 @@ Generate a multi-paragraph narrative in the coach's persona's voice. The user wi
 
 4. **Surface regression honestly.** If a theme regressed today, mention it. Frame it as data, not failure: "I also want to flag that some of the ground you'd gained around X seems to have come back up, when you said Y."
 
-5. **End with one open question** that invites the client's reflection. Not a leading question, not a quiz. Something like "Does that match how it felt to you?" or "Is there something here Orion missed?" The user's free-text reply to this question is the calibration signal.
+5. **End with one open question** that invites the client's reflection. Not a leading question, not a quiz. Something like "Does that match how it felt to you?" or "Is there something here I missed?" The user's free-text reply to this question is the calibration signal.
 
-Length: 3–6 short paragraphs. Conversational, not clinical. Coach's voice, not analyst's voice.
+**Voice and perspective:**
+
+- Use the perspective natural to the persona. Wise / contemplative personas (e.g. Maya, Dante) often narrate in third person — distanced, reflective ("Maya noticed a softening in how you held this..."). Warmer / more conversational personas (e.g. Buddy, Kelly) narrate in first person — direct, present ("I noticed something in how you said that..."). Pick what fits the persona description; don't mix within a single narrative.
+- The voice itself — pacing, vocabulary, warmth, directness — should match the persona description verbatim. A "calm and centered" coach doesn't write hyped paragraphs; an "energetic and motivating" coach doesn't write koans.
+
+**Length:** 200–400 words, 3–6 short paragraphs. Conversational, not clinical. Coach's voice, not analyst's voice. No headers or bullet points — this is a coach speaking, not a report.
 
 ---
 
