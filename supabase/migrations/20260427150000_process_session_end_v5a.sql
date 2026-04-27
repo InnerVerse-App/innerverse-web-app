@@ -210,8 +210,14 @@ begin
         description = coalesce(excluded.description, public.themes.description)
       returning id into v_theme_id;
 
+      -- Map keys are lowercased so a shift / breakthrough that
+      -- references the theme with slightly different casing
+      -- (realistic LLM drift within a single response) still links
+      -- correctly. The themes table is unique on (user_id,
+      -- lower(label)) so case-folded keys are guaranteed unique
+      -- within this map too.
       v_theme_label_to_id := v_theme_label_to_id
-        || jsonb_build_object(v_theme_label, v_theme_id::text);
+        || jsonb_build_object(lower(v_theme_label), v_theme_id::text);
 
       -- Intensity: clamp 0..10. NULL → skip the row entirely.
       v_theme_intensity_raw := nullif(v_theme_elem ->> 'intensity', '')::bigint;
@@ -295,7 +301,7 @@ begin
       v_shift_linked_theme_id := null;
       if v_shift_linked_label is not null then
         begin
-          v_shift_linked_theme_id := (v_theme_label_to_id ->> v_shift_linked_label)::uuid;
+          v_shift_linked_theme_id := (v_theme_label_to_id ->> lower(v_shift_linked_label))::uuid;
         exception when invalid_text_representation then
           v_shift_linked_theme_id := null;
         end;
@@ -307,7 +313,7 @@ begin
           coalesce(
             (select array_agg(value::uuid)
              from jsonb_array_elements_text(v_shift_elem -> 'contributing_session_ids')
-             where value ~ '^[0-9a-f-]{36}$'),
+             where value ~ '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'),
             '{}'::uuid[]
           )
         else '{}'::uuid[]
@@ -356,7 +362,7 @@ begin
       v_bk_linked_theme_id := null;
       if v_bk_linked_label is not null then
         begin
-          v_bk_linked_theme_id := (v_theme_label_to_id ->> v_bk_linked_label)::uuid;
+          v_bk_linked_theme_id := (v_theme_label_to_id ->> lower(v_bk_linked_label))::uuid;
         exception when invalid_text_representation then
           v_bk_linked_theme_id := null;
         end;
@@ -367,7 +373,7 @@ begin
           coalesce(
             (select array_agg(value::uuid)
              from jsonb_array_elements_text(v_bk_elem -> 'direct_session_ids')
-             where value ~ '^[0-9a-f-]{36}$'),
+             where value ~ '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'),
             '{}'::uuid[]
           )
         else '{}'::uuid[]
@@ -377,7 +383,7 @@ begin
           coalesce(
             (select array_agg(value::uuid)
              from jsonb_array_elements_text(v_bk_elem -> 'contributing_shift_ids')
-             where value ~ '^[0-9a-f-]{36}$'),
+             where value ~ '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'),
             '{}'::uuid[]
           )
         else '{}'::uuid[]
@@ -387,7 +393,7 @@ begin
           coalesce(
             (select array_agg(value::uuid)
              from jsonb_array_elements_text(v_bk_elem -> 'contributing_session_ids')
-             where value ~ '^[0-9a-f-]{36}$'),
+             where value ~ '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'),
             '{}'::uuid[]
           )
         else '{}'::uuid[]
@@ -469,7 +475,7 @@ begin
           coalesce(
             (select array_agg(value::uuid)
              from jsonb_array_elements_text(v_goal_elem -> 'contributing_session_ids')
-             where value ~ '^[0-9a-f-]{36}$'),
+             where value ~ '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'),
             '{}'::uuid[]
           )
         else '{}'::uuid[]
@@ -479,7 +485,7 @@ begin
           coalesce(
             (select array_agg(value::uuid)
              from jsonb_array_elements_text(v_goal_elem -> 'contributing_shift_ids')
-             where value ~ '^[0-9a-f-]{36}$'),
+             where value ~ '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'),
             '{}'::uuid[]
           )
         else '{}'::uuid[]
@@ -489,7 +495,7 @@ begin
           coalesce(
             (select array_agg(value::uuid)
              from jsonb_array_elements_text(v_goal_elem -> 'contributing_breakthrough_ids')
-             where value ~ '^[0-9a-f-]{36}$'),
+             where value ~ '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'),
             '{}'::uuid[]
           )
         else '{}'::uuid[]
@@ -506,13 +512,22 @@ begin
           progress_rationale = v_goal_rationale,
           last_session_id = p_session_id,
           contributing_session_ids = (
-            select array(select distinct unnest(public.goals.contributing_session_ids || v_goal_contrib_sessions))
+            select array(
+              select distinct val
+              from unnest(contributing_session_ids || v_goal_contrib_sessions) as val
+            )
           ),
           contributing_shift_ids = (
-            select array(select distinct unnest(public.goals.contributing_shift_ids || v_goal_contrib_shifts))
+            select array(
+              select distinct val
+              from unnest(contributing_shift_ids || v_goal_contrib_shifts) as val
+            )
           ),
           contributing_breakthrough_ids = (
-            select array(select distinct unnest(public.goals.contributing_breakthrough_ids || v_goal_contrib_breakthroughs))
+            select array(
+              select distinct val
+              from unnest(contributing_breakthrough_ids || v_goal_contrib_breakthroughs) as val
+            )
           )
       where id = v_goal_id
         and user_id = v_user_id
