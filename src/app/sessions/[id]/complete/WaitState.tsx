@@ -1,14 +1,23 @@
 "use client";
 
+import * as Sentry from "@sentry/nextjs";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
-// Polled while the v6 analysis runs in the background. Calls
+// Polled while the v6/v7 analysis runs in the background. Calls
 // router.refresh() every POLL_INTERVAL_MS so the parent server
 // component re-fetches the session row and switches to the
 // narrative form once `coach_narrative` is populated.
 const POLL_INTERVAL_MS = 3500;
+
+// Tiered observability + UX for stuck analyses. The OpenAI client
+// timeout is 180s, so anything still polling past this window has
+// almost certainly errored out and is waiting on the cron retry
+// to recover. We surface that as a soft fallback rather than an
+// infinite spinner.
+const BREADCRUMB_AFTER_MS = 90_000;
+const FALLBACK_AFTER_MS = 200_000;
 
 // Rotating reflection prompts shown during the wait. Cycles every
 // PROMPT_INTERVAL_MS so the user has something to chew on while the
@@ -28,6 +37,9 @@ const PROMPT_INTERVAL_MS = 5000;
 export function WaitState() {
   const router = useRouter();
   const [promptIdx, setPromptIdx] = useState(0);
+  // Tracks how long we've been polling so we can flip into the
+  // fallback view if the analysis appears to have stalled.
+  const [showFallback, setShowFallback] = useState(false);
 
   // Poll the server until the parent (a server component) sees the
   // narrative ready and stops rendering this client. router.refresh()
@@ -48,6 +60,57 @@ export function WaitState() {
     }, PROMPT_INTERVAL_MS);
     return () => window.clearInterval(id);
   }, []);
+
+  // Stall handling.
+  // - At BREADCRUMB_AFTER_MS: send a Sentry breadcrumb so we see in
+  //   production how often analyses are running long. Doesn't change
+  //   the UI; just observability.
+  // - At FALLBACK_AFTER_MS: swap the spinner for a "session saved,
+  //   analysis is taking longer than usual" message + Home CTA. The
+  //   cron's retry pass picks up unanalyzed sessions overnight, so
+  //   the summary will still be generated; the user just doesn't have
+  //   to stare at a stuck spinner.
+  useEffect(() => {
+    const breadcrumb = window.setTimeout(() => {
+      Sentry.captureMessage("post_session_wait_state_extended", {
+        level: "warning",
+        tags: { stage: "post_session_wait_extended" },
+        extra: { thresholdMs: BREADCRUMB_AFTER_MS },
+      });
+    }, BREADCRUMB_AFTER_MS);
+    const fallback = window.setTimeout(() => {
+      setShowFallback(true);
+    }, FALLBACK_AFTER_MS);
+    return () => {
+      window.clearTimeout(breadcrumb);
+      window.clearTimeout(fallback);
+    };
+  }, []);
+
+  if (showFallback) {
+    return (
+      <div className="flex min-h-[100dvh] flex-col bg-brand-dark text-neutral-200">
+        <main className="flex flex-1 flex-col items-center justify-center px-6 text-center">
+          <div className="flex max-w-sm flex-col items-center gap-4">
+            <h1 className="text-lg font-semibold text-white">
+              Your session is saved
+            </h1>
+            <p className="text-sm leading-relaxed text-neutral-300">
+              The summary is taking a little longer than usual to put
+              together. We&apos;ll have it ready next time you check
+              the Sessions tab. No need to wait here.
+            </p>
+            <Link
+              href="/home"
+              className="mt-2 rounded-md bg-brand-primary px-5 py-2.5 text-sm font-semibold text-brand-primary-contrast transition hover:bg-brand-primary/90"
+            >
+              Head home
+            </Link>
+          </div>
+        </main>
+      </div>
+    );
+  }
 
   return (
     <div className="flex min-h-[100dvh] flex-col bg-brand-dark text-neutral-200">
