@@ -20,9 +20,13 @@ export const MODEL_SESSION_RESPONSE = "gpt-5";
 // Session-start / Call 2 use far less anyway.
 export const MAX_OUTPUT_TOKENS = 6000;
 
-// OpenAI client timeout. Coaching responses stream for tens of seconds;
-// 60s covers the non-streaming session-start call.
-const CLIENT_TIMEOUT_MS = 60_000;
+// OpenAI client timeout. Bumped 60_000 → 180_000 after v7 sessions
+// were timing out on substantive transcripts. v7's output is
+// materially bigger than v5/v6 (per-theme + per-sub-score rationales,
+// galaxy_name, etc.); on rich sessions gpt-5 occasionally runs past
+// 60s. 180s gives generous headroom without making genuinely-stuck
+// requests sit forever.
+const CLIENT_TIMEOUT_MS = 180_000;
 
 let cachedClient: OpenAI | null = null;
 
