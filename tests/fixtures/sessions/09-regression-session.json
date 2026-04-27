@@ -1,0 +1,59 @@
+{
+  "description": "REGRESSION TEST. Client returns having lost ground from a prior shift seeded in priorContext (the 'fast-yes is fear' shift). They actively talk themselves back into the old pattern, rationalize the regression, and the coach gently surfaces it. Expected: theme captured at building-band intensity (4-6) with direction='regression', 0 shifts (not a moment of growth), 0 breakthroughs. The coach narrative MUST honestly surface the regression without celebrating or minimizing. self_disclosure should be moderate; cognitive_shift LOW (no movement); direction flag is the key signal.",
+  "clientFirstName": "Sam",
+  "priorContext": "=== Client ===\nFirst name: Sam\n\n=== Coach Persona ===\nName: Maya\nDescription: Calm and centered, helps you find inner peace\n\n=== Active Goals ===\n(none)\n\n=== Theme Vocabulary (most-recent first) ===\n- \"People-pleasing\" — Saying yes to avoid disappointment, overriding inner wants. (last used 5 days ago)\n- \"Self-trust\" — Choosing your own knowing over external validation. (last used 5 days ago)\n\n=== Recent Mindset Shifts (most-recent first; user_disagreed flag means do NOT cite as a contributor) ===\n- [aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa | 5 days ago] Recognized the fast-yes as a fear response, not consent. Caught it before agreeing to host mom's birthday.\n\n=== Recent Breakthroughs (most-recent first; same disagreement rule) ===\n(none yet)\n\n=== Recent Sessions (most-recent first; eligible pool for contributing_session_ids) ===\n- [11111111-1111-1111-1111-111111111111 | 5 days ago]\n- [22222222-2222-2222-2222-222222222222 | 12 days ago]\n- [33333333-3333-3333-3333-333333333333 | 19 days ago]",
+  "coachPersona": {
+    "name": "Maya",
+    "description": "Calm and centered, helps you find inner peace"
+  },
+  "messages": [
+    {
+      "role": "coach",
+      "content": "Welcome back, Sam. How has the week been?"
+    },
+    {
+      "role": "user",
+      "content": "I want to talk about my mom's birthday. I ended up saying yes to flying out for the whole weekend. So I'm going."
+    },
+    {
+      "role": "coach",
+      "content": "Tell me how that decision came together for you."
+    },
+    {
+      "role": "user",
+      "content": "I called her back the next day like I said I would. And I was going to say I couldn't make the whole weekend. But she sounded so excited. And then I started thinking, you know, she's getting older. I don't see her enough anyway. What's the harm in just going for the weekend."
+    },
+    {
+      "role": "coach",
+      "content": "What happened to the pause we talked about, the one where you check in with what you actually want?"
+    },
+    {
+      "role": "user",
+      "content": "I checked in. I think I just decided that what I want isn't always the most important thing. Sometimes you just do the thing for the other person, you know? I think last week I was being kind of selfish honestly."
+    },
+    {
+      "role": "coach",
+      "content": "Selfish is a strong word for what we noticed last week. Last week you said, 'I had all three with me at once and I used them. I knew what I was doing. I trusted myself.' What's it like to call that selfish today?"
+    },
+    {
+      "role": "user",
+      "content": "Yeah, I don't know. I think I got a little high on it. Like I was patting myself on the back too much. The reality is I have a mom who loves me and wants to see me. Calling that fast-yes a 'fear response' was probably overdoing it."
+    },
+    {
+      "role": "coach",
+      "content": "I want to slow down here. I'm hearing two different stories. Last week the pause was a big deal. This week it sounds like you're talking yourself out of it being a big deal. Are you feeling something underneath that?"
+    },
+    {
+      "role": "user",
+      "content": "Maybe a little guilt. I don't know. It's just easier to go than to feel like I'm being difficult. I don't want to make this complicated. It's a weekend, I'll go, it's fine."
+    },
+    {
+      "role": "coach",
+      "content": "Okay. I won't push you on the decision. But I want to flag what I'm noticing, just so it's named. Last week we found something. This week the thing we found is being called overblown. That happens, that's part of the work, but I don't want it to disappear without us seeing it."
+    },
+    {
+      "role": "user",
+      "content": "Yeah. Yeah, I hear you. Maybe we can come back to it next week."
+    }
+  ]
+}
