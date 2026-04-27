@@ -40,6 +40,13 @@ export function ChatView({
   const [error, setError] = useState<string | null>(null);
 
   const bottomRef = useRef<HTMLDivElement | null>(null);
+  // Auto-focus the textarea when the coach finishes streaming so the
+  // user can keep typing without clicking back into the input.
+  const inputRef = useRef<HTMLTextAreaElement | null>(null);
+  // Tracks whether streaming was true on the previous render — lets
+  // us detect the true→false transition (response finished) without
+  // also firing on initial mount (where streaming starts as false).
+  const wasStreamingRef = useRef(false);
   // Holds the in-flight stream's AbortController so component unmount
   // (user navigates away) cancels the fetch, which propagates through
   // to cancel the upstream OpenAI call on the server.
@@ -57,6 +64,18 @@ export function ChatView({
       streamAbortRef.current?.abort();
     };
   }, []);
+
+  // Return cursor to the textarea once the coach is done responding.
+  // We compare against the previous streaming value (via ref) so this
+  // only fires on the true→false transition — not on initial mount,
+  // where streaming starts false and we'd otherwise steal focus
+  // from anything else on the page.
+  useEffect(() => {
+    if (wasStreamingRef.current && !streaming && !ended) {
+      inputRef.current?.focus();
+    }
+    wasStreamingRef.current = streaming;
+  }, [streaming, ended]);
 
   async function send(e: FormEvent) {
     e.preventDefault();
@@ -191,6 +210,7 @@ export function ChatView({
       >
         <div className="mx-auto flex max-w-2xl items-end gap-2">
           <textarea
+            ref={inputRef}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={onKeyDown}
@@ -230,22 +250,65 @@ export function ChatView({
 
 function MessageBubble({ message }: { message: Message }) {
   const fromAi = message.fromAi;
+  // An AI message with empty content is the brief window between
+  // "user just hit send" and "first streamed chunk arrived." Show
+  // typing dots there so the bubble doesn't render as an empty
+  // shell during the model's first-token latency.
+  const isThinking = fromAi && message.content.length === 0;
+  // Outer wrapper is a flex ROW that fills the message column and
+  // uses justify-content to pin the bubble. Inner wrapper holds the
+  // bubble + timestamp stacked, capped at 80% so even long messages
+  // don't span the full column. Flex-column + self-end (the prior
+  // approach) didn't reliably push the right edge to the column
+  // boundary on wrapped multi-line text — flex auto-sized the item
+  // smaller than the available width, so it floated mid-column.
   return (
-    <div className={fromAi ? "self-start" : "self-end"}>
-      <div
-        className={`max-w-[80%] rounded-2xl px-4 py-2.5 text-sm text-neutral-100 ${fromAi ? "bg-white/5" : "bg-brand-primary/15"}`}
-      >
-        {message.content}
+    <div className={`flex w-full ${fromAi ? "justify-start" : "justify-end"}`}>
+      <div className="flex max-w-[80%] flex-col">
+        <div
+          className={`rounded-2xl px-4 py-2.5 text-sm ${
+            fromAi
+              ? "rounded-bl-sm bg-white/5 text-neutral-100"
+              : "rounded-br-sm bg-brand-primary text-brand-primary-contrast"
+          }`}
+        >
+          {isThinking ? <TypingDots /> : message.content}
+        </div>
+        {/* Hide the timestamp while thinking — the bubble appears
+            immediately on send, so a "now" timestamp would be
+            misleading until the response actually arrives. */}
+        {!isThinking ? (
+          <p
+            className={
+              fromAi
+                ? "mt-1 pl-2 text-xs text-neutral-500"
+                : "mt-1 pr-2 text-right text-xs text-neutral-500"
+            }
+          >
+            {formatTime(message.createdAt)}
+          </p>
+        ) : null}
       </div>
-      <p
-        className={
-          fromAi
-            ? "mt-1 pl-2 text-xs text-neutral-500"
-            : "mt-1 pr-2 text-right text-xs text-neutral-500"
-        }
-      >
-        {formatTime(message.createdAt)}
-      </p>
+    </div>
+  );
+}
+
+// Three dots that pulse with a staggered delay, sized to fit the
+// AI bubble's vertical rhythm. animation-delay is set inline because
+// Tailwind's animate-pulse utility doesn't accept per-instance
+// delay variants.
+function TypingDots() {
+  return (
+    <div className="flex items-center gap-1.5 py-1" aria-label="Coach is typing">
+      <span className="block h-2 w-2 animate-pulse rounded-full bg-neutral-400" />
+      <span
+        className="block h-2 w-2 animate-pulse rounded-full bg-neutral-400"
+        style={{ animationDelay: "0.2s" }}
+      />
+      <span
+        className="block h-2 w-2 animate-pulse rounded-full bg-neutral-400"
+        style={{ animationDelay: "0.4s" }}
+      />
     </div>
   );
 }
