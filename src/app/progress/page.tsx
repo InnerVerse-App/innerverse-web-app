@@ -98,6 +98,12 @@ type GoalContributorRow = {
   contributing_breakthrough_ids: string[] | null;
 };
 
+// Soft cap matching the demo data scale. Below the breakthroughs /
+// mindset-shifts list, the expandable list virtualizes its rendering
+// to ~5 visible cards anyway — fetching every row regardless of age
+// would balloon over time without a corresponding UI benefit.
+const LEGACY_SECTION_LIMIT = 100;
+
 async function loadLegacySections(
   ctx: UserSupabase,
 ): Promise<LegacySectionData> {
@@ -105,11 +111,13 @@ async function loadLegacySections(
     ctx.client
       .from("breakthroughs")
       .select("id, content, created_at")
-      .order("created_at", { ascending: false }),
+      .order("created_at", { ascending: false })
+      .limit(LEGACY_SECTION_LIMIT),
     ctx.client
       .from("insights")
       .select("id, content, created_at")
-      .order("created_at", { ascending: false }),
+      .order("created_at", { ascending: false })
+      .limit(LEGACY_SECTION_LIMIT),
   ]);
   if (brRes.error) throw brRes.error;
   if (inRes.error) throw inRes.error;
@@ -292,7 +300,7 @@ async function loadConstellation(
 }
 
 // Stripped-down galaxy name when the model didn't emit one. First
-// few content words, title-cased — readable but obviously a fallback
+// few content words verbatim — readable but obviously a fallback
 // (no flourish like "The Sovereign" or "Belonging Without Bargaining").
 function fallbackGalaxyName(content: string): string {
   const words = content.trim().split(/\s+/).slice(0, 4).join(" ");
