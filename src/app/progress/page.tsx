@@ -300,10 +300,14 @@ async function loadConstellation(
 }
 
 // Stripped-down galaxy name when the model didn't emit one. First
-// few content words verbatim — readable but obviously a fallback
-// (no flourish like "The Sovereign" or "Belonging Without Bargaining").
+// few content words after trimming leading punctuation/markdown —
+// readable but obviously a fallback (no flourish like "The Sovereign"
+// or "Belonging Without Bargaining"). The leading-char strip prevents
+// pre-v6 breakthroughs whose content opens with a quote or markdown
+// header from leaking those markers into the constellation label.
 function fallbackGalaxyName(content: string): string {
-  const words = content.trim().split(/\s+/).slice(0, 4).join(" ");
+  const cleaned = content.trim().replace(/^[#"'*\s]+/, "");
+  const words = cleaned.split(/\s+/).slice(0, 4).join(" ");
   return words || "Untitled Galaxy";
 }
 
