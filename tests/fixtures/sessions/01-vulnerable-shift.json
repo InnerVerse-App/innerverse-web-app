@@ -1,0 +1,77 @@
+{
+  "description": "Substantive session with a clear, evidence-anchored mindset shift on people-pleasing → self-trust. Expected: ≥1 shift emitted with non-empty evidence_quote, possibly 0–1 breakthroughs (rubric should weigh whether this is shift territory or breakthrough territory), themes like 'people-pleasing' or 'self-trust' marked is_new_theme=true, no trauma flag.",
+  "messages": [
+    {
+      "role": "coach",
+      "content": "Good to see you. What's most alive for you today?"
+    },
+    {
+      "role": "user",
+      "content": "I had a thing with my sister this week. She asked me to host Thanksgiving and I just said yes immediately. Then I spent three days dreading it and being kind of a wreck about it."
+    },
+    {
+      "role": "coach",
+      "content": "Three days dreading it. What was the dread doing — what was it trying to tell you?"
+    },
+    {
+      "role": "user",
+      "content": "I think it was telling me I didn't actually want to do it. But by the time I noticed, I'd already said yes and then it felt impossible to take it back."
+    },
+    {
+      "role": "coach",
+      "content": "There's a gap there — between the yes you said out loud and the yes you actually had inside. What is it like to notice that gap?"
+    },
+    {
+      "role": "user",
+      "content": "Honestly it's kind of devastating. Because I do this all the time. I say yes before I check with myself. And then I resent everyone for things I agreed to."
+    },
+    {
+      "role": "coach",
+      "content": "Mm. Say more about 'before I check with myself.'"
+    },
+    {
+      "role": "user",
+      "content": "It's like there's a part of me whose whole job is making sure no one is disappointed. And it answers the question before the rest of me even hears it. Like an autopilot."
+    },
+    {
+      "role": "coach",
+      "content": "An autopilot whose job is making sure no one is disappointed. What happens to the part of you who would have said something different, if it had been allowed to answer?"
+    },
+    {
+      "role": "user",
+      "content": "She gets… I don't know. Buried. I think I've been ignoring her for so long that I'm not even sure what she would say half the time."
+    },
+    {
+      "role": "coach",
+      "content": "Take a breath. If she could speak right now, about Thanksgiving — what would she say?"
+    },
+    {
+      "role": "user",
+      "content": "Probably that I love my sister and I want to see her, but I don't want to host. I want someone else to host and I want to bring a pie. That's it. That's what I actually want."
+    },
+    {
+      "role": "coach",
+      "content": "What's it like to say that out loud?"
+    },
+    {
+      "role": "user",
+      "content": "It feels like the truth. And also kind of scary because I don't know if I can actually call her and say it."
+    },
+    {
+      "role": "coach",
+      "content": "The truth and the scary live next to each other a lot. What would it mean to trust her — the buried one — even just enough to make the call?"
+    },
+    {
+      "role": "user",
+      "content": "I think it would mean I'm actually allowed to want what I want. Even if it disappoints my sister. Which feels huge to even say."
+    },
+    {
+      "role": "coach",
+      "content": "It is huge. Sit with that for a moment if you can."
+    },
+    {
+      "role": "user",
+      "content": "Yeah. I want to remember this. That the autopilot isn't me — and the buried voice is closer to who I actually am."
+    }
+  ]
+}

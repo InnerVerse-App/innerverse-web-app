@@ -1,0 +1,65 @@
+{
+  "description": "Defensive / surface-level session. Client deflects with humor and intellectualization, never goes to the body or the felt sense. Expected: NO shifts, NO breakthroughs (rubric demands evidence ≥7 with a clear contradicted-pattern moment — none here), session_themes captures the surface-stay direction='stuck', no trauma flag.",
+  "messages": [
+    {
+      "role": "coach",
+      "content": "Good to see you. What's most alive for you today?"
+    },
+    {
+      "role": "user",
+      "content": "Nothing in particular. Same week as always — too much to do, not enough hours, the usual."
+    },
+    {
+      "role": "coach",
+      "content": "When you say 'the usual,' what comes up underneath that?"
+    },
+    {
+      "role": "user",
+      "content": "Ha. Underneath? Probably more spreadsheets. I'm a project manager, that's pretty much the answer."
+    },
+    {
+      "role": "coach",
+      "content": "I notice the joke. Is there something you'd want to talk about if we slowed down a bit?"
+    },
+    {
+      "role": "user",
+      "content": "I mean, I could complain about my boss. Standard issue. Nothing dramatic."
+    },
+    {
+      "role": "coach",
+      "content": "What's the standard issue with your boss?"
+    },
+    {
+      "role": "user",
+      "content": "She micromanages. I roll my eyes. We move on. It's fine. I just have to remind myself that work is work."
+    },
+    {
+      "role": "coach",
+      "content": "When you remind yourself work is work, what happens in your body?"
+    },
+    {
+      "role": "user",
+      "content": "Nothing? I'm not really a body person. I'm pretty much always in my head."
+    },
+    {
+      "role": "coach",
+      "content": "Mm. If your head was the only one in the room and the rest of you got a turn — what might that part want to say?"
+    },
+    {
+      "role": "user",
+      "content": "Probably 'go take a nap.' That's about as deep as I get."
+    },
+    {
+      "role": "coach",
+      "content": "Sometimes the answer is the nap. I don't want to push if you're not in a place to go further today. Is there anything else worth naming before we close?"
+    },
+    {
+      "role": "user",
+      "content": "Not really. I think I'm good. Just needed a break from the spreadsheets honestly."
+    },
+    {
+      "role": "coach",
+      "content": "Okay. Thanks for showing up. We'll be here next time."
+    }
+  ]
+}

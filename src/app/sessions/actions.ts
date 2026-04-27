@@ -18,14 +18,17 @@ import {
   ensureCoachingState,
 } from "@/lib/sessions";
 import { runSessionEndAnalysis } from "@/lib/session-end";
+import { runSessionResponseAnalysis } from "@/lib/session-response";
 import { supabaseForUser, type UserSupabase } from "@/lib/supabase";
 
-import { FEEDBACK_FIELDS } from "./[id]/complete/fields";
+import { POST_SESSION_RESPONSE_FIELD } from "./[id]/complete/fields";
 
-// Postgres SQLSTATE 23505 = unique_violation. Used by the feedback
-// submit flow: a duplicate insert is a user double-click, not an
-// error.
-const PG_UNIQUE_VIOLATION = "23505";
+// Soft cap on the reflection length to bound bad-actor / paste-job
+// inputs before they reach the DB. The schema column is unbounded
+// `text`; this is a defensive guardrail at the action boundary, not
+// a UX limit (the textarea has no maxLength). Anything above gets
+// truncated server-side.
+const MAX_RESPONSE_LENGTH = 5000;
 
 // Resolve the user's first name for the coaching prompt's
 // `Client: <user_name>` field. Three-tier fallback:
@@ -143,10 +146,15 @@ export async function endSession(sessionId: string): Promise<void> {
   redirect("/home");
 }
 
-// Writes the Session Complete reflection + feedback form. Skip for
-// now doesn't call this — the skip link just navigates to /home
-// without creating a row.
-export async function submitSessionFeedback(
+// Writes the post-session reflection (free-text response to the
+// coach narrative). Empty submits skip the write and just bounce
+// home — same UX as the Skip link.
+//
+// On a non-empty write we set both `user_response_text` and
+// `user_responded_at`, which: (1) flips the page render branch so
+// follow-up visits redirect home; (2) primes the row for Call 2
+// (response-parser) to pick up later.
+export async function submitSessionResponse(
   sessionId: string,
   formData: FormData,
 ): Promise<void> {
@@ -156,47 +164,39 @@ export async function submitSessionFeedback(
   const ctx = await supabaseForUser();
   if (!ctx) redirect("/sign-in");
 
-  const reflection = trimOrNull(formData.get(FEEDBACK_FIELDS.REFLECTION));
-  const tone = parseRating(formData.get(FEEDBACK_FIELDS.TONE_RATING));
-  const helpful = parseRating(formData.get(FEEDBACK_FIELDS.HELPFUL_RATING));
-  const aligned = parseRating(formData.get(FEEDBACK_FIELDS.ALIGNED_RATING));
-  const additional = trimOrNull(formData.get(FEEDBACK_FIELDS.ADDITIONAL_FEEDBACK));
+  const raw = formData.get(POST_SESSION_RESPONSE_FIELD);
+  const text =
+    typeof raw === "string"
+      ? raw.trim().slice(0, MAX_RESPONSE_LENGTH)
+      : "";
+  if (text.length === 0) redirect("/home");
 
-  // Schema CHECK requires at least one non-null value; a fully-empty
-  // submit is indistinguishable from Skip and lands on /home without
-  // a row.
-  const hasContent =
-    reflection !== null ||
-    tone !== null ||
-    helpful !== null ||
-    aligned !== null ||
-    additional !== null;
-  if (!hasContent) redirect("/home");
-
-  const { error } = await ctx.client.from("session_feedback").insert({
-    user_id: ctx.userId,
-    session_id: sessionId,
-    reflection,
-    tone_rating: tone,
-    helpful_rating: helpful,
-    aligned_rating: aligned,
-    additional_feedback: additional,
-  });
-  if (error && error.code !== PG_UNIQUE_VIOLATION) {
-    captureSessionError(error, "session_feedback_insert", sessionId);
+  const { error } = await ctx.client
+    .from("sessions")
+    .update({
+      user_response_text: text,
+      user_responded_at: new Date().toISOString(),
+    })
+    .eq("id", sessionId)
+    .is("user_responded_at", null);
+  if (error) {
+    captureSessionError(error, "session_response_save", sessionId);
     throw error;
   }
+
+  // Fire Call 2 (response-parser) in the background — same pattern
+  // as runSessionEndAnalysis from endSession. The user is redirected
+  // to /home immediately; the parse happens after the response has
+  // been sent. Errors are captured to Sentry inside the function;
+  // swallow here so background failures don't crash the serverless
+  // invocation.
+  after(async () => {
+    try {
+      await runSessionResponseAnalysis(ctx, sessionId);
+    } catch {
+      // already logged + captured
+    }
+  });
+
   redirect("/home");
-}
-
-function trimOrNull(value: FormDataEntryValue | null): string | null {
-  if (typeof value !== "string") return null;
-  const trimmed = value.trim();
-  return trimmed.length > 0 ? trimmed : null;
-}
-
-function parseRating(value: FormDataEntryValue | null): number | null {
-  if (typeof value !== "string" || value.length === 0) return null;
-  const n = Number.parseInt(value, 10);
-  return Number.isFinite(n) && n >= 1 && n <= 5 ? n : null;
 }

@@ -1,18 +1,36 @@
 import { notFound, redirect } from "next/navigation";
 import { auth } from "@clerk/nextjs/server";
 
-import { loadSessionForUser } from "@/lib/sessions";
+import { supabaseForUser } from "@/lib/supabase";
 
-import { FeedbackForm } from "./FeedbackForm";
+import { NarrativeForm } from "./NarrativeForm";
+import { WaitState } from "./WaitState";
 
 export const dynamic = "force-dynamic";
 
-// Session Complete — shown right after the End button for substantive
-// sessions. Captures the reflection + 1–5 sliders from
-// reference/screenshots/app-ui/app-screenshot-session-complete-*.PNG.
+type SessionRow = {
+  id: string;
+  ended_at: string | null;
+  is_substantive: boolean;
+  coach_narrative: string | null;
+  narrative_reflection_prompt: string | null;
+  user_responded_at: string | null;
+};
+
+// Session Complete — the post-session screen. Three render branches:
+//
+//  1. Narrative not yet written (`coach_narrative IS NULL`): show the
+//     wait-state. The v6 analysis runs in the background after the
+//     End click; the wait-state polls via router.refresh until the
+//     narrative lands on the row.
+//  2. User has already responded (`user_responded_at IS NOT NULL`):
+//     send them home. We don't expose a second-chance editor; the
+//     response feeds Call 2 (response-parser) which runs once.
+//  3. Otherwise: render the narrative + free-text reflection form.
+//
 // Abandoned sessions never hit this page (the cron processes them
-// silently); that matches operator intent to treat abandonment
-// identically to clicking Skip on the form.
+// silently). Short non-substantive sessions also skip — the End
+// action redirects them straight to /home.
 export default async function SessionCompletePage({
   params,
 }: {
@@ -20,20 +38,49 @@ export default async function SessionCompletePage({
 }) {
   const { id } = await params;
 
-  const session = await auth();
-  if (!session?.userId) redirect("/sign-in");
+  const authSession = await auth();
+  if (!authSession?.userId) redirect("/sign-in");
 
-  const loaded = await loadSessionForUser(id);
-  if (!loaded) notFound();
+  const ctx = await supabaseForUser();
+  if (!ctx) redirect("/sign-in");
 
-  // A session that isn't ended yet shouldn't expose this page; send
-  // the user back to the active chat. And only substantive sessions
-  // route here intentionally — short sessions redirect to /home from
-  // the endSession action, but if someone navigates here directly
-  // we still let them submit feedback (schema allows it).
-  if (!loaded.session.ended_at) {
+  const { data, error } = await ctx.client
+    .from("sessions")
+    .select(
+      "id, ended_at, is_substantive, coach_narrative, narrative_reflection_prompt, user_responded_at",
+    )
+    .eq("id", id)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) notFound();
+  const session = data as SessionRow;
+
+  // Not ended yet → bounce back to the active chat. Same guard as
+  // before (this page is only meaningful post-end).
+  if (!session.ended_at) {
     redirect(`/sessions/${id}`);
   }
 
-  return <FeedbackForm sessionId={id} />;
+  // Non-substantive sessions skip the analysis entirely; they should
+  // never have been routed here, but if a user navigates directly
+  // there's nothing to render — send them home.
+  if (!session.is_substantive) {
+    redirect("/home");
+  }
+
+  if (session.user_responded_at) {
+    redirect("/home");
+  }
+
+  if (!session.coach_narrative) {
+    return <WaitState />;
+  }
+
+  return (
+    <NarrativeForm
+      sessionId={id}
+      coachNarrative={session.coach_narrative}
+      reflectionPrompt={session.narrative_reflection_prompt}
+    />
+  );
 }

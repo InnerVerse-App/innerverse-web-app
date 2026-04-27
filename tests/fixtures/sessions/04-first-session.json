@@ -1,0 +1,66 @@
+{
+  "description": "First-ever session for a brand-new client. Surface-level scoping conversation — what brought them here, what do they want from coaching. Expected: a session_summary in introductory tone, themes are all is_new_theme=true, NO shifts (rubric: first session is rarely shift territory; pattern-contradiction needs prior pattern), NO breakthroughs, no trauma flag. Tests the bootstrap-empty-context path.",
+  "clientFirstName": "Alex",
+  "messages": [
+    {
+      "role": "coach",
+      "content": "Welcome — I'm glad you're here. This is your first session, so there's no script. What brought you to this work right now?"
+    },
+    {
+      "role": "user",
+      "content": "Honestly, I've been feeling kind of stuck. Not in a crisis way — just, I keep doing the same things and getting the same results, and I'm tired of it. A friend recommended this so I figured I'd try it."
+    },
+    {
+      "role": "coach",
+      "content": "Stuck, and tired of stuck. Can you say more about what 'the same things' looks like?"
+    },
+    {
+      "role": "user",
+      "content": "I take on too much at work. I overcommit socially. I tell myself I'm going to start working out and then I don't. I don't know — it's like I have all these intentions and none of them stick."
+    },
+    {
+      "role": "coach",
+      "content": "Lots of intentions, hard to land. If we worked together for a while, what would you want to be different a few months from now?"
+    },
+    {
+      "role": "user",
+      "content": "I think I'd want to feel like I actually live my life on purpose, instead of just reacting all the time. Like, I make a plan and follow through. Or I say no to things without spinning out about it."
+    },
+    {
+      "role": "coach",
+      "content": "That's a clear north star. 'Living on purpose' instead of reacting. We can work with that. Is there one piece of that — saying no, following through, something else — that feels most pressing this month?"
+    },
+    {
+      "role": "user",
+      "content": "Probably saying no. I think a lot of the overcommit is the root cause of everything else."
+    },
+    {
+      "role": "coach",
+      "content": "Good — let's name it. Saying no without spinning out is one of the threads we'll work on. What's a recent moment where you wish you'd said no?"
+    },
+    {
+      "role": "user",
+      "content": "My team lead asked me to take on a project last week. I said yes immediately and I knew the second after that I shouldn't have. I'm already underwater."
+    },
+    {
+      "role": "coach",
+      "content": "That's a very recognizable moment. We won't fix the pattern in one session, but I'd like to flag it: that gap between the yes you said and the yes you meant — that's the place we'll keep coming back to. Sound okay?"
+    },
+    {
+      "role": "user",
+      "content": "Yeah. That actually feels right. I'm tired of the gap."
+    },
+    {
+      "role": "coach",
+      "content": "Good. Anything else you want me to know before we close?"
+    },
+    {
+      "role": "user",
+      "content": "Not yet. I think I'll just see how this goes."
+    },
+    {
+      "role": "coach",
+      "content": "Fair. Thanks for showing up — I'll see you next time."
+    }
+  ]
+}

@@ -1,11 +1,6 @@
-// Field names for the Session Complete feedback form. Shared by
-// FeedbackForm (sets <input name={FEEDBACK_FIELDS.x}>) and
-// submitSessionFeedback (reads formData.get(FEEDBACK_FIELDS.x)),
-// so a typo on either side can't silently break submission.
-export const FEEDBACK_FIELDS = {
-  REFLECTION: "reflection",
-  TONE_RATING: "tone_rating",
-  HELPFUL_RATING: "helpful_rating",
-  ALIGNED_RATING: "aligned_rating",
-  ADDITIONAL_FEEDBACK: "additional_feedback",
-} as const;
+// Shared field name for the post-session reflection form.
+// NarrativeForm sets <textarea name={POST_SESSION_RESPONSE_FIELD}>;
+// submitSessionResponse reads formData.get(POST_SESSION_RESPONSE_FIELD).
+// Co-locating the constant prevents a typo on either side from
+// silently swallowing user-submitted text.
+export const POST_SESSION_RESPONSE_FIELD = "user_response_text";
