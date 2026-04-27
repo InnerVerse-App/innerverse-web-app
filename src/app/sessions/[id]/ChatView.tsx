@@ -255,40 +255,40 @@ function MessageBubble({ message }: { message: Message }) {
   // typing dots there so the bubble doesn't render as an empty
   // shell during the model's first-token latency.
   const isThinking = fromAi && message.content.length === 0;
-  // max-w on the flex item (outer div) so the alignment is
-  // unambiguous: user bubbles can be no wider than 80% of the
-  // column, and self-end pins them to the right edge with the
-  // bubble extending leftward. AI bubbles do the mirror image.
-  // The color contrast (solid brand-primary for user vs dark
-  // bg-white/5 for AI) makes left/right unmistakable even when
-  // both are long enough to fill 80% of the column.
+  // Outer wrapper is a flex ROW that fills the message column and
+  // uses justify-content to pin the bubble. Inner wrapper holds the
+  // bubble + timestamp stacked, capped at 80% so even long messages
+  // don't span the full column. Flex-column + self-end (the prior
+  // approach) didn't reliably push the right edge to the column
+  // boundary on wrapped multi-line text — flex auto-sized the item
+  // smaller than the available width, so it floated mid-column.
   return (
-    <div
-      className={`flex max-w-[80%] flex-col ${fromAi ? "self-start" : "self-end"}`}
-    >
-      <div
-        className={`rounded-2xl px-4 py-2.5 text-sm ${
-          fromAi
-            ? "rounded-bl-sm bg-white/5 text-neutral-100"
-            : "rounded-br-sm bg-brand-primary text-brand-primary-contrast"
-        }`}
-      >
-        {isThinking ? <TypingDots /> : message.content}
-      </div>
-      {/* Hide the timestamp while thinking — the bubble appears
-          immediately on send, so a "now" timestamp would be
-          misleading until the response actually arrives. */}
-      {!isThinking ? (
-        <p
-          className={
+    <div className={`flex w-full ${fromAi ? "justify-start" : "justify-end"}`}>
+      <div className="flex max-w-[80%] flex-col">
+        <div
+          className={`rounded-2xl px-4 py-2.5 text-sm ${
             fromAi
-              ? "mt-1 pl-2 text-xs text-neutral-500"
-              : "mt-1 pr-2 text-right text-xs text-neutral-500"
-          }
+              ? "rounded-bl-sm bg-white/5 text-neutral-100"
+              : "rounded-br-sm bg-brand-primary text-brand-primary-contrast"
+          }`}
         >
-          {formatTime(message.createdAt)}
-        </p>
-      ) : null}
+          {isThinking ? <TypingDots /> : message.content}
+        </div>
+        {/* Hide the timestamp while thinking — the bubble appears
+            immediately on send, so a "now" timestamp would be
+            misleading until the response actually arrives. */}
+        {!isThinking ? (
+          <p
+            className={
+              fromAi
+                ? "mt-1 pl-2 text-xs text-neutral-500"
+                : "mt-1 pr-2 text-right text-xs text-neutral-500"
+            }
+          >
+            {formatTime(message.createdAt)}
+          </p>
+        ) : null}
+      </div>
     </div>
   );
 }
