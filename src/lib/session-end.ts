@@ -21,6 +21,25 @@ const SESSION_END_PROMPT = readFileSync(
   "utf8",
 ).trim();
 
+// Influence scores are emitted as an array of { target_id, score }
+// objects rather than an arbitrary-key map. OpenAI strict-mode
+// structured outputs require additionalProperties:false on every
+// object, which forbids the natural "{ uuid: 0..100 }" map shape.
+// The RPC transforms this array into a jsonb object on insert so
+// downstream lookups stay cheap.
+const INFLUENCE_SCORES_SCHEMA = {
+  type: "array",
+  items: {
+    type: "object",
+    additionalProperties: false,
+    required: ["target_id", "score"],
+    properties: {
+      target_id: { type: "string" },
+      score: { type: "integer" },
+    },
+  },
+} as const;
+
 // Strict mode forbids numeric bounds (minimum/maximum/minItems); range
 // enforcement lives in the prompt and in process_session_end's defensive
 // parse (the RPC body under supabase/migrations/).
@@ -125,9 +144,11 @@ const SESSION_END_SCHEMA: Record<string, unknown> = {
           direct_session_ids: { type: "array", items: { type: "string" } },
           contributing_shift_ids: { type: "array", items: { type: "string" } },
           contributing_session_ids: { type: "array", items: { type: "string" } },
-          // Map of session/shift id → 0-100 influence. Object shape
-          // can't be schema-enforced for arbitrary keys; RPC clamps.
-          influence_scores: { type: "object", additionalProperties: { type: "integer" } },
+          // Array shape (not arbitrary-key object) so the schema
+          // satisfies OpenAI strict-mode's additionalProperties:false
+          // requirement. The RPC transforms it into a jsonb map at
+          // insert time for cheap downstream lookups.
+          influence_scores: INFLUENCE_SCORES_SCHEMA,
         },
       },
     },
@@ -150,7 +171,7 @@ const SESSION_END_SCHEMA: Record<string, unknown> = {
           evidence_quote: { type: "string" },
           combined_score: { type: "integer" },
           contributing_session_ids: { type: "array", items: { type: "string" } },
-          influence_scores: { type: "object", additionalProperties: { type: "integer" } },
+          influence_scores: INFLUENCE_SCORES_SCHEMA,
         },
       },
     },
@@ -293,7 +314,7 @@ export async function runSessionEndAnalysis(
   // active goals, coach persona. Built lazily after the transcript
   // loads so we don't pay the round-trips on the empty-transcript
   // short-circuit.
-  const context = await buildSessionEndContext(ctx, coachName);
+  const context = await buildSessionEndContext(ctx, coachName, sessionId);
 
   let response;
   try {

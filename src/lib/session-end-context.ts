@@ -169,6 +169,7 @@ function formatSessions(rows: RecentSessionRow[], now: number): string {
 async function loadInputs(
   ctx: UserSupabase,
   coachName: string | null,
+  currentSessionId: string,
 ): Promise<{
   firstName: string;
   persona: { name: string; description: string };
@@ -198,10 +199,14 @@ async function loadInputs(
         .select("id, content, created_at, user_disagreed_at")
         .order("created_at", { ascending: false })
         .limit(RECENT_BREAKTHROUGHS_CAP),
+      // Exclude the current session — it's the SOURCE of any
+      // shifts/breakthroughs we'll emit, not a contributor TO them.
+      // Letting it into the eligible pool tempts the AI to self-cite.
       ctx.client
         .from("sessions")
         .select("id, ended_at")
         .not("ended_at", "is", null)
+        .neq("id", currentSessionId)
         .order("ended_at", { ascending: false })
         .limit(RECENT_SESSIONS_CAP),
     ]);
@@ -226,8 +231,9 @@ async function loadInputs(
 export async function buildSessionEndContext(
   ctx: UserSupabase,
   coachName: string | null,
+  currentSessionId: string,
 ): Promise<string> {
-  const inputs = await loadInputs(ctx, coachName);
+  const inputs = await loadInputs(ctx, coachName, currentSessionId);
   const now = Date.now();
   return [
     `=== Client ===`,

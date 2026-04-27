@@ -96,14 +96,14 @@ When a theme maps to one of the client's active goals, set `linked_goal_id` on t
 For every emitted **shift**:
 - `contributing_session_ids[]` — at least 1 prior session_id from the recent-history input that fed this shift. Must be IDs from the input; never invent.
 - `evidence_quote` — the line from THIS session's transcript that justifies calling it a shift.
-- `influence_scores` — for each contributing_session_id, a 0–100 score for how much that session contributed to the shift.
+- `influence_scores` — array of `{ target_id, score }` objects, one per contributing_session_id, with score 0–100 representing how much that session contributed to the shift.
 
 For every emitted **breakthrough**:
 - `direct_session_ids[]` — sessions that fed this breakthrough directly without going through a shift. Often 0–1 entries.
 - `contributing_shift_ids[]` — prior shifts that culminated in this breakthrough. Usually 1–3 entries; this is the bulk of how a breakthrough is reached.
 - `contributing_session_ids[]` — full list: every direct session AND every session that fed any of the contributing shifts. The constellation map uses this for galaxy membership.
 - `evidence_quote` — the moment.
-- `influence_scores` — 0–100 per contributing session AND per contributing shift.
+- `influence_scores` — array of `{ target_id, score }` objects, one per contributing session AND per contributing shift; score 0–100.
 
 If you cannot populate at least `contributing_shift_ids[]` OR `direct_session_ids[]` with non-empty entries, you do not have a breakthrough — emit a shift instead, or emit nothing.
 
@@ -183,7 +183,7 @@ Output ONLY this JSON. No commentary before or after.
       "evidence_quote": "string — required",
       "combined_score": 7,
       "contributing_session_ids": ["uuid"],
-      "influence_scores": { "uuid": 0 }
+      "influence_scores": [{ "target_id": "uuid", "score": 0 }]
     }
   ],
 
@@ -197,7 +197,7 @@ Output ONLY this JSON. No commentary before or after.
       "direct_session_ids": ["uuid"],
       "contributing_shift_ids": ["uuid"],
       "contributing_session_ids": ["uuid"],
-      "influence_scores": { "uuid": 0 }
+      "influence_scores": [{ "target_id": "uuid", "score": 0 }]
     }
   ],
 
