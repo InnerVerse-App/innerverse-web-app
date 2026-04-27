@@ -211,6 +211,7 @@ Output ONLY this JSON. No commentary before or after.
       "linked_theme_label": "string — must match a label in session_themes above (intensity 9-10)",
       "evidence_quote": "string — required",
       "combined_score": 9,
+      "galaxy_name": "string — short evocative name (2-5 words) for this breakthrough's constellation on the user's progress map. Examples: 'The First Honest No', 'Belonging Without Bargaining', 'The Sovereign'. Required.",
       "direct_session_ids": ["uuid"],
       "contributing_shift_ids": ["uuid"],
       "contributing_session_ids": ["uuid"],
