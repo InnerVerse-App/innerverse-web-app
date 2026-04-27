@@ -136,16 +136,29 @@ export async function countMessages(
 // exchange threshold. Returns the final row. Pure flip — no OpenAI
 // call, no analysis writes. Chunk 6.3 layers session-end analysis on
 // top by calling this after the JSON write.
+//
+// Logs the message-count → is_substantive decision so we can spot
+// the bug where a real conversation gets tagged is_substantive=false
+// (seen once on a 40-exchange session in prod; root cause unknown,
+// likely countMessages returning a wrong count under some race).
+// The counterpart finalize beacon does the same.
 export async function endSession(
   ctx: UserSupabase,
   sessionId: string,
 ): Promise<SessionRow> {
   const messageCount = await countMessages(ctx, sessionId);
+  const isSubstantive = messageCount >= SUBSTANTIVE_MESSAGE_THRESHOLD;
+  console.log("endSession close", {
+    sessionId,
+    messageCount,
+    threshold: SUBSTANTIVE_MESSAGE_THRESHOLD,
+    isSubstantive,
+  });
   const { data, error } = await ctx.client
     .from("sessions")
     .update({
       ended_at: new Date().toISOString(),
-      is_substantive: messageCount >= SUBSTANTIVE_MESSAGE_THRESHOLD,
+      is_substantive: isSubstantive,
     })
     .eq("id", sessionId)
     .is("ended_at", null)

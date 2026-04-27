@@ -96,8 +96,18 @@ async function findStaleSessions(): Promise<CandidateSession[]> {
 // runSessionEndAnalysis throws inside after() — the `catch` in
 // src/app/sessions/actions.ts swallows the error so the serverless
 // invocation doesn't crash, but the session is left with
-// `(ended_at set, is_substantive true, summary null)` and no retry
-// path. This sweep picks them up and re-runs the RPC.
+// `(ended_at set, summary null)` and no retry path. This sweep picks
+// them up and re-runs the RPC.
+//
+// Note: we deliberately do NOT filter on is_substantive=true here.
+// In testing we hit a bug where a 40-exchange session was tagged
+// is_substantive=false (root cause TBD — likely countMessages
+// returning a wrong count under some race), and the cron silently
+// skipped it. Filtering caused real conversations to never recover.
+// runSessionEndAnalysis itself short-circuits gracefully on empty
+// transcripts, so the worst case for a truly-short session is one
+// extra OpenAI call that produces a tiny analysis — vastly better
+// than silent skipping of real ones.
 async function findEndedUnanalyzedSessions(): Promise<RetrySession[]> {
   const admin = supabaseAdmin();
   const { data, error } = await admin
@@ -105,7 +115,6 @@ async function findEndedUnanalyzedSessions(): Promise<RetrySession[]> {
     .select("id, user_id")
     .not("ended_at", "is", null)
     .is("summary", null)
-    .eq("is_substantive", true)
     .limit(SWEEP_BATCH_LIMIT);
   if (error) throw error;
   return data ?? [];
