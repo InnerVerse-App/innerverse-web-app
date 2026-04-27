@@ -47,8 +47,14 @@ next-env.d.ts
 
 # Claude Code per-operator state (not repo metadata)
 .claude/.last-audited-sha
+.claude/launch.json
 .claude/settings.local.json
 .claude/worktrees/
 
 # Supabase pg_dump output — may contain real user data once testers land
 backups/
+
+# UI mockups / one-off design scratch — kept out of the repo so
+# experiments don't pollute git history. Use the constellation
+# branch's mockups/ as a model if reusable.
+/mockups/
