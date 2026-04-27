@@ -157,6 +157,7 @@ const SESSION_END_SCHEMA: Record<string, unknown> = {
           "linked_theme_label",
           "evidence_quote",
           "combined_score",
+          "galaxy_name",
           "direct_session_ids",
           "contributing_shift_ids",
           "contributing_session_ids",
@@ -168,6 +169,11 @@ const SESSION_END_SCHEMA: Record<string, unknown> = {
           linked_theme_label: { type: "string" },
           evidence_quote: { type: "string" },
           combined_score: { type: "integer" },
+          // V.7.1: short evocative constellation name. Persists to
+          // breakthroughs.galaxy_name; the constellation map uses it
+          // as the rendered label when present, falling back to the
+          // first words of content when missing.
+          galaxy_name: { type: "string" },
           direct_session_ids: { type: "array", items: { type: "string" } },
           contributing_shift_ids: { type: "array", items: { type: "string" } },
           contributing_session_ids: { type: "array", items: { type: "string" } },
