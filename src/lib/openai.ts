@@ -7,6 +7,10 @@ import OpenAI from "openai";
 export const MODEL_SESSION_START = "gpt-5";
 export const MODEL_SESSION_CHAT = "gpt-5.2";
 export const MODEL_SESSION_END = "gpt-5";
+// Call 2 (response-parser) — same family as session-end. The task is
+// narrower so we could downsize, but matching session-end keeps
+// reasoning quality consistent for the disagreement-detection rubric.
+export const MODEL_SESSION_RESPONSE = "gpt-5";
 
 // Bubble uses 2000 for session-start; matched here.
 export const MAX_OUTPUT_TOKENS = 2000;

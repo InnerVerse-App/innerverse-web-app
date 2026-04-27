@@ -18,6 +18,7 @@ import {
   ensureCoachingState,
 } from "@/lib/sessions";
 import { runSessionEndAnalysis } from "@/lib/session-end";
+import { runSessionResponseAnalysis } from "@/lib/session-response";
 import { supabaseForUser, type UserSupabase } from "@/lib/supabase";
 
 import { POST_SESSION_RESPONSE_FIELD } from "./[id]/complete/fields";
@@ -182,5 +183,20 @@ export async function submitSessionResponse(
     captureSessionError(error, "session_response_save", sessionId);
     throw error;
   }
+
+  // Fire Call 2 (response-parser) in the background — same pattern
+  // as runSessionEndAnalysis from endSession. The user is redirected
+  // to /home immediately; the parse happens after the response has
+  // been sent. Errors are captured to Sentry inside the function;
+  // swallow here so background failures don't crash the serverless
+  // invocation.
+  after(async () => {
+    try {
+      await runSessionResponseAnalysis(ctx, sessionId);
+    } catch {
+      // already logged + captured
+    }
+  });
+
   redirect("/home");
 }
