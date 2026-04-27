@@ -58,3 +58,4 @@ backups/
 # experiments don't pollute git history. Use the constellation
 # branch's mockups/ as a model if reusable.
 /mockups/
+.claude/scheduled_tasks.lock

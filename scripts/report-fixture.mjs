@@ -96,11 +96,20 @@ async function main() {
   paragraph("", s.coach_narrative);
 
   heading("Sub-scores (0-10 each)");
-  field("Self-disclosure        ", s.self_disclosure_score);
-  field("Cognitive shift        ", s.cognitive_shift_score);
-  field("Emotional integration  ", s.emotional_integration_score);
-  field("Novelty                ", s.novelty_score);
-  field("Progress percent       ", s.progress_percent);
+  const r = s.score_rationales ?? {};
+  function scoreLine(label, key, value) {
+    console.log(`${label}: ${value}`);
+    if (r[key]) console.log(`    rationale: ${r[key]}`);
+  }
+  scoreLine("Self-disclosure       ", "self_disclosure", s.self_disclosure_score);
+  scoreLine("Cognitive shift       ", "cognitive_shift", s.cognitive_shift_score);
+  scoreLine(
+    "Emotional integration ",
+    "emotional_integration",
+    s.emotional_integration_score,
+  );
+  scoreLine("Novelty               ", "novelty", s.novelty_score);
+  field("Progress percent      ", s.progress_percent);
 
   heading("Session summary");
   paragraph("", s.summary);
@@ -123,9 +132,19 @@ async function main() {
     field("    intensity (0-10)", t.intensity);
     field("    direction       ", t.direction);
     if (t.themes?.description) field("    description     ", t.themes.description);
+    if (t.score_rationale) {
+      console.log(`    rationale       :`);
+      console.log(`      ${t.score_rationale}`);
+    }
     if (t.evidence_quote) {
       console.log(`    evidence quote  :`);
       console.log(`      "${t.evidence_quote}"`);
+    }
+    if (t.user_disagreed_at) {
+      console.log(`    USER DISAGREED  : ${t.user_disagreed_at}`);
+      if (t.user_disagreement_note) {
+        console.log(`      note: "${t.user_disagreement_note}"`);
+      }
     }
     console.log("");
   }
