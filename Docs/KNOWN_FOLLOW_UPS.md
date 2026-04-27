@@ -1335,3 +1335,14 @@ Blast radius: Per-misroute: one disagreement signal dropped, no surface. With st
 Suggested fix: Either (a) collapse the schema to a single `disagreed: [{ id, kind: 'shift'|'breakthrough', note }]` array and dispatch in the RPC by `kind`, removing the routing risk entirely; or (b) keep the split but add a fallback in the RPC: when an id from `disagreed_shifts` doesn't match an `insights` row, try `breakthroughs` before silently skipping. Option (a) is cleaner; option (b) is non-breaking. Bundle with the next prompt-session-response version bump (likely when score recalibration / goal-completion gets added in D-3).
 Status: OPEN (revisit at D-3).
 
+## 2026-04-27 — Process gap: stacked PRs swept by squash-merge (#96 + #97 superseded)
+
+Note: Audit-trail anomaly only — no functional impact
+Severity: LOW
+Lens: operator
+Location: PR #99 squash commit `c73e08f` on main; closed PRs #96 + #97
+Root cause: PR #99 (fixture runner) was branched on top of PR #97 (Call 2 response-parser), which was branched on top of PR #96 (post-session narrative UI). When #99 was squash-merged first, GitHub's squash bundled the entire stacked lineage into a single commit on main. The intended changes from #96 and #97 — `NarrativeForm.tsx`, `WaitState.tsx`, `session-response.ts`, the `process_session_response` RPC migration, etc. — landed on main as part of `c73e08f`, not under their own PR numbers. #96 and #97 were closed-not-merged (the GitHub UI does not allow merging a PR whose contents are already on the target branch).
+Blast radius: Zero functional impact — the code shipped, the migration is on dev, prod will get it on the next prod-push. The only cost is git-blame accuracy (lines authored in #96/#97 trace back to `c73e08f`'s squash) and PR-history readability (closed-not-merged PRs require a closing comment to explain).
+Suggested fix: Already mitigated. Closing comments on #96 and #97 explain the supersedence; this entry adds an operator-level audit trail. Going forward: when stacking PRs, either (a) merge the bottom of the stack first, or (b) rebase upper branches onto main before squash-merging so the squash only contains its own changes.
+Status: FIXED (2026-04-27) — process learning, no code action needed.
+
