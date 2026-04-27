@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 import { formatDateCompact } from "@/lib/format";
 
 export type RecentBreakthrough = {
@@ -9,9 +11,14 @@ export type RecentBreakthrough = {
 
 type Props = {
   items: RecentBreakthrough[];
+  // Demo mode passes "/progress?demo=1"; real passes "/progress".
+  // Each card links to that base + &constellation=<id>#constellation-map
+  // so tapping a breakthrough lands on the Progress tab with that
+  // breakthrough's constellation already selected.
+  progressBase?: string;
 };
 
-export function RecentBreakthroughsCard({ items }: Props) {
+export function RecentBreakthroughsCard({ items, progressBase = "/progress" }: Props) {
   return (
     <section className="mt-6 rounded-xl border border-white/10 bg-white/[0.02] p-5">
       <div className="flex items-center gap-3">
@@ -38,16 +45,28 @@ export function RecentBreakthroughsCard({ items }: Props) {
           coaching session.
         </p>
       ) : (
-        <ul className="mt-4 flex flex-col gap-4">
-          {items.map((item) => (
-            <li key={item.id}>
-              <p className="text-sm font-medium text-white">{item.content}</p>
-              <p className="mt-1 text-xs text-neutral-500">
-                {formatDateCompact(item.createdAt)}
-                {item.note ? ` • ${item.note}` : null}
-              </p>
-            </li>
-          ))}
+        <ul className="mt-4 flex flex-col gap-2">
+          {items.map((item) => {
+            const sep = progressBase.includes("?") ? "&" : "?";
+            // No fragment — AutoScrollToTarget on /progress will scroll
+            // to the card itself so the user lands on the breakthrough's
+            // detail body, not the constellation map at the top.
+            const href = `${progressBase}${sep}constellation=${item.id}`;
+            return (
+              <li key={item.id}>
+                <Link
+                  href={href}
+                  className="block rounded-lg border border-transparent px-2 py-1.5 transition hover:border-brand-primary/30 hover:bg-white/5"
+                >
+                  <p className="text-sm font-medium text-white">{item.content}</p>
+                  <p className="mt-1 text-xs text-neutral-500">
+                    {formatDateCompact(item.createdAt)}
+                    {item.note ? ` • ${item.note}` : null}
+                  </p>
+                </Link>
+              </li>
+            );
+          })}
         </ul>
       )}
     </section>

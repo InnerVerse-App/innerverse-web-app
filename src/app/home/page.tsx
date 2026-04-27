@@ -10,6 +10,8 @@ import {
 import { coachLabel } from "@/lib/onboarding-labels";
 import { supabaseForUser } from "@/lib/supabase";
 
+import { DEMO_SESSIONS_LIST, DEMO_GOALS } from "../progress/demo-data";
+
 import {
   FirstSessionCard,
   LastSessionCard,
@@ -80,10 +82,7 @@ type BreakthroughRow = {
 
 function buildGrowthItems(rows: GrowthRow[]): RecentGrowthItem[] {
   return rows
-    .filter(
-      (r): r is GrowthRow & { progress_percent: number } =>
-        r.progress_percent !== null,
-    )
+    .filter((r): r is GrowthRow & { ended_at: string } => !!r.ended_at)
     .map((r) => {
       const firstBreakthrough = r.breakthroughs[0];
       const title =
@@ -93,7 +92,7 @@ function buildGrowthItems(rows: GrowthRow[]): RecentGrowthItem[] {
       const note = firstBreakthrough?.note?.trim() || null;
       return {
         sessionId: r.id,
-        progressPercent: r.progress_percent,
+        endedAt: r.ended_at,
         title,
         note,
       };
@@ -217,38 +216,127 @@ function activeGoalsForMenu(goals: ActiveGoal[]): StartSessionGoal[] {
   }));
 }
 
-export default async function HomePage() {
-  const session = await auth();
-  if (!session?.userId) {
-    redirect("/sign-in");
+export default async function HomePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ demo?: string }>;
+}) {
+  const params = await searchParams;
+  const isDemo = params.demo === "1";
+
+  let coach = "your coach";
+  let lastSession: LastSession | null = null;
+  let sessionCount = 0;
+  let endedTimestamps: string[] = [];
+  let recentGrowth: RecentGrowthItem[] = [];
+  let recentBreakthroughs: RecentBreakthrough[] = [];
+  let activeGoals: ActiveGoal[] = [];
+  let recentShifts: StartSessionShift[] = [];
+
+  if (isDemo) {
+    coach = "Maya";
+    const latest = DEMO_SESSIONS_LIST[0];
+    lastSession = {
+      id: latest.id,
+      ended_at: latest.ended_at,
+      summary: latest.summary,
+      progress_summary_short: latest.progress_summary_short,
+      coach_message:
+        "You're not waiting for permission anymore — you're choosing fit. Keep noticing the felt difference; that's the muscle.",
+    };
+    sessionCount = DEMO_SESSIONS_LIST.length;
+    endedTimestamps = DEMO_SESSIONS_LIST.map((s) => s.ended_at);
+    recentGrowth = [
+      {
+        sessionId: "demo-s6",
+        endedAt: latest.ended_at,
+        title: "Greater clarity in own decision-making",
+        note: "Recognized that time in nature is the felt marker of a meaningful day.",
+      },
+      {
+        sessionId: "demo-s4",
+        endedAt: DEMO_SESSIONS_LIST[2].ended_at,
+        title: "Distinguishing harm from discomfort",
+        note: "Moved from preventing all upset to honoring explicit commitments.",
+      },
+      {
+        sessionId: "demo-s2",
+        endedAt: DEMO_SESSIONS_LIST[4].ended_at,
+        title: "Named the fear behind negative feedback",
+        note: "Held a balanced interpretation instead of collapsing into shame.",
+      },
+    ];
+    recentBreakthroughs = [
+      {
+        id: "demo-b4",
+        content: "Greater clarity in own decision-making",
+        note: "Felt sense as the marker of meaningful direction.",
+        createdAt: latest.ended_at,
+      },
+      {
+        id: "demo-b2",
+        content: "Distinguishing harm from discomfort",
+        note: "Honoring commitments while allowing others their feelings.",
+        createdAt: DEMO_SESSIONS_LIST[2].ended_at,
+      },
+      {
+        id: "demo-b1",
+        content: "Named the fear behind negative feedback",
+        note: "Loss of belonging — and that it's survivable.",
+        createdAt: DEMO_SESSIONS_LIST[4].ended_at,
+      },
+    ];
+    activeGoals = DEMO_GOALS.filter(
+      (g) => g.completionType === "milestone" || g.lastEngagedAt,
+    ).map((g) => ({
+      id: g.id,
+      title: g.title,
+      description: g.description,
+      status: "on_track",
+      progress_percent: g.progressPercent,
+      progress_rationale: null,
+      last_session_id: g.lastEngagedAt ? "demo-s6" : null,
+      is_predefined: g.completionType === "practice",
+    }));
+    // Demo-mode start-session menu: leave shifts empty so the
+    // mindset-shift option auto-hides per the menu's own spec.
+    recentShifts = [];
+  } else {
+    const session = await auth();
+    if (!session?.userId) {
+      redirect("/sign-in");
+    }
+
+    const state = await getOnboardingState();
+    if (!isOnboardingComplete(state)) {
+      redirect("/onboarding");
+    }
+
+    coach = coachLabel(state?.coach_name);
+    const homeData = await loadHomeData();
+    lastSession = homeData.lastSession;
+    sessionCount = homeData.sessionCount;
+    endedTimestamps = homeData.endedTimestamps;
+    recentGrowth = homeData.recentGrowth;
+    recentBreakthroughs = homeData.recentBreakthroughs;
+    activeGoals = homeData.activeGoals;
+    recentShifts = homeData.recentShifts;
   }
 
-  const state = await getOnboardingState();
-  if (!isOnboardingComplete(state)) {
-    redirect("/onboarding");
-  }
-
-  const coach = coachLabel(state?.coach_name);
-  const {
-    lastSession,
-    sessionCount,
-    endedTimestamps,
-    recentGrowth,
-    recentBreakthroughs,
-    activeGoals,
-    recentShifts,
-  } = await loadHomeData();
   const goalCount = activeGoals.length;
   const topGoal = activeGoals[0] ?? null;
   const menuGoals = activeGoalsForMenu(activeGoals);
 
   return (
-    <PageShell active="home">
+    <PageShell active="home" navHrefSuffix={isDemo ? "?demo=1" : ""}>
       <h1 className="text-3xl font-bold text-white sm:text-4xl">
         Welcome to InnerVerse
       </h1>
       <p className="mt-1 text-sm text-neutral-400 sm:text-base">
         Ready to start your growth journey?
+        {isDemo ? (
+          <span className="text-amber-400"> (demo mode)</span>
+        ) : null}
       </p>
 
       {lastSession ? (
@@ -276,8 +364,14 @@ export default async function HomePage() {
         <TopGoalCard topGoal={topGoal} />
       </div>
 
-      <PersonalGrowthProgressCard items={recentGrowth} />
-      <RecentBreakthroughsCard items={recentBreakthroughs} />
+      <PersonalGrowthProgressCard
+        items={recentGrowth}
+        sessionsBase={isDemo ? "/sessions?demo=1" : "/sessions"}
+      />
+      <RecentBreakthroughsCard
+        items={recentBreakthroughs}
+        progressBase={isDemo ? "/progress?demo=1" : "/progress"}
+      />
       {lastSession?.coach_message ? (
         <MessageFromCoachCard message={lastSession.coach_message} />
       ) : null}

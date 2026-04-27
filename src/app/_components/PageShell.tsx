@@ -16,9 +16,14 @@ type TabKey = "home" | "sessions" | "progress" | "goals" | "settings";
 export function PageShell({
   active,
   children,
+  navHrefSuffix = "",
 }: {
   active: TabKey | null;
   children: ReactNode;
+  // Demo-only: appended to every BottomNav href so `?demo=1` is
+  // preserved across tab navigation. DROP BEFORE MERGE along with
+  // the per-page demo escape hatches.
+  navHrefSuffix?: string;
 }) {
   return (
     // min-h-[100dvh] — dynamic viewport unit so the container tracks
@@ -35,7 +40,7 @@ export function PageShell({
       <main className="flex-1 px-4 py-6 pb-24 sm:px-8 sm:py-10 sm:pb-28">
         <div className="mx-auto max-w-2xl">{children}</div>
       </main>
-      <BottomNav active={active} />
+      <BottomNav active={active} hrefSuffix={navHrefSuffix} />
     </div>
   );
 }

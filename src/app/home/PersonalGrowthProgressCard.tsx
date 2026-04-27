@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-import { ProgressBar } from "@/app/_components/ProgressBar";
+import { RecencyBar } from "@/app/_components/RecencyBar";
 
 // Title falls back from first breakthrough's content → session's
 // progress_summary_short → "Growth session" — our schema has no
@@ -8,16 +8,24 @@ import { ProgressBar } from "@/app/_components/ProgressBar";
 
 export type RecentGrowthItem = {
   sessionId: string;
-  progressPercent: number;
+  endedAt: string;
   title: string;
   note: string | null;
 };
 
 type Props = {
   items: RecentGrowthItem[];
+  // Demo mode passes "/sessions?demo=1"; real passes "/sessions".
+  // Each item links to that base + &session=<id>#s-<id> so tapping
+  // a growth theme on Home jumps to the Sessions tab with that
+  // session highlighted + auto-expanded.
+  sessionsBase?: string;
 };
 
-export function PersonalGrowthProgressCard({ items }: Props) {
+export function PersonalGrowthProgressCard({
+  items,
+  sessionsBase = "/sessions",
+}: Props) {
   return (
     <section className="mt-6 rounded-xl border border-white/10 bg-white/[0.02] p-5">
       <div className="flex items-center gap-3">
@@ -39,6 +47,10 @@ export function PersonalGrowthProgressCard({ items }: Props) {
           Personal Growth Progress
         </h2>
       </div>
+      <p className="mt-1 text-xs text-neutral-500">
+        Themes from your most-analyzed sessions. Tap any to open the
+        session.
+      </p>
       {items.length === 0 ? (
         <p className="mt-3 text-sm text-neutral-500">
           Your growth progress will appear here after your first analyzed
@@ -46,21 +58,25 @@ export function PersonalGrowthProgressCard({ items }: Props) {
         </p>
       ) : (
         <>
-          <ul className="mt-4 flex flex-col gap-5">
-            {items.map((item) => (
-              <li key={item.sessionId}>
-                <div className="flex items-start justify-between gap-3">
-                  <p className="text-sm font-medium text-white">{item.title}</p>
-                  <span className="shrink-0 text-sm text-neutral-400">
-                    {item.progressPercent}%
-                  </span>
-                </div>
-                <ProgressBar percent={item.progressPercent} />
-                {item.note ? (
-                  <p className="mt-2 text-sm text-neutral-400">{item.note}</p>
-                ) : null}
-              </li>
-            ))}
+          <ul className="mt-4 flex flex-col gap-2">
+            {items.map((item) => {
+              const sep = sessionsBase.includes("?") ? "&" : "?";
+              const href = `${sessionsBase}${sep}session=${item.sessionId}#s-${item.sessionId}`;
+              return (
+                <li key={item.sessionId}>
+                  <Link
+                    href={href}
+                    className="block rounded-lg border border-transparent px-2 py-2 transition hover:border-brand-primary/30 hover:bg-white/5"
+                  >
+                    <p className="text-sm font-medium text-white">{item.title}</p>
+                    <RecencyBar lastEngagedAt={item.endedAt} color="#59A4C0" />
+                    {item.note ? (
+                      <p className="mt-2 text-sm text-neutral-400">{item.note}</p>
+                    ) : null}
+                  </Link>
+                </li>
+              );
+            })}
           </ul>
           <Link
             href="/progress"

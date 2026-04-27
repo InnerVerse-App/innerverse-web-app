@@ -32,11 +32,26 @@ const TABS: Tab[] = [
   },
   {
     key: "progress",
-    label: "Progress",
+    label: "Your InnerVerse",
     href: "/progress",
+    // Galaxy / universe icon: a central core with a single broad
+    // spiral arm sweeping around it, evoking the star map without
+    // being literal.
     icon: (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="h-6 w-6" aria-hidden>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 18 9 11.25l4.306 4.306a11.95 11.95 0 0 1 5.814-5.518l2.74-1.22m0 0-5.94-2.281m5.94 2.28-2.28 5.941" />
+      <svg
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth={1.6}
+        className="h-6 w-6"
+        aria-hidden
+      >
+        <circle cx="12" cy="12" r="9" />
+        <path
+          strokeLinecap="round"
+          d="M12 4.5c4.142 0 7.5 3.358 7.5 7.5 0 2.071-1.679 3.75-3.75 3.75-1.036 0-1.875-.84-1.875-1.875 0-.518.42-.938.938-.938"
+        />
+        <circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none" />
       </svg>
     ),
   },
@@ -69,7 +84,16 @@ const TABS: Tab[] = [
 // nav visible (e.g. /next-steps). A null active means no tab
 // renders as selected — the nav is still there for navigation but
 // no visual "you are here" highlight.
-export function BottomNav({ active }: { active: TabKey | null }) {
+export function BottomNav({
+  active,
+  hrefSuffix = "",
+}: {
+  active: TabKey | null;
+  // Appended to every tab href. Used by demo mode to preserve
+  // ?demo=1 across navigation. DROP BEFORE MERGE along with the
+  // demo escape hatches.
+  hrefSuffix?: string;
+}) {
   return (
     // fixed inset-x-0 bottom-0 z-20 — pin to viewport bottom so the
     // nav stays visible while the page scrolls. PageShell's main
@@ -97,7 +121,11 @@ export function BottomNav({ active }: { active: TabKey | null }) {
           );
           if (tab.href) {
             return (
-              <Link key={tab.key} href={tab.href} className={className}>
+              <Link
+                key={tab.key}
+                href={`${tab.href}${hrefSuffix}`}
+                className={className}
+              >
                 {content}
               </Link>
             );

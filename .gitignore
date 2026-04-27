@@ -50,6 +50,11 @@ next-env.d.ts
 .claude/launch.json
 .claude/settings.local.json
 .claude/worktrees/
+.claude/launch.json
+
+# Local design exploration / scratch
+/mockups/
+/.tmp/
 
 # Supabase pg_dump output — may contain real user data once testers land
 backups/

@@ -25,6 +25,19 @@ html {
   background: rgba(255, 255, 255, 0.25);
 }
 
+/* Constellation zoom-aware fade. Contributor stars (sessions,
+   mindset shifts) are dimmed at the universe-zoom-out view so the
+   galaxy glows + suns dominate, then brighten as the user zooms in.
+   --zoom-scale is set on the constellation panel by the
+   TransformWrapper's onTransform callback. At scale 1 (default
+   zoom) members are at 0.5 opacity — visible enough to see the
+   galaxy disc shape, faint enough not to compete with the suns.
+   By scale 2.5+ they're fully visible. Multiplies cleanly with the
+   per-star recency opacity inline-styled on each member. */
+.constellation-zoom-fade-in {
+  opacity: clamp(0.75, calc(0.75 + (var(--zoom-scale, 1) - 1) * 0.2), 1);
+}
+
 /* Feedback survey slider — yellow thumb on a teal track. Default
    accent-color can only color the thumb+filled-track together; we
    need them to differ to match the canonical session-complete UI
