@@ -40,6 +40,13 @@ export function ChatView({
   const [error, setError] = useState<string | null>(null);
 
   const bottomRef = useRef<HTMLDivElement | null>(null);
+  // Auto-focus the textarea when the coach finishes streaming so the
+  // user can keep typing without clicking back into the input.
+  const inputRef = useRef<HTMLTextAreaElement | null>(null);
+  // Tracks whether streaming was true on the previous render — lets
+  // us detect the true→false transition (response finished) without
+  // also firing on initial mount (where streaming starts as false).
+  const wasStreamingRef = useRef(false);
   // Holds the in-flight stream's AbortController so component unmount
   // (user navigates away) cancels the fetch, which propagates through
   // to cancel the upstream OpenAI call on the server.
@@ -57,6 +64,18 @@ export function ChatView({
       streamAbortRef.current?.abort();
     };
   }, []);
+
+  // Return cursor to the textarea once the coach is done responding.
+  // We compare against the previous streaming value (via ref) so this
+  // only fires on the true→false transition — not on initial mount,
+  // where streaming starts false and we'd otherwise steal focus
+  // from anything else on the page.
+  useEffect(() => {
+    if (wasStreamingRef.current && !streaming && !ended) {
+      inputRef.current?.focus();
+    }
+    wasStreamingRef.current = streaming;
+  }, [streaming, ended]);
 
   async function send(e: FormEvent) {
     e.preventDefault();
@@ -191,6 +210,7 @@ export function ChatView({
       >
         <div className="mx-auto flex max-w-2xl items-end gap-2">
           <textarea
+            ref={inputRef}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={onKeyDown}
