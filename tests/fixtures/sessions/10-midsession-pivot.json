@@ -1,0 +1,69 @@
+{
+  "description": "MID-SESSION PIVOT TEST. Client opens intellectualized and surface-level, deflecting with humor about a work problem. Halfway through, they unexpectedly drop into something underneath: their grief about their dad's recent diagnosis. The session has TWO registers: shallow first half, depth-of-feeling second half. Expected: AT LEAST one theme captured at building or shift band reflecting the second-half work (the grief). The first-half work-stress content should be a low-rated theme or omitted. Tests whether the rubric can recognize when the real session begins partway through, rather than averaging the whole transcript flat. self_disclosure should be moderate-to-high; emotional_integration high; cognitive_shift moderate.",
+  "messages": [
+    {
+      "role": "coach",
+      "content": "Good to see you. What's most alive for you today?"
+    },
+    {
+      "role": "user",
+      "content": "Not much. Same week as always. My boss is still my boss, the project is still a mess, I'm still procrastinating. Standard issue."
+    },
+    {
+      "role": "coach",
+      "content": "Standard issue. Anything underneath the standard issue, or is today a maintenance day?"
+    },
+    {
+      "role": "user",
+      "content": "Probably maintenance. I might just rant about my project for a bit if that's okay."
+    },
+    {
+      "role": "coach",
+      "content": "Of course. What's going on with the project?"
+    },
+    {
+      "role": "user",
+      "content": "It's behind schedule and my product manager is being a pain about it. She keeps wanting status updates and I keep not having anything new to say. So I just write the same email three different ways."
+    },
+    {
+      "role": "coach",
+      "content": "Mm. Sounds tiring."
+    },
+    {
+      "role": "user",
+      "content": "It's whatever. Honestly, the project isn't even what's bothering me, I'm just venting."
+    },
+    {
+      "role": "coach",
+      "content": "What is bothering you?"
+    },
+    {
+      "role": "user",
+      "content": "My dad got diagnosed last week. They think it's stage three. I haven't really told anyone. I came in here intending not to talk about it actually."
+    },
+    {
+      "role": "coach",
+      "content": "Oh, Sam. Thank you for telling me. Take a breath if you need to."
+    },
+    {
+      "role": "user",
+      "content": "I keep thinking I should be more upset than I am. Or maybe I am that upset and I just can't feel it yet. I don't know. I've been in meetings all week. I made a stupid joke about it to my brother and we both laughed and then I went and threw up."
+    },
+    {
+      "role": "coach",
+      "content": "That sounds like a body that knows something the words haven't caught up to yet."
+    },
+    {
+      "role": "user",
+      "content": "Yeah. That's exactly what it is. I'm going through the motions and my body keeps telling me it's not okay. I don't know what I want from you here. I just needed to say it out loud to someone who isn't him."
+    },
+    {
+      "role": "coach",
+      "content": "You don't need to want anything specific from me. You just told the truth out loud. That's the work today."
+    },
+    {
+      "role": "user",
+      "content": "Yeah. Okay. I think I needed that. Thanks."
+    }
+  ]
+}
