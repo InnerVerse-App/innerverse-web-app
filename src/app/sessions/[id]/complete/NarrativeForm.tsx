@@ -58,6 +58,7 @@ export function NarrativeForm({
               id={POST_SESSION_RESPONSE_FIELD}
               name={POST_SESSION_RESPONSE_FIELD}
               rows={5}
+              maxLength={5000}
               placeholder="Write what comes up — or skip if nothing does."
               className="w-full resize-none rounded-lg border border-white/10 bg-white/5 px-3 py-2.5 text-sm text-white placeholder:text-neutral-500 focus:outline-none focus:ring-2 focus:ring-brand-primary"
             />

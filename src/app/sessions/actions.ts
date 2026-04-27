@@ -177,6 +177,10 @@ export async function submitSessionResponse(
       user_responded_at: new Date().toISOString(),
     })
     .eq("id", sessionId)
+    // Belt-and-suspenders: RLS on `sessions` already scopes UPDATE to
+    // the caller's rows, but spelling out user_id makes the scope
+    // obvious in code review and survives a hypothetical RLS regression.
+    .eq("user_id", ctx.userId)
     .is("user_responded_at", null);
   if (error) {
     captureSessionError(error, "session_response_save", sessionId);
