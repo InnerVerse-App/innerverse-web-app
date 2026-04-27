@@ -22,8 +22,8 @@ const FALLBACK_AFTER_MS = 200_000;
 // Rotating reflection prompts shown during the wait. Cycles every
 // PROMPT_INTERVAL_MS so the user has something to chew on while the
 // AI finishes — stops the screen from feeling like a stalled spinner.
-// The list is intentionally short and gentle; these are reflection
-// invitations, not productivity prompts.
+// Kept gentle and reflection-oriented; these are invitations, not
+// productivity prompts.
 const WAIT_PROMPTS = [
   "Take a moment to reflect on this session…",
   "What was alive for you today?",
@@ -31,6 +31,10 @@ const WAIT_PROMPTS = [
   "What surprised you?",
   "What does the version of you who showed up today need?",
   "Is there anything you noticed that you don't want to forget?",
+  "What's one moment from this session you want to come back to?",
+  "What were you carrying when you walked in, and is it lighter now?",
+  "What did you say out loud that you've been meaning to say?",
+  "What feels a little clearer than it did when we started?",
 ];
 const PROMPT_INTERVAL_MS = 5000;
 
