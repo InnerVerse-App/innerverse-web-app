@@ -1,0 +1,61 @@
+{
+  "description": "FALSE-POSITIVE BAIT — coach-articulated. The coach offers an interpretive framing; the client agrees passively ('yeah, that's it', 'I think that's right'). The v7 prompt says: 'The shift has to come from the client's own words.' Expected: themes captured at moderate intensity (4-6), 0 shifts (the moment-level realization came from the COACH, not the client), 0 breakthroughs. If v7 attributes the shift to the client when the client only echoed the coach's framing, the rubric is failing the 'client's own words' rule.",
+  "messages": [
+    {
+      "role": "coach",
+      "content": "Good to see you. What's most alive for you today?"
+    },
+    {
+      "role": "user",
+      "content": "I had this thing with my partner. He didn't unload the dishwasher and I went off on him and now I feel terrible. It was a small thing. I overreacted."
+    },
+    {
+      "role": "coach",
+      "content": "What was happening in you right before you went off?"
+    },
+    {
+      "role": "user",
+      "content": "I'd had a long day. A bad meeting. I came home and saw the dishwasher and just snapped."
+    },
+    {
+      "role": "coach",
+      "content": "It sounds like the dishwasher wasn't really about the dishwasher. The bad meeting was looking for somewhere to land, and the dishwasher was the closest target."
+    },
+    {
+      "role": "user",
+      "content": "Yeah. That's probably right."
+    },
+    {
+      "role": "coach",
+      "content": "I wonder if you're carrying more from work than you realize, and it's coming out sideways at the people closest to you."
+    },
+    {
+      "role": "user",
+      "content": "Yeah, that makes sense. I think I do that."
+    },
+    {
+      "role": "coach",
+      "content": "That seems like a pattern worth noticing — work stress doesn't get expressed at work, so it leaks into your relationships at home."
+    },
+    {
+      "role": "user",
+      "content": "Mm-hm. Yeah. That's kind of what I do."
+    },
+    {
+      "role": "coach",
+      "content": "Maybe one thing to try this week is checking in with yourself before you walk in the door — what am I bringing in with me?"
+    },
+    {
+      "role": "user",
+      "content": "Yeah, I could try that."
+    },
+    {
+      "role": "coach",
+      "content": "Good. Anything else for today?"
+    },
+    {
+      "role": "user",
+      "content": "No, I think that's it. Thanks. That was helpful."
+    }
+  ]
+}

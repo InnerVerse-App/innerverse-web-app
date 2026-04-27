@@ -17,43 +17,32 @@ import type { UserSupabase } from "@/lib/supabase";
 // Bundled at build time via next.config.ts outputFileTracingIncludes
 // (the existing prompt-*.md glob covers this filename).
 const RESPONSE_PROMPT = readFileSync(
-  path.join(process.cwd(), "reference", "prompt-session-response-v1.md"),
+  path.join(process.cwd(), "reference", "prompt-session-response-v2.md"),
   "utf8",
 ).trim();
 
 // Strict-mode JSON schema for Call 2's output. Mirrors the structure
-// in prompt-session-response-v1.md's "Output" section. Both arrays
-// are required (strict mode); empty arrays are valid and represent
-// "no disagreements detected" — the common case.
+// in prompt-session-response-v2.md's "Output" section. All three
+// arrays are required (strict mode); empty arrays are valid and
+// represent "no disagreements detected" — the common case.
+const DISAGREEMENT_ITEM = {
+  type: "object",
+  additionalProperties: false,
+  required: ["id", "note"],
+  properties: {
+    id: { type: "string" },
+    note: { type: "string" },
+  },
+} as const;
+
 const SESSION_RESPONSE_SCHEMA: Record<string, unknown> = {
   type: "object",
   additionalProperties: false,
-  required: ["disagreed_shifts", "disagreed_breakthroughs"],
+  required: ["disagreed_themes", "disagreed_shifts", "disagreed_breakthroughs"],
   properties: {
-    disagreed_shifts: {
-      type: "array",
-      items: {
-        type: "object",
-        additionalProperties: false,
-        required: ["id", "note"],
-        properties: {
-          id: { type: "string" },
-          note: { type: "string" },
-        },
-      },
-    },
-    disagreed_breakthroughs: {
-      type: "array",
-      items: {
-        type: "object",
-        additionalProperties: false,
-        required: ["id", "note"],
-        properties: {
-          id: { type: "string" },
-          note: { type: "string" },
-        },
-      },
-    },
+    disagreed_themes: { type: "array", items: DISAGREEMENT_ITEM },
+    disagreed_shifts: { type: "array", items: DISAGREEMENT_ITEM },
+    disagreed_breakthroughs: { type: "array", items: DISAGREEMENT_ITEM },
   },
 };
 
@@ -90,6 +79,16 @@ type BreakthroughRow = {
   evidence_quote: string | null;
 };
 
+// V.7: themes are now first-class disagreement targets too. The id
+// here is `session_themes.id` (not `themes.id`) — disagreement is
+// per-session-instance.
+type ThemeRow = {
+  id: string;
+  intensity: number | null;
+  score_rationale: string | null;
+  themes: { label: string } | null;
+};
+
 type SessionContext = {
   coach_narrative: string | null;
   user_response_text: string | null;
@@ -97,25 +96,29 @@ type SessionContext = {
 };
 
 // Builds the developer-message context for Call 2: the coach
-// narrative the client just read, plus every shift / breakthrough
-// emitted in this session (ids + content + evidence_quote). The AI
-// uses the ids to indicate which prior claims are being rejected;
-// the evidence_quote helps it judge whether the client's reflection
-// directly addresses that claim's anchoring moment.
+// narrative the client just read, plus every theme / shift /
+// breakthrough emitted in this session (ids + content + evidence
+// quotes). The AI uses the ids to indicate which prior claims are
+// being rejected.
 async function buildResponseContext(
   ctx: UserSupabase,
   sessionId: string,
 ): Promise<{
   session: SessionContext;
+  themes: ThemeRow[];
   shifts: ShiftRow[];
   breakthroughs: BreakthroughRow[];
 }> {
-  const [sessionRes, shiftsRes, breakthroughsRes] = await Promise.all([
+  const [sessionRes, themesRes, shiftsRes, breakthroughsRes] = await Promise.all([
     ctx.client
       .from("sessions")
       .select("coach_narrative, user_response_text, response_parsed_at")
       .eq("id", sessionId)
       .maybeSingle(),
+    ctx.client
+      .from("session_themes")
+      .select("id, intensity, score_rationale, themes(label)")
+      .eq("session_id", sessionId),
     ctx.client
       .from("insights")
       .select("id, content, evidence_quote")
@@ -126,6 +129,7 @@ async function buildResponseContext(
       .eq("session_id", sessionId),
   ]);
   if (sessionRes.error) throw sessionRes.error;
+  if (themesRes.error) throw themesRes.error;
   if (shiftsRes.error) throw shiftsRes.error;
   if (breakthroughsRes.error) throw breakthroughsRes.error;
   if (!sessionRes.data) {
@@ -133,9 +137,24 @@ async function buildResponseContext(
   }
   return {
     session: sessionRes.data as SessionContext,
+    themes: (themesRes.data ?? []) as unknown as ThemeRow[],
     shifts: (shiftsRes.data ?? []) as ShiftRow[],
     breakthroughs: (breakthroughsRes.data ?? []) as BreakthroughRow[],
   };
+}
+
+function formatThemes(rows: ThemeRow[]): string {
+  if (rows.length === 0) return "(none recorded for this session)";
+  return rows
+    .map((t) => {
+      const label = t.themes?.label ?? "(unknown)";
+      const intensity = t.intensity != null ? ` | intensity ${t.intensity}` : "";
+      const rationale = t.score_rationale?.trim()
+        ? `\n  rationale: "${t.score_rationale.trim()}"`
+        : "";
+      return `- ${t.id} — ${label}${intensity}${rationale}`;
+    })
+    .join("\n");
 }
 
 function formatShifts(rows: ShiftRow[]): string {
@@ -192,14 +211,20 @@ export async function runSessionResponseAnalysis(
 
   // Skip the call entirely when there's nothing to disagree with.
   // Persist response_parsed_at directly so the row doesn't sit in
-  // the unparsed bucket forever.
+  // the unparsed bucket forever. v7 adds themes to the disagreement
+  // surface, so the empty-bucket check covers all three.
   if (
+    context.themes.length === 0 &&
     context.shifts.length === 0 &&
     context.breakthroughs.length === 0
   ) {
     const { data, error } = await ctx.client.rpc("process_session_response", {
       p_session_id: sessionId,
-      p_analysis: { disagreed_shifts: [], disagreed_breakthroughs: [] },
+      p_analysis: {
+        disagreed_themes: [],
+        disagreed_shifts: [],
+        disagreed_breakthroughs: [],
+      },
     });
     if (error) {
       failStage("session_response_rpc", sessionId, error, { code: error.code });
@@ -210,6 +235,9 @@ export async function runSessionResponseAnalysis(
   const developerContext = [
     `=== Coach narrative shown to client ===`,
     context.session.coach_narrative.trim(),
+    ``,
+    `=== Themes recorded in this session ===`,
+    formatThemes(context.themes),
     ``,
     `=== Mindset shifts emitted in this session ===`,
     formatShifts(context.shifts),
