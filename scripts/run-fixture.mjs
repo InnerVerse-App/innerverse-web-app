@@ -86,6 +86,7 @@ const SESSION_END_SCHEMA = {
     "cognitive_shift_score",
     "emotional_integration_score",
     "novelty_score",
+    "score_rationales",
     "progress_percent",
     "session_themes",
     "breakthroughs",
@@ -109,6 +110,22 @@ const SESSION_END_SCHEMA = {
     cognitive_shift_score: { type: "integer" },
     emotional_integration_score: { type: "integer" },
     novelty_score: { type: "integer" },
+    score_rationales: {
+      type: "object",
+      additionalProperties: false,
+      required: [
+        "self_disclosure",
+        "cognitive_shift",
+        "emotional_integration",
+        "novelty",
+      ],
+      properties: {
+        self_disclosure: { type: "string" },
+        cognitive_shift: { type: "string" },
+        emotional_integration: { type: "string" },
+        novelty: { type: "string" },
+      },
+    },
     progress_percent: { type: "integer" },
     session_themes: {
       type: "array",
@@ -120,6 +137,7 @@ const SESSION_END_SCHEMA = {
           "is_new_theme",
           "description",
           "intensity",
+          "score_rationale",
           "direction",
           "evidence_quote",
           "linked_goal_id",
@@ -129,6 +147,7 @@ const SESSION_END_SCHEMA = {
           is_new_theme: { type: "boolean" },
           description: { type: "string" },
           intensity: { type: "integer" },
+          score_rationale: { type: "string" },
           direction: { type: "string", enum: ["forward", "stuck", "regression"] },
           evidence_quote: { type: "string" },
           linked_goal_id: { type: "string" },
@@ -239,35 +258,24 @@ const SESSION_END_SCHEMA = {
   },
 };
 
+const DISAGREEMENT_ITEM = {
+  type: "object",
+  additionalProperties: false,
+  required: ["id", "note"],
+  properties: {
+    id: { type: "string" },
+    note: { type: "string" },
+  },
+};
+
 const SESSION_RESPONSE_SCHEMA = {
   type: "object",
   additionalProperties: false,
-  required: ["disagreed_shifts", "disagreed_breakthroughs"],
+  required: ["disagreed_themes", "disagreed_shifts", "disagreed_breakthroughs"],
   properties: {
-    disagreed_shifts: {
-      type: "array",
-      items: {
-        type: "object",
-        additionalProperties: false,
-        required: ["id", "note"],
-        properties: {
-          id: { type: "string" },
-          note: { type: "string" },
-        },
-      },
-    },
-    disagreed_breakthroughs: {
-      type: "array",
-      items: {
-        type: "object",
-        additionalProperties: false,
-        required: ["id", "note"],
-        properties: {
-          id: { type: "string" },
-          note: { type: "string" },
-        },
-      },
-    },
+    disagreed_themes: { type: "array", items: DISAGREEMENT_ITEM },
+    disagreed_shifts: { type: "array", items: DISAGREEMENT_ITEM },
+    disagreed_breakthroughs: { type: "array", items: DISAGREEMENT_ITEM },
   },
 };
 
@@ -377,7 +385,7 @@ async function main() {
 
   // ----- Call 1: session-end analysis -----
   const prompt = readFileSync(
-    path.join("reference", "prompt-session-end-v6.md"),
+    path.join("reference", "prompt-session-end-v7.md"),
     "utf8",
   ).trim();
   const context = buildContextBlock(fixture);
@@ -397,11 +405,12 @@ async function main() {
       { role: "developer", content: context },
       { role: "user", content: transcript },
     ],
-    // Bumped above prod's 2000 cap — fixtures that exercise the
-    // full v6 schema (coach_narrative + multiple shifts/breakthroughs
-    // + themes) have hit the cap in early tests. Real users will too;
-    // see KNOWN_FOLLOW_UPS.md note from the fixture-runner work.
-    max_output_tokens: 4000,
+    // Bumped above prod's previous 2000 cap — v6 hit it on
+    // substantive sessions; v7 hits it more often because every
+    // theme + sub-score now carries a rationale. 6000 covers
+    // every fixture so far. Bumping is free (OpenAI charges per
+    // actual output token, not per cap-ceiling).
+    max_output_tokens: 6000,
     text: {
       format: {
         type: "json_schema",
@@ -506,10 +515,23 @@ async function main() {
     if (updErr) throw updErr;
 
     const responsePrompt = readFileSync(
-      path.join("reference", "prompt-session-response-v1.md"),
+      path.join("reference", "prompt-session-response-v2.md"),
       "utf8",
     ).trim();
 
+    const themesList =
+      themes.length === 0
+        ? "(none recorded for this session)"
+        : themes
+            .map((t) => {
+              const label = t.themes?.label ?? "(unknown)";
+              const intensity = t.intensity != null ? ` | intensity ${t.intensity}` : "";
+              const rationale = t.score_rationale?.trim()
+                ? `\n  rationale: "${t.score_rationale.trim()}"`
+                : "";
+              return `- ${t.id} — ${label}${intensity}${rationale}`;
+            })
+            .join("\n");
     const shiftsList =
       shifts.length === 0
         ? "(none — no shifts emitted in this session)"
@@ -531,6 +553,9 @@ async function main() {
     const responseContext = [
       `=== Coach narrative shown to client ===`,
       s.coach_narrative ?? "",
+      ``,
+      `=== Themes recorded in this session ===`,
+      themesList,
       ``,
       `=== Mindset shifts emitted in this session ===`,
       shiftsList,
@@ -565,7 +590,7 @@ async function main() {
     }
     const responseAnalysis = JSON.parse(responseRes.output_text);
     console.log(
-      `  emitted: ${responseAnalysis.disagreed_shifts.length} shift disagreements, ${responseAnalysis.disagreed_breakthroughs.length} breakthrough disagreements`,
+      `  emitted: ${responseAnalysis.disagreed_themes.length} theme + ${responseAnalysis.disagreed_shifts.length} shift + ${responseAnalysis.disagreed_breakthroughs.length} breakthrough disagreements`,
     );
 
     const { data: r2, error: r2Err } = await supabase.rpc(
@@ -578,7 +603,11 @@ async function main() {
     }
     console.log(`  RPC returned: ${r2}`);
 
-    const [shAfter, btAfter] = await Promise.all([
+    const [thAfter, shAfter, btAfter] = await Promise.all([
+      supabase
+        .from("session_themes")
+        .select("id, themes(label), user_disagreed_at, user_disagreement_note")
+        .eq("session_id", sessionId),
       supabase
         .from("insights")
         .select("id, content, user_disagreed_at, user_disagreement_note")
@@ -589,6 +618,13 @@ async function main() {
         .eq("session_id", sessionId),
     ]);
 
+    header("Call 2 result — themes");
+    for (const t of thAfter.data ?? []) {
+      const flag = t.user_disagreed_at ? "DISAGREED" : "agreed";
+      console.log(`  ${flag}: "${t.themes?.label ?? "(unknown)"}"`);
+      if (t.user_disagreement_note)
+        console.log(`      note: "${t.user_disagreement_note}"`);
+    }
     header("Call 2 result — shifts");
     for (const sh of shAfter.data ?? []) {
       const flag = sh.user_disagreed_at ? "DISAGREED" : "agreed";
