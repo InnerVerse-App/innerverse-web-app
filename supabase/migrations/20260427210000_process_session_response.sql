@@ -75,7 +75,13 @@ begin
         continue;
       end if;
       v_disagreed_id := v_disagreed_id_text::uuid;
-      v_disagreed_note := nullif(trim(coalesce(v_disagreed_elem->>'note', '')), '');
+      -- Clamp to 500 chars defensively — the prompt asks for ~150 but
+      -- a misbehaving prompt-vN could write multi-KB blobs. Matches
+      -- the same defense pattern v5a uses on coach_narrative.
+      v_disagreed_note := nullif(
+        left(trim(coalesce(v_disagreed_elem->>'note', '')), 500),
+        ''
+      );
 
       update public.insights
          set user_disagreed_at = now(),
@@ -98,7 +104,10 @@ begin
         continue;
       end if;
       v_disagreed_id := v_disagreed_id_text::uuid;
-      v_disagreed_note := nullif(trim(coalesce(v_disagreed_elem->>'note', '')), '');
+      v_disagreed_note := nullif(
+        left(trim(coalesce(v_disagreed_elem->>'note', '')), 500),
+        ''
+      );
 
       update public.breakthroughs
          set user_disagreed_at = now(),
@@ -128,3 +137,10 @@ $$;
 
 comment on function public.process_session_response(uuid, jsonb)
   is 'V.5a Call 2 — apply user_response_text disagreements back to insights / breakthroughs. Idempotent; returns true on first successful application, false on subsequent calls.';
+
+-- security invoker means the JWT's role still needs execute on the
+-- function. Both `authenticated` (action-fired path) and `service_role`
+-- (future cron-recovery path) need access; granting both now avoids
+-- a silent permission-denied bug when the cron PR lands.
+grant execute on function public.process_session_response(uuid, jsonb) to authenticated;
+grant execute on function public.process_session_response(uuid, jsonb) to service_role;

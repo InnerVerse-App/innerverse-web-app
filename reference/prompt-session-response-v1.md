@@ -81,6 +81,12 @@ Notes:
 
 - **id** must exactly match an id from the input lists; do not
   invent new ids.
+- **id routing is strict**: an id from the "Mindset shifts" section
+  goes ONLY in `disagreed_shifts`. An id from the "Breakthroughs"
+  section goes ONLY in `disagreed_breakthroughs`. Putting an id in
+  the wrong array will silently drop the disagreement (the storage
+  layer scopes each array to its matching table). Double-check
+  every id you emit against the section header it came from.
 - **note** is what the client said (or your paraphrase), not your
   judgment. Keep it under ~150 characters. The note will be stored
   alongside the disagreement timestamp for the user's later review.

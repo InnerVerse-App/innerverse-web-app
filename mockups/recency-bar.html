@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Recency Bar — Concept #3 Preview</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+      :root {
+        --brand-primary: #59a4c0;
+        --brand-dark: #00050a;
+      }
+      body {
+        background: var(--brand-dark);
+        color: white;
+        font-family:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      }
+      /* Recency bar: a thin track with a left→bright-right gradient
+         fill whose width and opacity fade as the item ages. */
+      .recency-track {
+        position: relative;
+        margin-top: 0.5rem;
+        height: 4px;
+        width: 100%;
+        overflow: hidden;
+        border-radius: 9999px;
+        background: rgba(255, 255, 255, 0.05);
+      }
+      .recency-fill {
+        position: absolute;
+        inset: 0 auto 0 0;
+        border-radius: 9999px;
+      }
+      .recency-gold {
+        background: linear-gradient(
+          to right,
+          rgba(220, 161, 20, 0),
+          rgba(220, 161, 20, 0.6),
+          rgba(220, 161, 20, 1)
+        );
+      }
+      .recency-violet {
+        background: linear-gradient(
+          to right,
+          rgba(167, 139, 250, 0),
+          rgba(167, 139, 250, 0.6),
+          rgba(167, 139, 250, 1)
+        );
+      }
+      .recency-green {
+        background: linear-gradient(
+          to right,
+          rgba(74, 222, 128, 0),
+          rgba(74, 222, 128, 0.6),
+          rgba(74, 222, 128, 1)
+        );
+      }
+    </style>
+  </head>
+  <body class="min-h-screen">
+    <div class="mx-auto max-w-md px-5 py-6">
+      <h1 class="text-3xl font-bold">Your Progress</h1>
+      <p class="mt-1 text-sm text-neutral-400">
+        Recency-bar mockup
+        <span class="text-amber-400">(concept #3)</span>
+      </p>
+
+      <p class="mt-4 text-xs text-neutral-500">
+        Each item card now carries a thin "comet-trail" bar below the date.
+        Width grows from the left and the fill fades transparent → bright as
+        you read left to right. Recent items have long, bright bars. Stale
+        items have short, dim slivers. Items beyond the 30-day window
+        (or never engaged) show an empty track.
+      </p>
+
+      <section class="mt-6 rounded-xl border border-white/10 bg-white/[0.02] p-5">
+        <h2 class="text-base font-semibold text-white">Breakthroughs</h2>
+        <ul class="mt-3 flex flex-col gap-3">
+          <!-- Today -->
+          <li
+            class="rounded-lg border border-white/10 bg-white/[0.02] px-4 py-3"
+          >
+            <p class="text-sm text-neutral-200">
+              Greater clarity in own decision-making
+            </p>
+            <p class="mt-1 text-[11px] text-neutral-500">Today</p>
+            <div class="recency-track">
+              <div class="recency-fill recency-gold" style="width: 100%; opacity: 1"></div>
+            </div>
+          </li>
+
+          <!-- 5 days ago -->
+          <li
+            class="rounded-lg border border-white/10 bg-white/[0.02] px-4 py-3"
+          >
+            <p class="text-sm text-neutral-200">
+              Distinguishing harm from discomfort
+            </p>
+            <p class="mt-1 text-[11px] text-neutral-500">Apr 21</p>
+            <div class="recency-track">
+              <div
+                class="recency-fill recency-gold"
+                style="width: 83%; opacity: 0.86"
+              ></div>
+            </div>
+          </li>
+
+          <!-- 14 days ago -->
+          <li
+            class="rounded-lg border border-white/10 bg-white/[0.02] px-4 py-3"
+          >
+            <p class="text-sm text-neutral-200">
+              Named the fear behind negative feedback
+            </p>
+            <p class="mt-1 text-[11px] text-neutral-500">Apr 12</p>
+            <div class="recency-track">
+              <div class="recency-fill recency-gold" style="width: 53%; opacity: 0.6"></div>
+            </div>
+          </li>
+
+          <!-- 25 days ago -->
+          <li
+            class="rounded-lg border border-white/10 bg-white/[0.02] px-4 py-3"
+          >
+            <p class="text-sm text-neutral-200">
+              Recognized resistance as data, not failure
+            </p>
+            <p class="mt-1 text-[11px] text-neutral-500">Apr 1</p>
+            <div class="recency-track">
+              <div class="recency-fill recency-gold" style="width: 17%; opacity: 0.29"></div>
+            </div>
+          </li>
+
+          <!-- 45 days ago: outside window -->
+          <li
+            class="rounded-lg border border-white/10 bg-white/[0.02] px-4 py-3"
+          >
+            <p class="text-sm text-neutral-200">
+              First articulation of values direction
+            </p>
+            <p class="mt-1 text-[11px] text-neutral-500">Mar 12</p>
+            <div class="recency-track">
+              <!-- empty: outside the 30-day window -->
+            </div>
+          </li>
+        </ul>
+      </section>
+
+      <section class="mt-6 rounded-xl border border-white/10 bg-white/[0.02] p-5">
+        <h2 class="text-base font-semibold text-white">Insights</h2>
+        <ul class="mt-3 flex flex-col gap-3">
+          <li
+            class="rounded-lg border border-white/10 bg-white/[0.02] px-4 py-3"
+          >
+            <p class="text-sm text-neutral-200">Felt sense as a compass</p>
+            <p class="mt-1 text-[11px] text-neutral-500">Today</p>
+            <div class="recency-track">
+              <div class="recency-fill recency-violet" style="width: 100%; opacity: 1"></div>
+            </div>
+          </li>
+          <li
+            class="rounded-lg border border-white/10 bg-white/[0.02] px-4 py-3"
+          >
+            <p class="text-sm text-neutral-200">
+              Recognized explanation as a cue to stop
+            </p>
+            <p class="mt-1 text-[11px] text-neutral-500">Apr 21</p>
+            <div class="recency-track">
+              <div
+                class="recency-fill recency-violet"
+                style="width: 83%; opacity: 0.86"
+              ></div>
+            </div>
+          </li>
+          <li
+            class="rounded-lg border border-white/10 bg-white/[0.02] px-4 py-3"
+          >
+            <p class="text-sm text-neutral-200">
+              Identified the cost of waiting for certainty
+            </p>
+            <p class="mt-1 text-[11px] text-neutral-500">Apr 17</p>
+            <div class="recency-track">
+              <div class="recency-fill recency-violet" style="width: 70%; opacity: 0.74"></div>
+            </div>
+          </li>
+        </ul>
+      </section>
+
+      <p class="mt-8 text-center text-[11px] text-neutral-500">
+        Mockup — recency-bar concept #3
+      </p>
+    </div>
+  </body>
+</html>
