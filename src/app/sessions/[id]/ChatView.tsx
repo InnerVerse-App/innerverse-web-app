@@ -230,10 +230,23 @@ export function ChatView({
 
 function MessageBubble({ message }: { message: Message }) {
   const fromAi = message.fromAi;
+  // max-w on the flex item (outer div) so the alignment is
+  // unambiguous: user bubbles can be no wider than 80% of the
+  // column, and self-end pins them to the right edge with the
+  // bubble extending leftward. AI bubbles do the mirror image.
+  // The color contrast (solid brand-primary for user vs dark
+  // bg-white/5 for AI) makes left/right unmistakable even when
+  // both are long enough to fill 80% of the column.
   return (
-    <div className={fromAi ? "self-start" : "self-end"}>
+    <div
+      className={`flex max-w-[80%] flex-col ${fromAi ? "self-start" : "self-end"}`}
+    >
       <div
-        className={`max-w-[80%] rounded-2xl px-4 py-2.5 text-sm text-neutral-100 ${fromAi ? "bg-white/5" : "bg-brand-primary/15"}`}
+        className={`rounded-2xl px-4 py-2.5 text-sm ${
+          fromAi
+            ? "rounded-bl-sm bg-white/5 text-neutral-100"
+            : "rounded-br-sm bg-brand-primary text-brand-primary-contrast"
+        }`}
       >
         {message.content}
       </div>
