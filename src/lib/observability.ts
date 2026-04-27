@@ -21,6 +21,7 @@ export type SessionErrorStage =
   | "session_response_truncated"
   | "session_response_refusal"
   | "session_response_rpc"
+  | "session_finalize_beacon"
   | "cron_sweep_scan"
   | "cron_sweep_close"
   | "cron_sweep_analyze"

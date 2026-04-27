@@ -77,6 +77,29 @@ export function ChatView({
     wasStreamingRef.current = streaming;
   }, [streaming, ended]);
 
+  // Auto-end on close. When the page is being unloaded (tab close,
+  // browser quit, navigating to another domain), fire a beacon to
+  // /api/sessions/<id>/finalize so the session is marked ended
+  // immediately instead of waiting for the daily cron sweep.
+  //
+  // pagehide (not beforeunload): pagehide fires on mobile Safari
+  // when the user backgrounds the app; beforeunload doesn't.
+  // event.persisted === true means the page is going into bfcache —
+  // skip the beacon so a Back-tap resumes the session.
+  //
+  // Doesn't fire on in-app navigation: Next.js App Router does
+  // SPA-style transitions, so a <Link> click doesn't unload the
+  // page. Only true browser-level unloads trigger this.
+  useEffect(() => {
+    if (ended) return;
+    function handler(event: PageTransitionEvent) {
+      if (event.persisted) return;
+      navigator.sendBeacon(`/api/sessions/${sessionId}/finalize`);
+    }
+    window.addEventListener("pagehide", handler);
+    return () => window.removeEventListener("pagehide", handler);
+  }, [ended, sessionId]);
+
   async function send(e: FormEvent) {
     e.preventDefault();
     const content = input.trim();
