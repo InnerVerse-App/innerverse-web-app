@@ -15,6 +15,10 @@ import {
   LastSessionCard,
   type LastSession,
 } from "./LastSessionCard";
+import type {
+  StartSessionGoal,
+  StartSessionShift,
+} from "./StartSessionMenu";
 import { MessageFromCoachCard } from "./MessageFromCoachCard";
 import {
   PersonalGrowthProgressCard,
@@ -43,6 +47,12 @@ const GROWTH_PROGRESS_LIMIT = 3;
 // 2). Full history lives on the Progress tab.
 const BREAKTHROUGHS_LIMIT = 3;
 
+// Cap on how many recent mindset shifts the StartSessionMenu lists.
+// Picks the freshest — older shifts fall off the picker but stay
+// visible elsewhere. 20 keeps the sheet scrollable without becoming
+// a wall.
+const START_MENU_SHIFTS_LIMIT = 20;
+
 type HomeData = {
   lastSession: LastSession | null;
   sessionCount: number;
@@ -50,6 +60,7 @@ type HomeData = {
   recentGrowth: RecentGrowthItem[];
   recentBreakthroughs: RecentBreakthrough[];
   activeGoals: ActiveGoal[];
+  recentShifts: StartSessionShift[];
 };
 
 type GrowthRow = {
@@ -103,6 +114,7 @@ async function loadHomeData(): Promise<HomeData> {
       recentGrowth: [],
       recentBreakthroughs: [],
       activeGoals: [],
+      recentShifts: [],
     };
   }
 
@@ -110,55 +122,68 @@ async function loadHomeData(): Promise<HomeData> {
     Date.now() - STREAK_WINDOW_DAYS * 24 * 60 * 60 * 1000,
   ).toISOString();
 
-  const [lastRes, countRes, tsRes, growthRes, breakthroughsRes, activeGoals] =
-    await Promise.all([
-      ctx.client
-        .from("sessions")
-        .select(
-          "id, ended_at, summary, progress_summary_short, coach_message",
-        )
-        .not("ended_at", "is", null)
-        .order("ended_at", { ascending: false })
-        .limit(1)
-        .maybeSingle(),
-      ctx.client
-        .from("sessions")
-        .select("id", { count: "exact", head: true })
-        .not("ended_at", "is", null),
-      ctx.client
-        .from("sessions")
-        .select("ended_at")
-        .not("ended_at", "is", null)
-        .gte("ended_at", streakWindowIso)
-        .order("ended_at", { ascending: false })
-        .limit(STREAK_WINDOW_ROW_CAP),
-      ctx.client
-        .from("sessions")
-        .select(
-          "id, ended_at, progress_percent, progress_summary_short, breakthroughs(content, note)",
-        )
-        .not("ended_at", "is", null)
-        .not("progress_percent", "is", null)
-        .order("ended_at", { ascending: false })
-        .order("created_at", {
-          ascending: true,
-          referencedTable: "breakthroughs",
-        })
-        .limit(1, { referencedTable: "breakthroughs" })
-        .limit(GROWTH_PROGRESS_LIMIT),
-      ctx.client
-        .from("breakthroughs")
-        .select("id, content, note, created_at")
-        .order("created_at", { ascending: false })
-        .limit(BREAKTHROUGHS_LIMIT),
-      loadActiveGoalsWithLazySeed(ctx),
-    ]);
+  const [
+    lastRes,
+    countRes,
+    tsRes,
+    growthRes,
+    breakthroughsRes,
+    activeGoals,
+    shiftsRes,
+  ] = await Promise.all([
+    ctx.client
+      .from("sessions")
+      .select(
+        "id, ended_at, summary, progress_summary_short, coach_message",
+      )
+      .not("ended_at", "is", null)
+      .order("ended_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    ctx.client
+      .from("sessions")
+      .select("id", { count: "exact", head: true })
+      .not("ended_at", "is", null),
+    ctx.client
+      .from("sessions")
+      .select("ended_at")
+      .not("ended_at", "is", null)
+      .gte("ended_at", streakWindowIso)
+      .order("ended_at", { ascending: false })
+      .limit(STREAK_WINDOW_ROW_CAP),
+    ctx.client
+      .from("sessions")
+      .select(
+        "id, ended_at, progress_percent, progress_summary_short, breakthroughs(content, note)",
+      )
+      .not("ended_at", "is", null)
+      .not("progress_percent", "is", null)
+      .order("ended_at", { ascending: false })
+      .order("created_at", {
+        ascending: true,
+        referencedTable: "breakthroughs",
+      })
+      .limit(1, { referencedTable: "breakthroughs" })
+      .limit(GROWTH_PROGRESS_LIMIT),
+    ctx.client
+      .from("breakthroughs")
+      .select("id, content, note, created_at")
+      .order("created_at", { ascending: false })
+      .limit(BREAKTHROUGHS_LIMIT),
+    loadActiveGoalsWithLazySeed(ctx),
+    ctx.client
+      .from("insights")
+      .select("id, content, created_at")
+      .order("created_at", { ascending: false })
+      .limit(START_MENU_SHIFTS_LIMIT),
+  ]);
 
   if (lastRes.error) throw lastRes.error;
   if (countRes.error) throw countRes.error;
   if (tsRes.error) throw tsRes.error;
   if (growthRes.error) throw growthRes.error;
   if (breakthroughsRes.error) throw breakthroughsRes.error;
+  if (shiftsRes.error) throw shiftsRes.error;
 
   const timestampRows = (tsRes.data ?? []) as Array<{
     ended_at: string | null;
@@ -180,7 +205,16 @@ async function loadHomeData(): Promise<HomeData> {
       createdAt: b.created_at,
     })),
     activeGoals,
+    recentShifts: (shiftsRes.data ?? []) as StartSessionShift[],
   };
+}
+
+function activeGoalsForMenu(goals: ActiveGoal[]): StartSessionGoal[] {
+  return goals.map((g) => ({
+    id: g.id,
+    title: g.title,
+    progress_percent: g.progress_percent,
+  }));
 }
 
 export default async function HomePage() {
@@ -202,9 +236,11 @@ export default async function HomePage() {
     recentGrowth,
     recentBreakthroughs,
     activeGoals,
+    recentShifts,
   } = await loadHomeData();
   const goalCount = activeGoals.length;
   const topGoal = activeGoals[0] ?? null;
+  const menuGoals = activeGoalsForMenu(activeGoals);
 
   return (
     <PageShell active="home">
@@ -216,9 +252,17 @@ export default async function HomePage() {
       </p>
 
       {lastSession ? (
-        <LastSessionCard session={lastSession} />
+        <LastSessionCard
+          session={lastSession}
+          goals={menuGoals}
+          shifts={recentShifts}
+        />
       ) : (
-        <FirstSessionCard coachLabelText={coach} />
+        <FirstSessionCard
+          coachLabelText={coach}
+          goals={menuGoals}
+          shifts={recentShifts}
+        />
       )}
 
       {/* Stays 2-col on narrow mobile per the Bubble design — cards
