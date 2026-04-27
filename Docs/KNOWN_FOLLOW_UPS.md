@@ -1286,3 +1286,52 @@ Suggested fix: Two options worth weighing —
   Until a decision is made, the operator should run `npx supabase link --project-ref <prod-ref> && npx supabase db push` immediately after merging any migration PR, then re-link to dev.
 Status: OPEN (revisit before opening to >10 testers; the current pattern is acceptable while the operator is the only writer of the prod DB).
 
+## 2026-04-27 — Independent reviews of PRs #86, #96, #97
+
+Items deferred from three sub-agent reviews of the V.5a constellation-wiring + post-session-narrative + Call-2 PRs. Ship-blockers were addressed in the PRs themselves; the items below are accepted-defer with concrete next-action notes.
+
+FINDING 1
+Severity: LOW
+Lens: correctness
+Location: src/app/progress/page.tsx loadConstellation (constellation branch)
+Root cause: `breakthroughs.in("session_id", sessionIds)` and `insights.in("session_id", sessionIds)` filter the constellation by the breakthrough/shift's *parent* session_id, not by created_at or by reachability through contributor arrays. With CONSTELLATION_SESSION_LIMIT=200, a user with >200 sessions will see breakthroughs whose parent session falls outside the recent window silently disappear, even when their `contributing_session_ids` include current sessions.
+Blast radius: 200 sessions ≈ 4 years at weekly cadence — distant. No user is at risk today. Becomes user-visible only at very long-tenure usage.
+Suggested fix: Change the breakthrough/insight scope from "parent session in recent N" to "created_at within window" once a real user gets within sight of the boundary. Drop CONSTELLATION_SESSION_LIMIT in favor of date-based filtering at that point.
+Status: OPEN (revisit when the first user crosses 100 sessions).
+
+FINDING 2
+Severity: LOW
+Lens: correctness
+Location: src/app/progress/page.tsx breakthroughDetailFor / shiftDetailFor (constellation branch)
+Root cause: The expanded-detail builders look up each contributor session in `sessionEndedById` and drop rows where the id misses. `sessionEndedById` is populated only from the recent-200 sessions plus the goal-last-session backfill — so a breakthrough whose `contributing_session_ids` reach back further than 200 sessions has its older contributors silently filtered out before the count is computed. The narrative renders "emerged from 3 sessions" when the model claimed 7.
+Blast radius: Same long-tenure cliff as Finding 1; same near-term "doesn't matter" footnote. The undercount is subtle — looks like accurate data, isn't.
+Suggested fix: Either (a) extend the existing extra-session backfill query (currently `goalLastSessionIds`-only at lines ~188–203) to also pull `ended_at` for any session id referenced in a breakthrough's or shift's `contributing_session_ids` outside the recent-200 window — ~10 extra lines; or (b) surface "(+N earlier)" in the narrative so the count stays honest even when older sessions aren't rendered.
+Status: OPEN (small fix; bundle with Finding 1's revisit).
+
+FINDING 3
+Severity: MED
+Lens: operator
+Location: src/app/sessions/[id]/complete/WaitState.tsx
+Root cause: `WaitState` polls `router.refresh()` every 3.5s with no cap and no timeout. If `runSessionEndAnalysis` throws after the End click and never writes `coach_narrative`, the user sits on the wait-state indefinitely with rotating prompts and zero signal that anything's wrong. PR #96 ships with the Skip-for-now link as the only escape hatch — fine for D-1 but operationally blind.
+Blast radius: Today, near-zero — `runSessionEndAnalysis` errors are already captured to Sentry under `session_end_*` stages, so a failure surfaces there. But the *user* never finds out. At the >10-tester gate, "session feels stuck" with no diagnostics will cost trust.
+Suggested fix: Two layers, both cheap. (1) After 90s (or some other "longer than usual" threshold), have `WaitState` call `Sentry.captureMessage('post_session_wait_state_extended', ...)` so we can see in production whether and how often this is happening. (2) After 180s, swap the wait-state for a soft-fallback CTA: "Your session is saved — analysis is taking longer than usual. Head home and we'll show the summary on the sessions list when it's ready." Pair with a future query that surfaces the pending narrative on `/sessions` once analysis completes.
+Status: OPEN (revisit at >10-tester gate or when first Sentry event for `session_end_*` lands without a corresponding response submission).
+
+FINDING 4
+Severity: MED
+Lens: operator
+Location: src/app/sessions/actions.ts submitSessionResponse
+Root cause: Call 2 (`runSessionResponseAnalysis`) is fired from the action via `after()` only. If the `after()` callback crashes after the redirect — Vercel kill, OOM, transient OpenAI 5xx — the row is left with `user_responded_at IS NOT NULL AND response_parsed_at IS NULL` indefinitely. There is no recovery path. Sentry will see the error stage but no automatic retry happens.
+Blast radius: Per-failure: one user's disagreement signals are silently dropped — their reflection went into `user_response_text` but the analysis never ran, so any rejected shifts/breakthroughs stay marked as endorsed. At 1 op + <10 testers, near-zero. At launch, this is a recurring small data-loss bug.
+Suggested fix: Add a cron sweep that picks up `WHERE user_responded_at IS NOT NULL AND response_parsed_at IS NULL AND user_responded_at < now() - interval '5 minutes'` and runs `runSessionResponseAnalysis`. Mirrors the abandonment-cron pattern already used for Call 1. The RPC's `response_parsed_at IS NULL` guard keeps it idempotent against the cron racing the action's `after()`.
+Status: OPEN (queue alongside any Call-2 expansion or before opening to >10 testers).
+
+FINDING 5
+Severity: LOW
+Lens: data-integrity
+Location: reference/prompt-session-response-v1.md, supabase/migrations/20260427210000_process_session_response.sql
+Root cause: The Call-2 schema separates `disagreed_shifts` and `disagreed_breakthroughs` into two arrays. If the model emits a breakthrough id under `disagreed_shifts` (or vice versa), the per-table `WHERE id = … AND session_id = …` guard in the RPC silently drops the entry — real but quiet data loss. The prompt now has an explicit "id routing is strict" note (PR #97), but enforcement is still trust-based; the RPC has no fallback.
+Blast radius: Per-misroute: one disagreement signal dropped, no surface. With strict-mode JSON schema + the new prompt note, near-zero at the v1 prompt; risk grows if a future prompt-vN combines both lists or invites cross-references.
+Suggested fix: Either (a) collapse the schema to a single `disagreed: [{ id, kind: 'shift'|'breakthrough', note }]` array and dispatch in the RPC by `kind`, removing the routing risk entirely; or (b) keep the split but add a fallback in the RPC: when an id from `disagreed_shifts` doesn't match an `insights` row, try `breakthroughs` before silently skipping. Option (a) is cleaner; option (b) is non-breaking. Bundle with the next prompt-session-response version bump (likely when score recalibration / goal-completion gets added in D-3).
+Status: OPEN (revisit at D-3).
+
