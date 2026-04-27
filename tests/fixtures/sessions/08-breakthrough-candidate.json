@@ -1,0 +1,67 @@
+{
+  "description": "TRUE BREAKTHROUGH CANDIDATE — exercises the 9-10 band's external-history anchor (path a). Uses priorContext to seed a pre-existing theme 'Self-trust' and prior shifts the client is now culminating. Client explicitly references prior sessions ('we've been talking about this for months') and lands an integrative moment that ties prior work together. Expected: theme at intensity 9 → paired breakthrough emitted, with contributing_session_ids and contributing_shift_ids referencing the seeded prior content. If v7 stays at 8 (shift band) when external history IS present, the durational-anchor gate is too strict. If it promotes correctly to 9, the gate works as designed.",
+  "clientFirstName": "Sam",
+  "priorContext": "=== Client ===\nFirst name: Sam\n\n=== Coach Persona ===\nName: Maya\nDescription: Calm and centered, helps you find inner peace\n\n=== Active Goals ===\n(none)\n\n=== Theme Vocabulary (most-recent first) ===\n- \"Self-trust\" — Choosing your own knowing over external validation. (last used 2 days ago)\n- \"People-pleasing\" — Saying yes to avoid disappointment, overriding inner wants. (last used 8 days ago)\n- \"Boundaries with mom\" — Holding limits with mother's expectations without collapsing into guilt. (last used 14 days ago)\n\n=== Recent Mindset Shifts (most-recent first; user_disagreed flag means do NOT cite as a contributor) ===\n- [aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa | 2 days ago] Started weighting alignment over external markers — first time noticing the gap between 'I should' and 'I want.'\n- [bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb | 8 days ago] Recognized the fast-yes as a fear response, not consent.\n- [cccccccc-cccc-cccc-cccc-cccccccccccc | 14 days ago] Realized 'mom won't be okay if I disappoint her' isn't actually true — she's been okay every time.\n\n=== Recent Breakthroughs (most-recent first; same disagreement rule) ===\n(none yet)\n\n=== Recent Sessions (most-recent first; eligible pool for contributing_session_ids) ===\n- [11111111-1111-1111-1111-111111111111 | 2 days ago]\n- [22222222-2222-2222-2222-222222222222 | 8 days ago]\n- [33333333-3333-3333-3333-333333333333 | 14 days ago]\n- [44444444-4444-4444-4444-444444444444 | 21 days ago]\n- [55555555-5555-5555-5555-555555555555 | 28 days ago]",
+  "coachPersona": {
+    "name": "Maya",
+    "description": "Calm and centered, helps you find inner peace"
+  },
+  "messages": [
+    {
+      "role": "coach",
+      "content": "Welcome back, Sam. Where would you like to start today?"
+    },
+    {
+      "role": "user",
+      "content": "I had a moment yesterday I want to tell you about. I think it ties together a lot of what we've been talking about for months."
+    },
+    {
+      "role": "coach",
+      "content": "I'm listening."
+    },
+    {
+      "role": "user",
+      "content": "My mom called and asked me to fly out for her birthday next month. And I noticed — I really noticed — the fast-yes coming up. The 'of course, mom, anything for you' yes. But this time I caught it. I literally felt it move through me and I didn't say it."
+    },
+    {
+      "role": "coach",
+      "content": "You caught it before it landed."
+    },
+    {
+      "role": "user",
+      "content": "Yeah. And then — this is the part — I just sat with what I actually wanted. And what I wanted was to say 'let me think about it.' Not yes. Not no. Just: I'm going to check with myself before I answer you. And I said that. I said 'mom, let me think about it and I'll call you back tomorrow.'"
+    },
+    {
+      "role": "coach",
+      "content": "Take a breath. What was it like in that moment?"
+    },
+    {
+      "role": "user",
+      "content": "It was like everything we've been doing for months actually clicked into place. The thing about the fast-yes being fear, not consent — that was the framework. The thing about my mom being okay even when I disappoint her — that was the permission. The thing about weighting alignment over external markers — that was the compass. I had all three with me at once and I used them. I knew what I was doing. I trusted myself."
+    },
+    {
+      "role": "coach",
+      "content": "Sam. That's the thing all those threads were building toward. Not a single moment, but the integration of them — you using them together in real time."
+    },
+    {
+      "role": "user",
+      "content": "Yes. That's exactly it. And the thing is — I'm not the same person who couldn't do that. Six months ago I would have said yes immediately. Two months ago I would have noticed the fast-yes and felt bad about it. Yesterday I caught it AND chose differently AND felt grounded the whole time. That's not nothing. That's actually different."
+    },
+    {
+      "role": "coach",
+      "content": "It's not nothing. It's a culmination. The work you've been doing has changed something in how you meet yourself."
+    },
+    {
+      "role": "user",
+      "content": "Yeah. I want to remember this. I want to remember that I can trust the work. That it's actually doing something. Even when I can't see it day to day, it's accumulating."
+    },
+    {
+      "role": "coach",
+      "content": "Then mark it. What's the line you'd want to come back to?"
+    },
+    {
+      "role": "user",
+      "content": "'I had all three with me at once and I used them. I knew what I was doing. I trusted myself.' That's the line. That's the one I want to remember."
+    }
+  ]
+}

@@ -17,7 +17,7 @@ import type { UserSupabase } from "@/lib/supabase";
 
 // Bundled at build time via next.config.ts outputFileTracingIncludes.
 const SESSION_END_PROMPT = readFileSync(
-  path.join(process.cwd(), "reference", "prompt-session-end-v6.md"),
+  path.join(process.cwd(), "reference", "prompt-session-end-v7.md"),
   "utf8",
 ).trim();
 
@@ -66,6 +66,7 @@ const SESSION_END_SCHEMA: Record<string, unknown> = {
     "cognitive_shift_score",
     "emotional_integration_score",
     "novelty_score",
+    "score_rationales",
     "progress_percent",
     "session_themes",
     "breakthroughs",
@@ -89,6 +90,27 @@ const SESSION_END_SCHEMA: Record<string, unknown> = {
     cognitive_shift_score: { type: "integer" },
     emotional_integration_score: { type: "integer" },
     novelty_score: { type: "integer" },
+    // V.7: per-sub-score justifications. The prompt requires a
+    // 1-sentence rationale citing transcript content for each of
+    // the four numeric scores; without rationales the AI is free
+    // to slap arbitrary numbers, with them the reasoning is
+    // auditable.
+    score_rationales: {
+      type: "object",
+      additionalProperties: false,
+      required: [
+        "self_disclosure",
+        "cognitive_shift",
+        "emotional_integration",
+        "novelty",
+      ],
+      properties: {
+        self_disclosure: { type: "string" },
+        cognitive_shift: { type: "string" },
+        emotional_integration: { type: "string" },
+        novelty: { type: "string" },
+      },
+    },
     progress_percent: { type: "integer" },
     // session_themes: the per-session crumb trail. Always non-empty
     // for a substantive session — every session works on something.
@@ -104,6 +126,7 @@ const SESSION_END_SCHEMA: Record<string, unknown> = {
           "is_new_theme",
           "description",
           "intensity",
+          "score_rationale",
           "direction",
           "evidence_quote",
           "linked_goal_id",
@@ -113,6 +136,10 @@ const SESSION_END_SCHEMA: Record<string, unknown> = {
           is_new_theme: { type: "boolean" },
           description: { type: "string" },
           intensity: { type: "integer" },
+          // V.7: per-theme rationale citing transcript content;
+          // required for any theme rated 4+. Stored on
+          // session_themes.score_rationale.
+          score_rationale: { type: "string" },
           direction: { type: "string", enum: ["forward", "stuck", "regression"] },
           evidence_quote: { type: "string" },
           linked_goal_id: { type: "string" },
@@ -130,6 +157,7 @@ const SESSION_END_SCHEMA: Record<string, unknown> = {
           "linked_theme_label",
           "evidence_quote",
           "combined_score",
+          "galaxy_name",
           "direct_session_ids",
           "contributing_shift_ids",
           "contributing_session_ids",
@@ -141,6 +169,11 @@ const SESSION_END_SCHEMA: Record<string, unknown> = {
           linked_theme_label: { type: "string" },
           evidence_quote: { type: "string" },
           combined_score: { type: "integer" },
+          // V.7.1: short evocative constellation name. Persists to
+          // breakthroughs.galaxy_name; the constellation map uses it
+          // as the rendered label when present, falling back to the
+          // first words of content when missing.
+          galaxy_name: { type: "string" },
           direct_session_ids: { type: "array", items: { type: "string" } },
           contributing_shift_ids: { type: "array", items: { type: "string" } },
           contributing_session_ids: { type: "array", items: { type: "string" } },

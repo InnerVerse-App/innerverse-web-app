@@ -1,0 +1,53 @@
+{
+  "description": "FALSE-POSITIVE BAIT — emotion-only. Client cries, expresses intense feelings, has a real moment of grief. But never thinks differently. They feel the same things they came in feeling, just more vividly. The v7 prompt says: 'Strong feeling alone is not a shift.' Expected: themes captured (intensity 4-6 building band), 0 shifts, 0 breakthroughs, no trauma flag. self_disclosure should be high (8+) but cognitive_shift should be low (1-3) because no reframe occurred. If v7 emits a shift here, the rubric is too eager.",
+  "messages": [
+    {
+      "role": "coach",
+      "content": "Good to see you. What's most alive for you today?"
+    },
+    {
+      "role": "user",
+      "content": "I miss my grandma. She died eight months ago and today is her birthday. I've just been crying off and on all morning."
+    },
+    {
+      "role": "coach",
+      "content": "I'm so sorry. Eight months is recent. Tell me what you're missing about her right now."
+    },
+    {
+      "role": "user",
+      "content": "Her hands. The way she would just put her hand on my shoulder when I was upset. She didn't say anything. She just put her hand there. I keep wanting to feel that and it's not there."
+    },
+    {
+      "role": "coach",
+      "content": "Her hand. The wordless thing. That's a specific kind of comfort that's hard to substitute."
+    },
+    {
+      "role": "user",
+      "content": "I know. And the worst part is I keep thinking she'd be the person I'd call about how much I miss her. That's the cruel joke of grief I guess."
+    },
+    {
+      "role": "coach",
+      "content": "Yeah. The person who would have helped you through this is the one you can't reach. That's a real cruelty."
+    },
+    {
+      "role": "user",
+      "content": "I just want her back. I know that's not how it works but I just want her back. I want to call her. I want her to make me chicken soup. I want her to fix this."
+    },
+    {
+      "role": "coach",
+      "content": "Stay with that. You don't have to make it into anything else right now."
+    },
+    {
+      "role": "user",
+      "content": "Yeah. I'm just sad. I don't have a clever insight, I'm just really really sad. I miss her so much."
+    },
+    {
+      "role": "coach",
+      "content": "Then that's enough for today. Sad doesn't need to become anything. You loved her and she's gone and that's the whole thing right now."
+    },
+    {
+      "role": "user",
+      "content": "Thank you. I think I needed someone to just let me be sad without trying to make it useful."
+    }
+  ]
+}

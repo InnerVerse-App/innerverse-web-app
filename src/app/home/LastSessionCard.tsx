@@ -1,9 +1,12 @@
 import Link from "next/link";
 
-import { startSession } from "@/app/sessions/actions";
 import { formatDateLong } from "@/lib/format";
 
-import { StartSessionButton } from "./StartSessionButton";
+import {
+  StartSessionMenu,
+  type StartSessionGoal,
+  type StartSessionShift,
+} from "./StartSessionMenu";
 
 export type LastSession = {
   id: string;
@@ -13,7 +16,15 @@ export type LastSession = {
   coach_message: string | null;
 };
 
-export function FirstSessionCard({ coachLabelText }: { coachLabelText: string }) {
+export function FirstSessionCard({
+  coachLabelText,
+  goals,
+  shifts,
+}: {
+  coachLabelText: string;
+  goals: StartSessionGoal[];
+  shifts: StartSessionShift[];
+}) {
   return (
     <section className="mt-6 rounded-xl border border-white/10 bg-white/[0.02] p-5 sm:p-6">
       <div className="flex items-center gap-3">
@@ -42,14 +53,26 @@ export function FirstSessionCard({ coachLabelText }: { coachLabelText: string })
         Your coach is ready to help you explore your thoughts, set meaningful
         goals, and create lasting change.
       </p>
-      <form action={startSession} className="mt-5">
-        <StartSessionButton label="Start Your First Session" />
-      </form>
+      <div className="mt-5">
+        <StartSessionMenu
+          goals={goals}
+          shifts={shifts}
+          buttonLabel="Start Your First Session"
+        />
+      </div>
     </section>
   );
 }
 
-export function LastSessionCard({ session }: { session: LastSession }) {
+export function LastSessionCard({
+  session,
+  goals,
+  shifts,
+}: {
+  session: LastSession;
+  goals: StartSessionGoal[];
+  shifts: StartSessionShift[];
+}) {
   const summaryText =
     session.summary ??
     session.progress_summary_short ??
@@ -79,9 +102,13 @@ export function LastSessionCard({ session }: { session: LastSession }) {
         {formatDateLong(session.ended_at)}
       </p>
       <p className="mt-3 text-sm text-neutral-300">{summaryText}</p>
-      <form action={startSession} className="mt-5">
-        <StartSessionButton label="Start a New Session" />
-      </form>
+      <div className="mt-5">
+        <StartSessionMenu
+          goals={goals}
+          shifts={shifts}
+          buttonLabel="Start a New Session"
+        />
+      </div>
       <Link
         href={`/sessions/${session.id}`}
         className="mt-3 block text-center text-xs text-neutral-400 transition hover:text-brand-primary"

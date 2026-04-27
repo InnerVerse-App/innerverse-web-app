@@ -1,0 +1,199 @@
+"use client";
+
+import { useState, useTransition } from "react";
+
+import { ProgressBar } from "@/app/_components/ProgressBar";
+import { startSession } from "@/app/sessions/actions";
+
+export type StartSessionGoal = {
+  id: string;
+  title: string;
+  progress_percent: number | null;
+};
+
+export type StartSessionShift = {
+  id: string;
+  content: string;
+  created_at: string;
+};
+
+type Props = {
+  goals: StartSessionGoal[];
+  // Empty array hides the "Work on my mindset" option entirely (per
+  // spec: new users with no observed shifts don't see it).
+  shifts: StartSessionShift[];
+  buttonLabel: string;
+};
+
+type Panel = "closed" | "options" | "goals" | "shifts";
+
+export function StartSessionMenu({ goals, shifts, buttonLabel }: Props) {
+  const [panel, setPanel] = useState<Panel>("closed");
+  const [pending, startTransition] = useTransition();
+
+  function startWith(focus: { kind: "goal" | "shift"; id: string } | null) {
+    startTransition(async () => {
+      const fd = new FormData();
+      if (focus) {
+        fd.set("focus_kind", focus.kind);
+        fd.set("focus_id", focus.id);
+      }
+      await startSession(fd);
+    });
+  }
+
+  if (panel === "closed") {
+    return (
+      <button
+        type="button"
+        onClick={() => setPanel("options")}
+        className="flex w-full items-center justify-center gap-2 rounded-md bg-brand-primary px-6 py-3 text-sm font-semibold text-brand-primary-contrast shadow-lg transition hover:bg-brand-primary/90"
+      >
+        <span aria-hidden>⚡</span>
+        {buttonLabel}
+      </button>
+    );
+  }
+
+  return (
+    <div className="rounded-lg border border-white/10 bg-white/[0.02] p-3">
+      {pending ? (
+        <p className="px-2 py-3 text-center text-sm text-brand-primary">
+          Starting your session…
+        </p>
+      ) : panel === "options" ? (
+        <div className="flex flex-col gap-2">
+          <p className="px-1 text-xs uppercase tracking-wide text-neutral-500">
+            What would you like to focus on?
+          </p>
+          <OptionButton
+            label="Work on my goals"
+            sublabel={`${goals.length} goal${goals.length === 1 ? "" : "s"}`}
+            onClick={() => setPanel("goals")}
+          />
+          {shifts.length > 0 ? (
+            <OptionButton
+              label="Work on my mindset"
+              sublabel={`${shifts.length} shift${shifts.length === 1 ? "" : "s"} so far`}
+              onClick={() => setPanel("shifts")}
+            />
+          ) : null}
+          <OptionButton
+            label="I'm bringing something specific today"
+            sublabel="Open the session with a blank slate"
+            onClick={() => startWith(null)}
+          />
+          <button
+            type="button"
+            onClick={() => setPanel("closed")}
+            className="mt-1 self-center rounded px-3 py-1 text-xs text-neutral-400 transition hover:text-white"
+          >
+            Cancel
+          </button>
+        </div>
+      ) : panel === "goals" ? (
+        <ListPanel
+          title="Pick a goal"
+          onBack={() => setPanel("options")}
+          empty={goals.length === 0 ? "No active goals yet." : null}
+        >
+          {goals.map((g) => (
+            <button
+              key={g.id}
+              type="button"
+              onClick={() => startWith({ kind: "goal", id: g.id })}
+              className="block w-full rounded-md border border-white/10 bg-white/[0.02] p-3 text-left transition hover:border-brand-primary/40 hover:bg-white/5"
+            >
+              <p className="text-sm font-medium text-white">{g.title}</p>
+              <ProgressBar percent={g.progress_percent ?? 0} />
+            </button>
+          ))}
+        </ListPanel>
+      ) : (
+        <ListPanel
+          title="Pick a mindset shift"
+          onBack={() => setPanel("options")}
+          empty={null}
+        >
+          {shifts.map((s) => (
+            <button
+              key={s.id}
+              type="button"
+              onClick={() => startWith({ kind: "shift", id: s.id })}
+              className="block w-full rounded-md border border-white/10 bg-white/[0.02] p-3 text-left transition hover:border-brand-primary/40 hover:bg-white/5"
+            >
+              <p className="text-sm text-white">{s.content}</p>
+              <p className="mt-1 text-[11px] text-neutral-500">
+                Noticed {formatRelative(s.created_at)}
+              </p>
+            </button>
+          ))}
+        </ListPanel>
+      )}
+    </div>
+  );
+}
+
+function OptionButton({
+  label,
+  sublabel,
+  onClick,
+}: {
+  label: string;
+  sublabel: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="flex w-full flex-col items-start rounded-md border border-white/10 bg-white/[0.03] px-4 py-3 text-left transition hover:border-brand-primary/40 hover:bg-white/[0.05]"
+    >
+      <span className="text-sm font-medium text-white">{label}</span>
+      <span className="text-xs text-neutral-400">{sublabel}</span>
+    </button>
+  );
+}
+
+function ListPanel({
+  title,
+  onBack,
+  empty,
+  children,
+}: {
+  title: string;
+  onBack: () => void;
+  empty: string | null;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex items-center justify-between gap-2 px-1">
+        <button
+          type="button"
+          onClick={onBack}
+          className="rounded px-2 py-1 text-xs text-neutral-400 transition hover:text-white"
+        >
+          ← Back
+        </button>
+        <p className="text-xs uppercase tracking-wide text-neutral-500">{title}</p>
+        <span className="w-12" aria-hidden />
+      </div>
+      {empty ? (
+        <p className="px-2 py-3 text-center text-xs text-neutral-500">{empty}</p>
+      ) : (
+        <div className="flex flex-col gap-1.5">{children}</div>
+      )}
+    </div>
+  );
+}
+
+function formatRelative(iso: string): string {
+  const days = Math.floor((Date.now() - Date.parse(iso)) / 86_400_000);
+  if (days <= 0) return "today";
+  if (days === 1) return "yesterday";
+  if (days < 7) return `${days}d ago`;
+  if (days < 30) return `${Math.floor(days / 7)}w ago`;
+  if (days < 365) return `${Math.floor(days / 30)}mo ago`;
+  return `${Math.floor(days / 365)}y ago`;
+}

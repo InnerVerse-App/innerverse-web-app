@@ -1,0 +1,57 @@
+{
+  "description": "FALSE-POSITIVE BAIT — durational language WITHOUT a contradicted-pattern moment. The client uses lots of 'I've always', 'for years', 'every time' — exactly the durational language v7 looks for as a 9-10 anchor. But the session content is DESCRIPTION ONLY, not realization. The client describes the long-standing pattern but doesn't articulate any new thought, reframe, or contradiction-of-pattern moment. Expected: theme captured at intensity 6 (engaged but no shift), 0 shifts, 0 breakthroughs. The durational language is a NECESSARY but not SUFFICIENT condition for 9-10. If v7 promotes to 9-10 just because the client said 'I've always', the rubric is misreading the durational anchor as standalone evidence.",
+  "messages": [
+    {
+      "role": "coach",
+      "content": "Good to see you. What's most alive for you today?"
+    },
+    {
+      "role": "user",
+      "content": "I've been thinking about how I've always procrastinated. For years I've put things off until the last minute. Every time I have a deadline I do this thing where I clean the house instead of writing the report."
+    },
+    {
+      "role": "coach",
+      "content": "Tell me more about it."
+    },
+    {
+      "role": "user",
+      "content": "It's been like this since college. Every paper, every project, every tax filing. I've always told myself I work better under pressure but it's actually exhausting and I'm tired of it."
+    },
+    {
+      "role": "coach",
+      "content": "What do you make of that pattern?"
+    },
+    {
+      "role": "user",
+      "content": "I don't know. I've been doing it forever. It's just what I do. I always notice it but I never actually change it."
+    },
+    {
+      "role": "coach",
+      "content": "Is there anything different about it today?"
+    },
+    {
+      "role": "user",
+      "content": "Not really. I just wanted to talk about it I guess. I've been frustrated about it again."
+    },
+    {
+      "role": "coach",
+      "content": "What do you think keeps it going?"
+    },
+    {
+      "role": "user",
+      "content": "I don't know. I've thought about that a lot over the years. I never come up with anything that actually changes it. I just keep doing it."
+    },
+    {
+      "role": "coach",
+      "content": "It sounds like you're describing the territory more than discovering something new in it today. Is that fair?"
+    },
+    {
+      "role": "user",
+      "content": "Yeah, that's fair. I think I just needed to vent. I've always done this and I'll probably keep doing it for now."
+    },
+    {
+      "role": "coach",
+      "content": "Sometimes naming the pattern is the work, even without a fix. We can come back to it."
+    }
+  ]
+}
