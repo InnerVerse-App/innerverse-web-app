@@ -4,6 +4,8 @@ import { auth } from "@clerk/nextjs/server";
 import { captureSessionError } from "@/lib/observability";
 import {
   countMessages,
+  deleteSession,
+  hasUserMessages,
   SUBSTANTIVE_MESSAGE_THRESHOLD,
 } from "@/lib/sessions";
 import { supabaseForUser } from "@/lib/supabase";
@@ -45,6 +47,14 @@ export async function POST(
   }
 
   try {
+    const userTyped = await hasUserMessages(ctx, id);
+    if (!userTyped) {
+      // User closed the tab without ever typing a message. The
+      // session is just the AI's opening — delete the row so it
+      // doesn't clutter the Sessions tab.
+      await deleteSession(ctx, id);
+      return new NextResponse(null, { status: 204 });
+    }
     const messageCount = await countMessages(ctx, id);
     const { error } = await ctx.client
       .from("sessions")

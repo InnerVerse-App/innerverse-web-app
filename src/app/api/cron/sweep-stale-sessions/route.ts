@@ -47,6 +47,7 @@ type CandidateSession = {
   id: string;
   user_id: string;
   message_count: number;
+  user_message_count: number;
 };
 
 type RetrySession = { id: string; user_id: string };
@@ -88,11 +89,18 @@ async function findStaleSessions(): Promise<CandidateSession[]> {
       .select("id", { count: "exact", head: true })
       .eq("session_id", s.id);
     if (countErr) throw countErr;
+    const { count: userCount, error: userCountErr } = await admin
+      .from("messages")
+      .select("id", { count: "exact", head: true })
+      .eq("session_id", s.id)
+      .eq("is_sent_by_ai", false);
+    if (userCountErr) throw userCountErr;
 
     out.push({
       id: s.id,
       user_id: s.user_id,
       message_count: count ?? 0,
+      user_message_count: userCount ?? 0,
     });
   }
   return out;
@@ -147,9 +155,35 @@ export async function GET(req: Request): Promise<Response> {
   }
 
   const admin = supabaseAdmin();
-  const results = { closed: 0, analyzed: 0, retried: 0, failed: 0 };
+  const results = { closed: 0, deleted: 0, analyzed: 0, retried: 0, failed: 0 };
 
   for (const s of stale) {
+    // Empty session — user started it but never typed. Delete the
+    // row + its (single, AI-only) message rather than closing it,
+    // so it doesn't clutter the Sessions tab as "Open session".
+    if (s.user_message_count === 0) {
+      const msgRes = await admin
+        .from("messages")
+        .delete()
+        .eq("session_id", s.id);
+      if (msgRes.error) {
+        results.failed += 1;
+        captureSessionError(msgRes.error, "cron_sweep_close", s.id);
+        continue;
+      }
+      const sessRes = await admin
+        .from("sessions")
+        .delete()
+        .eq("id", s.id);
+      if (sessRes.error) {
+        results.failed += 1;
+        captureSessionError(sessRes.error, "cron_sweep_close", s.id);
+        continue;
+      }
+      results.deleted += 1;
+      continue;
+    }
+
     const isSubstantive = s.message_count >= SUBSTANTIVE_MESSAGE_THRESHOLD;
 
     // Close the session under service_role. Same guard as the user
