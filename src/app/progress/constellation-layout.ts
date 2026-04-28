@@ -172,29 +172,32 @@ const GALAXY_AGE_TAU_DAYS = 240;
 // from the universe center.
 const GALAXY_RADIAL_JITTER = 0.05;
 
-// Within-galaxy radius. Members scatter around the sun across this
-// range, with denser packing near the core and sparser at the rim
-// to evoke an elliptical galaxy's profile. Tighter than V2 so
-// neighboring galaxies have visible empty space between them.
-// Minimum distance from a member dot to its galaxy's sun. Tuned
-// against the sun's halo (~3% of panel radius) plus the member
-// dot's own visible radius — members below this would render
-// directly under the sun's halo and be impossible to tap.
+// Within-galaxy scatter is a true 2D Gaussian centered on the sun.
+// σ scales gently with sqrt(memberCount) so a 1-member galaxy stays
+// tight while a 25-member galaxy has visible structure (bulge +
+// trailing halo) without ballooning past the universe's compact
+// feel. Uniform radial-with-density-exponent (V3) gave a uniform
+// ring once relaxation kicked in; Gaussian gives an organic cluster.
+const MEMBER_SIGMA_BASE = 0.025;
+const MEMBER_SIGMA_PER_SQRT = 0.005;
+// Minimum distance from a member to its galaxy's sun. The sun's
+// halo + the member dot's own radius sit roughly inside this; below
+// it, members render under the halo and become impossible to tap.
 const GALAXY_CORE_RADIUS = 0.05;
-const GALAXY_HALO_RADIUS_BASE = 0.045;
-const GALAXY_HALO_RADIUS_PER_MEMBER = 0.0010;
-const GALAXY_HALO_RADIUS_MAX = 0.07;
+// Visible nebula radius for the renderer's glow. Scales with sqrt(n)
+// so it tracks the actual member spread (≈ 2σ captures 95% of dots).
+// Capped to keep old galaxies from clipping the panel edge.
+const GALAXY_HALO_RADIUS_BASE = 0.05;
+const GALAXY_HALO_RADIUS_PER_SQRT = 0.012;
+const GALAXY_HALO_RADIUS_MAX = 0.10;
 // Minimum visual separation between two members (panel-fraction).
-// Tuned so two dots' tap targets don't visually overlap at base
-// zoom. Each dot's hit radius is ~10–12px on screen; on a typical
+// Each dot's hit radius is ~10–12px on screen; on a typical
 // ~400px-wide constellation panel that's ~3% of width per dot
 // radius, so the centers need ≥ ~6% (0.06) apart to keep tappable
-// even when the user is fully zoomed out.
+// even when the user is fully zoomed out. Relaxation only nudges
+// pairs closer than this — the Gaussian's natural spread already
+// keeps most dots safely apart, so passes are gentle.
 const MIN_MEMBER_SEPARATION = 0.06;
-// Density-falloff exponent. < 1 biases toward the core (denser
-// center). 0.4 is a strong-bulge cluster — clear core with the
-// outer halo only sparsely populated.
-const MEMBER_DENSITY_EXPONENT = 0.4;
 // Galaxy aspect ratio range. Each galaxy gets a random aspect from
 // MIN..1 along one axis, simulating that we're seeing it from a
 // different angle than the others. Combined with the per-galaxy
@@ -203,8 +206,12 @@ const MEMBER_DENSITY_EXPONENT = 0.4;
 const GALAXY_ASPECT_MIN = 0.55;
 
 // In-progress region — sessions/shifts not yet in any galaxy live
-// near the universe center, scattered within this radius.
-const INPROGRESS_MAX_DIST = 0.10;
+// near the universe center, the foundation of the next galaxy.
+// Same Gaussian recipe as galaxy members but slightly tighter (no
+// sun anchoring it, so it should read as a forming cluster rather
+// than a fully-spread galaxy).
+const INPROGRESS_SIGMA_BASE = 0.022;
+const INPROGRESS_SIGMA_PER_SQRT = 0.004;
 const INPROGRESS_MIN_DIST = 0.025;
 
 function galaxyDistanceFromUniverseCenter(
@@ -228,8 +235,18 @@ function galaxyDistanceFromUniverseCenter(
 function galaxyVisibleRadius(memberCount: number): number {
   return Math.min(
     GALAXY_HALO_RADIUS_MAX,
-    GALAXY_HALO_RADIUS_BASE + memberCount * GALAXY_HALO_RADIUS_PER_MEMBER,
+    GALAXY_HALO_RADIUS_BASE +
+      Math.sqrt(memberCount) * GALAXY_HALO_RADIUS_PER_SQRT,
   );
+}
+
+// Box-Muller magnitude — converts a uniform u ∈ (0,1] into a sample
+// from a standard half-normal distribution. Combined with a uniform
+// angle this gives a 2D Gaussian scatter around the origin: dense
+// near the center, falling off smoothly with a long tail. Floor on
+// u keeps the result finite for hash collisions at the boundary.
+function gaussianMagnitude(u: number): number {
+  return Math.sqrt(-2 * Math.log(Math.max(1e-4, u)));
 }
 
 function polarToXY(
@@ -319,13 +336,13 @@ function buildGalaxyCenters(
   });
 }
 
-// Position galaxy members as a random scatter around the sun with
-// density falling off toward the rim. Each galaxy has its own
-// random aspect ratio + rotation, simulating that we're seeing it
-// from a slightly different angle than its neighbors — so galaxies
-// look visibly distinct from each other rather than all reading as
-// uniform circles. After the initial scatter, run a relaxation pass
-// to push apart any pairs closer than MIN_MEMBER_SEPARATION.
+// Position galaxy members as a Gaussian scatter around the sun: a
+// dense bulge tapering off into a thinner halo. Each galaxy gets its
+// own random aspect + rotation so neighboring galaxies look visibly
+// distinct rather than reading as uniform circles. σ grows with
+// sqrt(memberCount) so a busy galaxy spreads naturally without
+// blowing up. A light relaxation pass then nudges apart any pairs
+// the Gaussian happened to land too close together.
 function buildMemberPositions(
   galaxies: GalaxyCenter[],
 ): Map<string, { x: number; y: number }> {
@@ -333,8 +350,11 @@ function buildMemberPositions(
   for (const galaxy of galaxies) {
     if (galaxy.memberIds.length === 0) continue;
     const sorted = [...galaxy.memberIds].sort();
+    const sigma =
+      MEMBER_SIGMA_BASE +
+      MEMBER_SIGMA_PER_SQRT * Math.sqrt(sorted.length);
 
-    // Per-galaxy ellipse: aspect from MIN..1, rotation 0..2π.
+    // Per-galaxy ellipse: aspect from MIN..1, rotation 0..π.
     const aspect =
       GALAXY_ASPECT_MIN +
       hashFloat(galaxy.breakthroughId, 47) * (1 - GALAXY_ASPECT_MIN);
@@ -342,14 +362,12 @@ function buildMemberPositions(
     const cosR = Math.cos(rotation);
     const sinR = Math.sin(rotation);
 
-    // Initial hash-based scatter in ellipse-local coords, rotated
-    // into world coords.
     const positions = sorted.map((id) => {
       const angle = hashFloat(id, 81) * Math.PI * 2;
-      const u = hashFloat(id, 83);
-      const t = Math.pow(u, MEMBER_DENSITY_EXPONENT);
-      const r =
-        GALAXY_CORE_RADIUS + t * (galaxy.radius - GALAXY_CORE_RADIUS);
+      const r = Math.max(
+        GALAXY_CORE_RADIUS,
+        sigma * gaussianMagnitude(hashFloat(id, 83)),
+      );
       // Local ellipse coords (long axis = X, short axis = Y * aspect).
       const lx = Math.cos(angle) * r;
       const ly = Math.sin(angle) * r * aspect;
@@ -359,28 +377,7 @@ function buildMemberPositions(
       return { id, x: galaxy.cx + dx, y: galaxy.cy + dy };
     });
 
-    // Relaxation — push overlapping pairs apart. 6 passes
-    // typically resolves a galaxy's worth of stars.
-    for (let pass = 0; pass < 6; pass++) {
-      for (let i = 0; i < positions.length; i++) {
-        for (let j = i + 1; j < positions.length; j++) {
-          const a = positions[i];
-          const b = positions[j];
-          const dx = b.x - a.x;
-          const dy = b.y - a.y;
-          const dist = Math.hypot(dx, dy);
-          if (dist < MIN_MEMBER_SEPARATION && dist > 1e-6) {
-            const push = (MIN_MEMBER_SEPARATION - dist) / 2;
-            const nx = dx / dist;
-            const ny = dy / dist;
-            a.x -= nx * push;
-            a.y -= ny * push;
-            b.x += nx * push;
-            b.y += ny * push;
-          }
-        }
-      }
-    }
+    relaxPositions(positions);
 
     for (const p of positions) {
       result.set(p.id, { x: p.x, y: p.y });
@@ -389,28 +386,12 @@ function buildMemberPositions(
   return result;
 }
 
-// Position the in-progress region — sessions/shifts not yet in any
-// galaxy. Same recipe as galaxy members: hash-scatter, then run
-// relaxation so nothing overlaps. Lives in a small disc near the
-// universe center.
-function buildInProgressPositions(
-  ids: string[],
-): Map<string, { x: number; y: number }> {
-  const result = new Map<string, { x: number; y: number }>();
-  if (ids.length === 0) return result;
-  const sorted = [...ids].sort();
-  const positions = sorted.map((id) => {
-    const angle = hashFloat(id, 91) * Math.PI * 2;
-    const u = hashFloat(id, 93);
-    const t = Math.pow(u, 0.6);
-    const dist = INPROGRESS_MIN_DIST + t * (INPROGRESS_MAX_DIST - INPROGRESS_MIN_DIST);
-    return {
-      id,
-      x: 0.5 + Math.cos(angle) * dist,
-      y: 0.5 + Math.sin(angle) * dist,
-    };
-  });
-  for (let pass = 0; pass < 5; pass++) {
+// Relaxation — push overlapping pairs apart. The Gaussian scatter
+// already spaces most pairs naturally; this just resolves the few
+// that landed too close. 4 passes is enough for that, less than the
+// 6 we used when the input was a uniform-radial scatter.
+function relaxPositions(positions: { x: number; y: number }[]): void {
+  for (let pass = 0; pass < 4; pass++) {
     for (let i = 0; i < positions.length; i++) {
       for (let j = i + 1; j < positions.length; j++) {
         const a = positions[i];
@@ -430,6 +411,35 @@ function buildInProgressPositions(
       }
     }
   }
+}
+
+// Position the in-progress region — sessions/shifts not yet in any
+// galaxy. Same Gaussian recipe as galaxy members but centered on
+// the universe origin (0.5, 0.5) and slightly tighter, since this
+// is the cluster gathering toward the next breakthrough rather than
+// an already-formed galaxy with a sun at the center.
+function buildInProgressPositions(
+  ids: string[],
+): Map<string, { x: number; y: number }> {
+  const result = new Map<string, { x: number; y: number }>();
+  if (ids.length === 0) return result;
+  const sorted = [...ids].sort();
+  const sigma =
+    INPROGRESS_SIGMA_BASE +
+    INPROGRESS_SIGMA_PER_SQRT * Math.sqrt(sorted.length);
+  const positions = sorted.map((id) => {
+    const angle = hashFloat(id, 91) * Math.PI * 2;
+    const r = Math.max(
+      INPROGRESS_MIN_DIST,
+      sigma * gaussianMagnitude(hashFloat(id, 93)),
+    );
+    return {
+      id,
+      x: 0.5 + Math.cos(angle) * r,
+      y: 0.5 + Math.sin(angle) * r,
+    };
+  });
+  relaxPositions(positions);
   for (const p of positions) result.set(p.id, { x: p.x, y: p.y });
   return result;
 }
