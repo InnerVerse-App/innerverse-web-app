@@ -384,6 +384,9 @@ export default async function HomePage({
         />
       </div>
 
+      {lastSession?.coach_message ? (
+        <MessageFromCoachCard message={lastSession.coach_message} />
+      ) : null}
       <PersonalGrowthProgressCard
         items={recentGrowth}
         sessionsBase={isDemo ? "/sessions?demo=1" : "/sessions"}
@@ -392,9 +395,6 @@ export default async function HomePage({
         items={recentBreakthroughs}
         progressBase={isDemo ? "/progress?demo=1" : "/progress"}
       />
-      {lastSession?.coach_message ? (
-        <MessageFromCoachCard message={lastSession.coach_message} />
-      ) : null}
     </PageShell>
   );
 }
