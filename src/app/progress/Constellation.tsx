@@ -389,13 +389,14 @@ export function Constellation({
         pushPoint(anchorPoint.x, anchorPoint.y, anchorPoint.t);
         boostedIds.add(s.id);
         const sid = selectedAnchor.id;
-        // Breakthroughs this session fed DIRECTLY (not through a
-        // shift). Most sessions will have none — they reach a
-        // breakthrough through a shift, which is shown via the shift
-        // anchor instead.
+        // Breakthroughs this session contributed to (full set, not
+        // just direct). Pills on the session card include any
+        // breakthrough where the session is in contributing_session_ids
+        // OR direct_session_ids OR is the source — drawing the same
+        // edges keeps the map and the pills in sync.
         if (constellationLinks) {
           for (const [bid, links] of constellationLinks) {
-            if (!links.directSessionIds.includes(sid)) continue;
+            if (!links.sessionIds.includes(sid)) continue;
             const bb = breakthroughById.get(bid);
             if (!bb) continue;
             pushEdge(anchorPoint.x, anchorPoint.y, bb.x * 100, bb.y * 100);
