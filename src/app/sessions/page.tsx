@@ -4,6 +4,7 @@ import { auth } from "@clerk/nextjs/server";
 
 import { AutoScrollToTarget } from "@/app/_components/AutoScrollToTarget";
 import { PageShell } from "@/app/_components/PageShell";
+import { ProgressBar } from "@/app/_components/ProgressBar";
 import {
   StartSessionMenu,
   type StartSessionGoal,
@@ -11,6 +12,7 @@ import {
 } from "@/app/home/StartSessionMenu";
 import { loadActiveGoalsWithLazySeed } from "@/lib/goals";
 import { formatDateShort } from "@/lib/format";
+import { progressForSession, progressToOpacity } from "@/lib/progress";
 import {
   getOnboardingState,
   isOnboardingComplete,
@@ -268,6 +270,15 @@ export default async function SessionsListPage({
                         <p className="mt-2 line-clamp-2 text-base font-semibold leading-snug text-white">
                           {briefTitle}
                         </p>
+                        {s.ended_at ? (
+                          <ProgressBar
+                            percent={progressForSession(s.ended_at)}
+                            color="#59A4C0"
+                            opacity={progressToOpacity(
+                              progressForSession(s.ended_at),
+                            )}
+                          />
+                        ) : null}
                       </div>
                       <span
                         className="mt-1 inline-block shrink-0 text-neutral-500 transition group-open:rotate-180"

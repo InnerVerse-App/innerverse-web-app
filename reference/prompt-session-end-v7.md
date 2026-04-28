@@ -48,11 +48,17 @@ For each theme this session worked on, rate it 0–10. The band determines what 
 
 - **7–8 — shift band.** The client articulated something new in this session, with a quotable contradicted-pattern moment. Emit the theme AND a paired entry in `mindset_shifts[]` whose `linked_theme_label` matches.
 
+  **Frequency calibration — read carefully.** Aim for roughly this distribution across a long stretch of sessions: **about half of substantive sessions emit one shift; some emit none (venting, exploration without landing, off-day); some emit two (when two genuinely distinct patterns each had a quotable contradicted-pattern moment).** Three or more shifts in a single session is **rare** — it should make you re-read; the highest is probably a 7 and the others are likely 5–6 in the building band. The system relies on shift emission being a meaningful but reachable signal: too few and the user feels nothing's happening; too many and the signal collapses. Find the honest middle.
+
+  **The 8 specifically is the upper end of the shift band — reserve it.** An 8 means the contradicted-pattern moment landed with unusual force: the client themselves marked it ("oh", a long pause, an explicit "that just changed something"). Without that landing, default to 7. **One 8 in a session is uncommon but fine. Two 8s is rare. Three 8s should not happen — if you're tempted to rate three themes at 8, only the strongest is an 8, the others are 6–7.**
+
 - **9–10 — breakthrough band.** Same as 7–8 PLUS *durational anchoring*. To rate above 8, you must satisfy one of:
   - **(a) External history** — this theme (or a close cousin under a different label) appears in the client's existing theme vocabulary you were given. Cite the matched prior theme in your rationale.
   - **(b) Self-reported history** — the client's own language *in this session* places the pattern in long-standing personal history: "I've always…", "for years I've…", "every time", "all my life", "I do this all the time", or equivalent. Cite the specific quoted phrase in your rationale.
   
   If neither (a) nor (b) is present, you may not rate above 8, even if the in-session moment feels significant. A first-ever theme that has only in-session intensity is shift territory at most. Emit the theme AND a paired entry in `breakthroughs[]` whose `linked_theme_label` matches.
+
+  **Breakthroughs are the rarest signal in this system.** Most weeks have none. The math should be: most sessions = no shift, no breakthrough. Some sessions = a shift. Few sessions = a breakthrough. If your output is implying breakthroughs in back-to-back sessions, you are inflating. Default toward shift.
 
 **Score rationale is mandatory for every theme rated 4+.** One short sentence that cites specific words from the transcript. A rationale that does not include a quoted phrase or a specific in-transcript reference is grounds for downgrading the score to ≤3 (and therefore omitting the theme).
 
@@ -119,7 +125,9 @@ For every emitted **breakthrough**:
 - `evidence_quote` — the moment.
 - `influence_scores` — array of `{ target_id, score }` objects, one per contributing session AND per contributing shift; score 0–100.
 
-If a breakthrough's durational anchor is path (b) (self-reported history rather than external prior sessions), `contributing_shift_ids[]` and `direct_session_ids[]` may both be empty — the durational evidence lives in the rationale on the parent theme. In that case, `contributing_session_ids[]` must still be populated with at least one prior session_id from the input (use the most recently-relevant session); the constellation map needs at least one anchor.
+**A breakthrough is a culmination, not a single-session event.** The expected shape is multiple prior sessions feeding into one or more prior shifts which now culminate in this breakthrough — `contributing_shift_ids[]` should normally have at least 1 entry, and `contributing_session_ids[]` should normally have several. A breakthrough whose total contributor count (direct + via-shift) is 1 should make you suspicious; reconsider whether it's actually a shift, not a breakthrough.
+
+If a breakthrough's durational anchor is path (b) (self-reported history rather than external prior sessions), `contributing_shift_ids[]` and `direct_session_ids[]` may both be empty — the durational evidence lives in the rationale on the parent theme. Even in that case, `contributing_session_ids[]` must be populated with at least one prior session_id from the input (use the most recently-relevant session); the constellation map needs at least one anchor.
 
 ---
 

@@ -296,6 +296,7 @@ export default async function HomePage({
       progress_percent: g.progressPercent,
       progress_rationale: null,
       last_session_id: g.lastEngagedAt ? "demo-s6" : null,
+      last_engaged_at: g.lastEngagedAt,
       is_predefined: g.completionType === "practice",
       completion_type: g.completionType,
     }));

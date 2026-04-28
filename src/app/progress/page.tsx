@@ -8,13 +8,18 @@ import {
   ExpandedDetailBody,
 } from "@/app/_components/ExpandedDetailBody";
 import { PageShell } from "@/app/_components/PageShell";
-import { RecencyBar } from "@/app/_components/RecencyBar";
+import { ProgressBar } from "@/app/_components/ProgressBar";
 import { loadActiveGoalsWithLazySeed } from "@/lib/goals";
 import { formatDateCompact } from "@/lib/format";
 import {
   getOnboardingState,
   isOnboardingComplete,
 } from "@/lib/onboarding";
+import {
+  progressForBreakthrough,
+  progressForShift,
+  progressToOpacity,
+} from "@/lib/progress";
 import { supabaseForUser, type UserSupabase } from "@/lib/supabase";
 
 import { Constellation } from "./Constellation";
@@ -297,9 +302,9 @@ async function loadConstellation(
     goals: activeGoals.map((g) => ({
       id: g.id,
       title: g.title,
-      lastEngagedAt: g.last_session_id
-        ? sessionEndedById.get(g.last_session_id) ?? null
-        : null,
+      lastEngagedAt: g.last_engaged_at,
+      progressPercent: g.progress_percent,
+      completionType: g.completion_type,
     })),
     constellationLinks,
   });
@@ -489,6 +494,7 @@ export default async function ProgressPage({
           recencyColor="#DCA114"
           idPrefix="bt"
           expandedDetailFor={breakthroughDetailFor}
+          progressFor={progressForBreakthrough}
           buildStarMapHref={(item) =>
             buildSelectUrl({
               demo: "1",
@@ -509,6 +515,7 @@ export default async function ProgressPage({
           recencyColor="#A78BFA"
           idPrefix="ms"
           expandedDetailFor={shiftDetailFor}
+          progressFor={progressForShift}
           buildStarMapHref={(item) =>
             buildSelectUrl({
               demo: "1",
@@ -665,6 +672,7 @@ export default async function ProgressPage({
         recencyColor="#DCA114"
         idPrefix="bt"
         expandedDetailFor={breakthroughDetailFor}
+        progressFor={progressForBreakthrough}
         buildStarMapHref={(item) =>
           buildSelectUrl({
             constellation: item.id,
@@ -684,6 +692,7 @@ export default async function ProgressPage({
         recencyColor="#A78BFA"
         idPrefix="ms"
         expandedDetailFor={shiftDetailFor}
+        progressFor={progressForShift}
         buildStarMapHref={(item) =>
           buildSelectUrl({
             shift: item.id,
@@ -734,10 +743,14 @@ function ExpandableList({
   expandedDetailFor,
   buttonLabel,
   highlightedItemId,
+  progressFor,
 }: {
   title: string;
   emoji?: string;
   items: TextRow[];
+  // Color shared by the bar gradient and (historically) the recency
+  // gauge. Tied to the entity category — gold for breakthroughs,
+  // violet for mindset shifts.
   recencyColor: string;
   idPrefix: string;
   buildStarMapHref?: (item: TextRow) => string;
@@ -748,6 +761,11 @@ function ExpandableList({
   // ?constellation=<id> param so the card lights up even though the
   // URL fragment is #constellation-map (not #bt-<id>).
   highlightedItemId?: string | null;
+  // Progress computation for the unified-progress bar. Caller passes
+  // progressForBreakthrough or progressForShift; keeping it as a
+  // function lets the two sections drift apart later if their decay
+  // rates diverge from the current 24h/pt.
+  progressFor: (iso: string | null | undefined) => number;
 }) {
   const visibleHeightPx = 420; // ≈ 5 collapsed cards
   return (
@@ -794,9 +812,12 @@ function ExpandableList({
                           {emoji ? <span className="mr-1.5">{emoji}</span> : null}
                           {item.content}
                         </p>
-                        <RecencyBar
-                          lastEngagedAt={item.created_at}
+                        <ProgressBar
+                          percent={progressFor(item.created_at)}
                           color={recencyColor}
+                          opacity={progressToOpacity(
+                            progressFor(item.created_at),
+                          )}
                         />
                       </div>
                       <span
