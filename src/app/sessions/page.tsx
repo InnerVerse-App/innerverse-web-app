@@ -265,7 +265,7 @@ export default async function SessionsListPage({
                             {s.ended_at ? "Completed" : "In progress"}
                           </span>
                         </div>
-                        <p className="mt-2 text-sm text-neutral-200">
+                        <p className="mt-2 text-base font-semibold leading-snug text-white">
                           {briefTitle}
                         </p>
                       </div>
@@ -299,11 +299,19 @@ export default async function SessionsListPage({
                             <p className="mb-1.5 text-[10px] font-medium uppercase tracking-wide text-neutral-500">
                               Breakthroughs from this session
                             </p>
-                            <ul className="flex flex-col gap-1.5 text-xs">
+                            <div className="flex flex-wrap gap-1.5">
                               {breakthroughs.map((b) => (
-                                <li key={b.id} className="flex items-start gap-2">
+                                <Link
+                                  key={b.id}
+                                  href={`/progress?constellation=${b.id}`}
+                                  className="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] transition hover:border-brand-primary/40 hover:text-brand-primary"
+                                  style={{
+                                    borderColor: "rgba(220,161,20,0.4)",
+                                    color: "#DCA114",
+                                  }}
+                                >
                                   <span
-                                    className="mt-1 inline-block h-2 w-2 shrink-0"
+                                    className="inline-block h-2 w-2 shrink-0"
                                     style={{
                                       background: "#DCA114",
                                       clipPath:
@@ -311,15 +319,10 @@ export default async function SessionsListPage({
                                     }}
                                     aria-hidden
                                   />
-                                  <Link
-                                    href={`/progress?constellation=${b.id}`}
-                                    className="flex-1 text-neutral-200 transition hover:text-brand-primary"
-                                  >
-                                    {b.content}
-                                  </Link>
-                                </li>
+                                  {b.content}
+                                </Link>
                               ))}
-                            </ul>
+                            </div>
                           </div>
                         ) : null}
 
@@ -328,23 +331,26 @@ export default async function SessionsListPage({
                             <p className="mb-1.5 text-[10px] font-medium uppercase tracking-wide text-neutral-500">
                               Mindset shifts noticed
                             </p>
-                            <ul className="flex flex-col gap-1.5 text-xs">
+                            <div className="flex flex-wrap gap-1.5">
                               {shifts.map((m) => (
-                                <li key={m.id} className="flex items-start gap-2">
+                                <Link
+                                  key={m.id}
+                                  href={`/progress?shift=${m.id}`}
+                                  className="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] transition hover:border-brand-primary/40 hover:text-brand-primary"
+                                  style={{
+                                    borderColor: "rgba(167,139,250,0.4)",
+                                    color: "#A78BFA",
+                                  }}
+                                >
                                   <span
-                                    className="mt-1.5 inline-block h-1.5 w-1.5 shrink-0 rounded-full"
+                                    className="inline-block h-1.5 w-1.5 shrink-0 rounded-full"
                                     style={{ background: "#A78BFA" }}
                                     aria-hidden
                                   />
-                                  <Link
-                                    href={`/progress?shift=${m.id}`}
-                                    className="flex-1 font-medium text-neutral-200 transition hover:text-brand-primary"
-                                  >
-                                    {m.content}
-                                  </Link>
-                                </li>
+                                  {m.content}
+                                </Link>
                               ))}
-                            </ul>
+                            </div>
                           </div>
                         ) : null}
 
@@ -358,12 +364,17 @@ export default async function SessionsListPage({
                                 <Link
                                   key={g.id}
                                   href={`/goals?goal=${g.id}#g-${g.id}`}
-                                  className="inline-flex items-center rounded-full border px-2.5 py-0.5 text-[11px] transition hover:border-brand-primary/40 hover:text-brand-primary"
+                                  className="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] transition hover:border-brand-primary/40 hover:text-brand-primary"
                                   style={{
                                     borderColor: "rgba(74,222,128,0.4)",
                                     color: "#4ADE80",
                                   }}
                                 >
+                                  <span
+                                    className="inline-block h-1.5 w-1.5 shrink-0 rounded-full"
+                                    style={{ background: "#4ADE80" }}
+                                    aria-hidden
+                                  />
                                   {g.title}
                                 </Link>
                               ))}
