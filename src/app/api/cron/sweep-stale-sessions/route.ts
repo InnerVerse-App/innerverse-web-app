@@ -33,7 +33,14 @@ export const maxDuration = 60;
 // external abuse. Manual testing: use the Run-now button from
 // the Vercel dashboard, or curl the endpoint with the secret.
 
-const STALE_IDLE_MINUTES = 30;
+// Tightened from 30 → 5 after adding the auto-end beacon (ChatView's
+// pagehide handler). The beacon catches the typical case (clean tab
+// close); this cron is the safety net for sessions where the beacon
+// didn't fire (browser crash, dirty tab kill, beacon network
+// failure, etc.). 5 min is short enough that cron sweeps don't
+// pile up but long enough that a user briefly switching tabs and
+// returning doesn't get their session closed.
+const STALE_IDLE_MINUTES = 5;
 const SWEEP_BATCH_LIMIT = 50;
 
 type CandidateSession = {
