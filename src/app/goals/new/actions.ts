@@ -67,6 +67,9 @@ export async function createGoal(
       title,
       description: description || null,
       is_predefined: false,
+      // Default to practice; we don't have UI for picking milestone
+      // vs practice yet. Most coaching goals are open-ended.
+      completion_type: "practice",
     })
     .select("id")
     .single();
@@ -144,6 +147,7 @@ export async function addPredefinedGoal(formData: FormData): Promise<void> {
       user_id: ctx.userId,
       title,
       is_predefined: true,
+      completion_type: "practice",
     })
     .select("id")
     .single();

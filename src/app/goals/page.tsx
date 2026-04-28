@@ -92,6 +92,7 @@ async function buildCardData(
       current_next_step_content: step?.content ?? null,
       current_next_step_done: step?.status === "done",
       is_predefined: g.is_predefined,
+      completion_type: g.completion_type,
     };
   });
 }
@@ -306,6 +307,9 @@ export default async function GoalsPage({
 
   return (
     <PageShell active="goals">
+      <AutoScrollToTarget
+        targetId={highlightedGoalId ? `g-${highlightedGoalId}` : null}
+      />
       <div className="flex items-start justify-between gap-3">
         <div>
           <h1 className="text-3xl font-bold text-white">Goals Progress</h1>

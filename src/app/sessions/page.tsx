@@ -303,7 +303,7 @@ export default async function SessionsListPage({
                               {breakthroughs.map((b) => (
                                 <Link
                                   key={b.id}
-                                  href={`/progress?constellation=${b.id}`}
+                                  href={`/progress?constellation=${b.id}#bt-${b.id}`}
                                   className="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] transition hover:border-brand-primary/40 hover:text-brand-primary"
                                   style={{
                                     borderColor: "rgba(220,161,20,0.4)",
@@ -311,11 +311,11 @@ export default async function SessionsListPage({
                                   }}
                                 >
                                   <span
-                                    className="inline-block h-2 w-2 shrink-0"
+                                    className="inline-block h-3 w-3 shrink-0"
                                     style={{
                                       background: "#DCA114",
                                       clipPath:
-                                        "polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%)",
+                                        "polygon(50% 0%, 57.7% 31.5%, 85.4% 14.6%, 68.5% 42.3%, 100% 50%, 68.5% 57.7%, 85.4% 85.4%, 57.7% 68.5%, 50% 100%, 42.3% 68.5%, 14.6% 85.4%, 31.5% 57.7%, 0% 50%, 31.5% 42.3%, 14.6% 14.6%, 42.3% 31.5%)",
                                     }}
                                     aria-hidden
                                   />
@@ -335,7 +335,7 @@ export default async function SessionsListPage({
                               {shifts.map((m) => (
                                 <Link
                                   key={m.id}
-                                  href={`/progress?shift=${m.id}`}
+                                  href={`/progress?shift=${m.id}#ms-${m.id}`}
                                   className="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] transition hover:border-brand-primary/40 hover:text-brand-primary"
                                   style={{
                                     borderColor: "rgba(167,139,250,0.4)",

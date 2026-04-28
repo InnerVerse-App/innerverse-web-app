@@ -297,6 +297,7 @@ export default async function HomePage({
       progress_rationale: null,
       last_session_id: g.lastEngagedAt ? "demo-s6" : null,
       is_predefined: g.completionType === "practice",
+      completion_type: g.completionType,
     }));
     // Demo-mode start-session menu: leave shifts empty so the
     // mindset-shift option auto-hides per the menu's own spec.
