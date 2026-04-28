@@ -11,6 +11,11 @@ export const MODEL_SESSION_END = "gpt-5";
 // narrower so we could downsize, but matching session-end keeps
 // reasoning quality consistent for the disagreement-detection rubric.
 export const MODEL_SESSION_RESPONSE = "gpt-5";
+// Growth narrative — the cumulative "where you've been" letter
+// re-rendered each session. Pure prose synthesis from existing
+// analyses, no extraction logic, so we use the same gpt-5 family
+// as session-end for voice quality.
+export const MODEL_GROWTH_NARRATIVE = "gpt-5";
 
 // Bumped from 2000 (v5) to 4000 (v6) to 6000 (v7) as the prompts
 // have grown. v7 adds per-theme rationales + per-sub-score

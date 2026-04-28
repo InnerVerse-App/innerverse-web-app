@@ -25,7 +25,15 @@ export function MessageFromCoachCard({ message }: Props) {
           Message from your Coach
         </h2>
       </div>
-      <p className="mt-3 text-sm text-neutral-300">{message}</p>
+      <div className="mt-3 flex flex-col gap-3 text-sm leading-relaxed text-neutral-300">
+        {message
+          .split(/\n{2,}/)
+          .map((p) => p.trim())
+          .filter(Boolean)
+          .map((p, i) => (
+            <p key={i}>{p}</p>
+          ))}
+      </div>
       <Link
         href="/next-steps"
         className="mt-5 block rounded-md border border-brand-primary/40 px-4 py-3 text-center text-sm font-medium text-brand-primary transition hover:bg-brand-primary/10"
