@@ -165,8 +165,10 @@ export default async function GoalsPage({
         <div className="flex items-start justify-between gap-3">
           <div>
             <h1 className="text-3xl font-bold text-white">Goals Progress</h1>
-            <p className="mt-1 text-sm text-neutral-400">
-              Your personal growth development.{" "}
+            <p className="mt-1 text-sm leading-relaxed text-neutral-400">
+              The threads you&apos;re working on. Each one grows with
+              the sessions, shifts, and breakthroughs that move it
+              forward.{" "}
               <span className="text-amber-400">(demo mode)</span>
             </p>
           </div>
@@ -313,8 +315,9 @@ export default async function GoalsPage({
       <div className="flex items-start justify-between gap-3">
         <div>
           <h1 className="text-3xl font-bold text-white">Goals Progress</h1>
-          <p className="mt-1 text-sm text-neutral-400">
-            Your personal growth development.
+          <p className="mt-1 text-sm leading-relaxed text-neutral-400">
+            The threads you&apos;re working on. Each one grows with the
+            sessions, shifts, and breakthroughs that move it forward.
           </p>
         </div>
         <Link
