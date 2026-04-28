@@ -275,24 +275,12 @@ export function Constellation({
           }
         }
 
-        // Goals that include this breakthrough — fan from the
-        // breakthrough.
-        if (goalLinks) {
-          for (const [gid, gl] of goalLinks) {
-            if (!gl.breakthroughIds.includes(selectedAnchor.id)) continue;
-            const g = goalById.get(gid);
-            if (!g) continue;
-            const gx = g.x * 100;
-            const gy = g.y * 100;
-            pushEdge(anchorPoint.x, anchorPoint.y, gx, gy);
-            pushPoint(
-              gx,
-              gy,
-              Date.parse(g.lastEngagedAt ?? b.createdAt),
-            );
-            boostedIds.add(gid);
-          }
-        }
+        // Goals are NOT drawn into a constellation — comets wander
+        // the universe, they don't belong to a single breakthrough's
+        // galaxy. The connection still exists in the data (a goal
+        // can still list this breakthrough as a contributor) and
+        // shows up as a line when the GOAL is selected; we just
+        // don't fan from a chosen breakthrough out to its comets.
       }
     } else if (selectedAnchor.type === "shift") {
       const m = shiftById.get(selectedAnchor.id);
@@ -773,25 +761,33 @@ export function Constellation({
                       {/* Each edge is an explicit from→to pair, so a
                           breakthrough's constellation reads as a tree
                           (breakthrough → shift → shift's session)
-                          rather than a flat fan. */}
-                      {chainEdges.map((e, i) => (
-                        <line
-                          key={i}
-                          x1={e.fromX}
-                          y1={e.fromY}
-                          x2={e.toX}
-                          y2={e.toY}
-                          stroke="white"
-                          strokeWidth={0.3}
-                          strokeOpacity={0.5}
-                          strokeLinecap="round"
-                          vectorEffect="non-scaling-stroke"
-                          style={{
-                            filter:
-                              "drop-shadow(0 0 1px rgba(255,255,255,0.5))",
-                          }}
-                        />
-                      ))}
+                          rather than a flat fan. Constellation lines
+                          (when a breakthrough is the anchor) draw
+                          slightly heavier than connector lines for
+                          shifts/sessions/goals so the galaxy reads
+                          as the dominant structure. */}
+                      {chainEdges.map((e, i) => {
+                        const isConstellation =
+                          selectedAnchor?.type === "breakthrough";
+                        return (
+                          <line
+                            key={i}
+                            x1={e.fromX}
+                            y1={e.fromY}
+                            x2={e.toX}
+                            y2={e.toY}
+                            stroke="white"
+                            strokeWidth={isConstellation ? 0.55 : 0.3}
+                            strokeOpacity={isConstellation ? 0.65 : 0.5}
+                            strokeLinecap="round"
+                            vectorEffect="non-scaling-stroke"
+                            style={{
+                              filter:
+                                "drop-shadow(0 0 1px rgba(255,255,255,0.5))",
+                            }}
+                          />
+                        );
+                      })}
                     </svg>
                   ) : null}
 
