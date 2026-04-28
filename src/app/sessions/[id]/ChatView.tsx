@@ -77,6 +77,17 @@ export function ChatView({
     wasStreamingRef.current = streaming;
   }, [streaming, ended]);
 
+  // Auto-grow the textarea as the user types. Reset to "auto" first
+  // so scrollHeight reflects the natural content size, then snap to
+  // it. The CSS max-height + overflow-y-auto cap further growth and
+  // turn on internal scrolling once the input gets long.
+  useEffect(() => {
+    const el = inputRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  }, [input]);
+
   // Auto-end on close. When the page is being unloaded (tab close,
   // browser quit, navigating to another domain), fire a beacon to
   // /api/sessions/<id>/finalize so the session is marked ended
@@ -240,7 +251,8 @@ export function ChatView({
             disabled={streaming || ended}
             placeholder={ended ? "Session ended" : "Type here…"}
             rows={1}
-            className="flex-1 resize-none rounded-full border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-white placeholder:text-neutral-500 focus:outline-none focus:ring-2 focus:ring-brand-primary disabled:opacity-50"
+            className="flex-1 resize-none overflow-y-auto rounded-3xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-white placeholder:text-neutral-500 focus:outline-none focus:ring-2 focus:ring-brand-primary disabled:opacity-50"
+            style={{ maxHeight: "8rem" }}
           />
           <button
             type="submit"
