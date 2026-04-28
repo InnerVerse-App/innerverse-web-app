@@ -19,10 +19,12 @@ export type ActiveGoal = {
   progress_percent: number | null;
   progress_rationale: string | null;
   last_session_id: string | null;
+  // Anchor for the unified-progress decay clock. Bumped by
+  // process_session_end whenever a linked theme adds to this goal.
+  last_engaged_at: string | null;
   is_predefined: boolean;
-  // milestone = goal has a defined finish line (progress_percent +
-  // bar makes sense). practice = ongoing/open-ended (show recency
-  // instead — most coaching goals are this).
+  // milestone = goal has a defined finish line, no progress decay.
+  // practice = ongoing/open-ended, decays at 1 point per 72h.
   completion_type: "milestone" | "practice";
 };
 
@@ -167,7 +169,7 @@ export async function loadActiveGoalsWithLazySeed(
     client
       .from("goals")
       .select(
-        "id, title, description, status, progress_percent, progress_rationale, last_session_id, is_predefined, completion_type",
+        "id, title, description, status, progress_percent, progress_rationale, last_session_id, last_engaged_at, is_predefined, completion_type",
       )
       .is("archived_at", null)
       .order("created_at", { ascending: false }),
@@ -205,7 +207,7 @@ export async function loadActiveGoalsWithLazySeed(
   const finalRes = await client
     .from("goals")
     .select(
-      "id, title, description, status, progress_percent, progress_rationale, last_session_id, is_predefined, completion_type",
+      "id, title, description, status, progress_percent, progress_rationale, last_session_id, last_engaged_at, is_predefined, completion_type",
     )
     .is("archived_at", null)
     .order("created_at", { ascending: false });

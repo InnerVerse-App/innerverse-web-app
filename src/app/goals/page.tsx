@@ -89,6 +89,7 @@ async function buildCardData(
       last_session_ended_at: g.last_session_id
         ? sessionEndedById.get(g.last_session_id) ?? null
         : null,
+      last_engaged_at: g.last_engaged_at,
       current_next_step_content: step?.content ?? null,
       current_next_step_done: step?.status === "done",
       is_predefined: g.is_predefined,

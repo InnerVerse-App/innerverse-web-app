@@ -62,6 +62,11 @@ export type GoalDot = {
   id: string;
   title: string;
   lastEngagedAt: string | null;
+  // Stored progress_percent (0-100) at the goal's most recent
+  // session-engagement. Optional so demo data and call sites that
+  // haven't migrated yet keep working — they fall back to recency.
+  progressPercent?: number | null;
+  completionType?: "milestone" | "practice";
 };
 
 export type Positioned<T> = T & {
@@ -112,6 +117,14 @@ export function hashFloat(input: string, seed = 0): number {
   }
   return (h % 10000) / 10000;
 }
+
+import {
+  progressForBreakthrough,
+  progressForGoal,
+  progressForSession,
+  progressForShift,
+  progressToOpacity,
+} from "@/lib/progress";
 
 // Default time window (days) used by the recency-opacity curve.
 // Distance-from-center is governed by GALAXY_AGE_TAU separately;
@@ -461,7 +474,21 @@ export function computeLayout(input: {
     // "trailing behind the orbit" baseline.
     const tailAngle =
       headAngle + Math.PI + (hashFloat(g.id, 53) - 0.5) * (Math.PI / 3);
-    const op = recencyOpacity(g.lastEngagedAt, nowMs, ageWindowDays);
+    // Opacity tracks the unified-progress value for this goal so the
+    // map matches the bar in the goals tab. Falls back to legacy
+    // recency curve when the caller hasn't supplied progress fields
+    // (older demo paths).
+    const op =
+      g.completionType !== undefined
+        ? progressToOpacity(
+            progressForGoal(
+              g.progressPercent,
+              g.lastEngagedAt,
+              g.completionType,
+              nowMs,
+            ),
+          )
+        : recencyOpacity(g.lastEngagedAt, nowMs, ageWindowDays);
     const tailLength = 0.035 + op * 0.06;
     return {
       ...g,
@@ -502,30 +529,21 @@ export function computeLayout(input: {
     }
   }
 
-  // Sessions: positioned inside their galaxy if they're a contributor;
-  // otherwise scattered in the in-progress inner region.
+  // Sessions / shifts / breakthroughs: opacity tracks the unified-
+  // progress value for that entity so the map's brightness matches
+  // the progress bar in the corresponding card.
   const positionedSessions: Positioned<SessionDot>[] = input.sessions.map(
     (s) => {
       const slot =
         memberPositions.get(s.id) ?? inProgressPositions.get(s.id);
+      const opacity = progressToOpacity(progressForSession(s.endedAt, nowMs));
       if (!slot) {
-        return {
-          ...s,
-          x: 0.5,
-          y: 0.5,
-          opacity: recencyOpacity(s.endedAt, nowMs, ageWindowDays),
-        };
+        return { ...s, x: 0.5, y: 0.5, opacity };
       }
-      return {
-        ...s,
-        x: clampPanel(slot.x),
-        y: clampPanel(slot.y),
-        opacity: recencyOpacity(s.endedAt, nowMs, ageWindowDays),
-      };
+      return { ...s, x: clampPanel(slot.x), y: clampPanel(slot.y), opacity };
     },
   );
 
-  // Breakthroughs: positioned at their galaxy's center (the sun).
   const positionedBreakthroughs: Positioned<BreakthroughDot>[] =
     input.breakthroughs.map((b) => {
       const galaxy = galaxyById.get(b.id);
@@ -535,31 +553,19 @@ export function computeLayout(input: {
         ...b,
         x: clampPanel(x),
         y: clampPanel(y),
-        opacity: recencyOpacity(b.createdAt, nowMs, ageWindowDays),
+        opacity: progressToOpacity(progressForBreakthrough(b.createdAt, nowMs)),
       };
     });
 
-  // Mindset shifts: same galaxy-vs-in-progress logic as sessions,
-  // with a different seed so shifts and sessions don't collide on
-  // identical local positions inside a galaxy.
   const positionedShifts: Positioned<MindsetShiftDot>[] =
     input.mindsetShifts.map((m) => {
       const slot =
         memberPositions.get(m.id) ?? inProgressPositions.get(m.id);
+      const opacity = progressToOpacity(progressForShift(m.createdAt, nowMs));
       if (!slot) {
-        return {
-          ...m,
-          x: 0.5,
-          y: 0.5,
-          opacity: recencyOpacity(m.createdAt, nowMs, ageWindowDays),
-        };
+        return { ...m, x: 0.5, y: 0.5, opacity };
       }
-      return {
-        ...m,
-        x: clampPanel(slot.x),
-        y: clampPanel(slot.y),
-        opacity: recencyOpacity(m.createdAt, nowMs, ageWindowDays),
-      };
+      return { ...m, x: clampPanel(slot.x), y: clampPanel(slot.y), opacity };
     });
 
   const galaxies: GalaxyMeta[] = galaxyCenters.map((g) => ({
