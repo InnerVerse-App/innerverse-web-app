@@ -795,6 +795,42 @@ export function Constellation({
                     <CrossGalaxyChain breakthroughs={layout.breakthroughs} />
                   ) : null}
 
+                  {/* Render order is largest-first / smallest-last so
+                      that when hit areas overlap (a session positioned
+                      close to its breakthrough's sun, for example) the
+                      smaller dot — the one the user is more likely
+                      trying to click — wins the pointer event. */}
+                  {layout.breakthroughs.map((b) => (
+                    <BreakthroughSun
+                      key={b.id}
+                      dot={
+                        boostedIds.has(b.id) ? { ...b, opacity: 1 } : b
+                      }
+                      buildHref={(id) =>
+                        buildUrl({ constellation: id, shift: null, goal: null })
+                      }
+                    />
+                  ))}
+                  {layout.goals.map((g) => (
+                    <GoalComet
+                      key={g.id}
+                      dot={
+                        boostedIds.has(g.id) ? { ...g, opacity: 1 } : g
+                      }
+                      buildGoalHref={(id) =>
+                        // Single-tap selects the goal as anchor on the
+                        // map. Existing /goals tab is the path to the
+                        // goal's full detail.
+                        buildUrl({
+                          goal: id,
+                          constellation: null,
+                          shift: null,
+                          session: null,
+                        })
+                      }
+                    />
+                  ))}
+
                   {/* Sessions + shifts share a fade-in wrapper so they
                       only become visible once the user has zoomed in
                       past the universe view. At full zoom-out the user
@@ -832,37 +868,6 @@ export function Constellation({
                       />
                     ))}
                   </div>
-
-                  {layout.goals.map((g) => (
-                    <GoalComet
-                      key={g.id}
-                      dot={
-                        boostedIds.has(g.id) ? { ...g, opacity: 1 } : g
-                      }
-                      buildGoalHref={(id) =>
-                        // Single-tap selects the goal as anchor on the
-                        // map. Existing /goals tab is the path to the
-                        // goal's full detail.
-                        buildUrl({
-                          goal: id,
-                          constellation: null,
-                          shift: null,
-                          session: null,
-                        })
-                      }
-                    />
-                  ))}
-                  {layout.breakthroughs.map((b) => (
-                    <BreakthroughSun
-                      key={b.id}
-                      dot={
-                        boostedIds.has(b.id) ? { ...b, opacity: 1 } : b
-                      }
-                      buildHref={(id) =>
-                        buildUrl({ constellation: id, shift: null, goal: null })
-                      }
-                    />
-                  ))}
 
                   {isEmpty ? (
                     <div className="absolute inset-0 flex items-center justify-center px-8 text-center">
