@@ -447,9 +447,13 @@ export default async function ProgressPage({
     return (
       <PageShell active="progress" navHrefSuffix="?demo=1">
         <AutoScrollToTarget targetId={autoScrollId} />
-        <h1 className="text-3xl font-bold text-white">Your Progress</h1>
-        <p className="mt-1 text-sm text-neutral-400">
-          Track your personal growth development.{" "}
+        <h1 className="text-3xl font-bold text-white">Your InnerVerse</h1>
+        <p className="mt-1 text-sm leading-relaxed text-neutral-400">
+          Welcome to your star map. This is a picture of your own
+          personal journey — sessions appear as stars, the
+          breakthroughs that emerge become suns at the heart of
+          constellations, and the goals you&apos;re tending wander as
+          comets. Tap any of them to see what it&apos;s connected to.{" "}
           <span className="text-amber-400">(demo mode)</span>
         </p>
         <Constellation
@@ -619,9 +623,13 @@ export default async function ProgressPage({
   return (
     <PageShell active="progress">
       <AutoScrollToTarget targetId={autoScrollTargetId} />
-      <h1 className="text-3xl font-bold text-white">Your Progress</h1>
-      <p className="mt-1 text-sm text-neutral-400">
-        Track your personal growth development.
+      <h1 className="text-3xl font-bold text-white">Your InnerVerse</h1>
+      <p className="mt-1 text-sm leading-relaxed text-neutral-400">
+        Welcome to your star map. This is a picture of your own
+        personal journey — sessions appear as stars, the breakthroughs
+        that emerge become suns at the heart of constellations, and
+        the goals you&apos;re tending wander as comets. Tap any of
+        them to see what it&apos;s connected to.
       </p>
 
       <Constellation
