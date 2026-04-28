@@ -236,9 +236,19 @@ async function loadConstellation(
   // to the first words of the breakthrough content if missing.
   const constellationLinks = new Map<string, ConstellationLinks>();
   for (const b of breakthroughRows) {
+    // Source session_id is the originating session — it's a contributor
+    // even when the AI forgets to list it in contributing_session_ids.
+    // Merging dedupes via Set so the map and the session card's pills
+    // agree on which sessions count as part of this breakthrough.
+    const sessionIds = Array.from(
+      new Set<string>([
+        b.session_id,
+        ...(b.contributing_session_ids ?? []),
+      ].filter(Boolean)),
+    );
     constellationLinks.set(b.id, {
       name: b.galaxy_name?.trim() || fallbackGalaxyName(b.content),
-      sessionIds: b.contributing_session_ids ?? [],
+      sessionIds,
       shiftIds: b.contributing_shift_ids ?? [],
       directSessionIds: b.direct_session_ids ?? [],
     });
@@ -246,9 +256,13 @@ async function loadConstellation(
 
   const mindsetShiftLinks = new Map<string, MindsetShiftLinks>();
   for (const m of insightRows) {
-    mindsetShiftLinks.set(m.id, {
-      sessionIds: m.contributing_session_ids ?? [],
-    });
+    const sessionIds = Array.from(
+      new Set<string>([
+        m.session_id,
+        ...(m.contributing_session_ids ?? []),
+      ].filter(Boolean)),
+    );
+    mindsetShiftLinks.set(m.id, { sessionIds });
   }
 
   const goalLinks = new Map<string, GoalLinks>();
