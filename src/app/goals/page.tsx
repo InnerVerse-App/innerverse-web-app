@@ -347,15 +347,23 @@ export default async function GoalsPage({
         </p>
       ) : (
         <ul className="mt-6 flex flex-col gap-4">
-          {cards.map((card) => (
-            <li
-              key={card.id}
-              id={`g-${card.id}`}
-              className="scroll-mt-20 rounded-xl target:outline target:outline-2 target:outline-brand-primary target:shadow-[0_0_18px_rgba(89,164,192,0.35)]"
-            >
-              <GoalCard goal={card} />
-            </li>
-          ))}
+          {cards.map((card) => {
+            const isHighlighted = highlightedGoalId === card.id;
+            return (
+              <li
+                key={card.id}
+                id={`g-${card.id}`}
+                className={
+                  "scroll-mt-20 rounded-xl transition " +
+                  (isHighlighted
+                    ? "outline outline-2 outline-brand-primary shadow-[0_0_18px_rgba(89,164,192,0.35)]"
+                    : "")
+                }
+              >
+                <GoalCard goal={card} />
+              </li>
+            );
+          })}
         </ul>
       )}
     </PageShell>
