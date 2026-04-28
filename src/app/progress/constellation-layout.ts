@@ -466,6 +466,35 @@ export function computeLayout(input: {
     };
   });
 
+  // Relax goal head positions so two comets can't render on top of
+  // each other (a click then resolves only the top one). Goal tails
+  // can extend ~0.10 of panel width, so we push heads apart with a
+  // wider separation than the dot-based MIN_MEMBER_SEPARATION used
+  // for sessions/shifts.
+  if (positionedGoals.length > 1) {
+    const GOAL_MIN_SEPARATION = 0.07;
+    for (let pass = 0; pass < 6; pass++) {
+      for (let i = 0; i < positionedGoals.length; i++) {
+        for (let j = i + 1; j < positionedGoals.length; j++) {
+          const a = positionedGoals[i];
+          const b = positionedGoals[j];
+          const dx = b.x - a.x;
+          const dy = b.y - a.y;
+          const d = Math.hypot(dx, dy);
+          if (d < GOAL_MIN_SEPARATION && d > 1e-6) {
+            const push = (GOAL_MIN_SEPARATION - d) / 2;
+            const nx = dx / d;
+            const ny = dy / d;
+            a.x = clampPanel(a.x - nx * push);
+            a.y = clampPanel(a.y - ny * push);
+            b.x = clampPanel(b.x + nx * push);
+            b.y = clampPanel(b.y + ny * push);
+          }
+        }
+      }
+    }
+  }
+
   // Sessions: positioned inside their galaxy if they're a contributor;
   // otherwise scattered in the in-progress inner region.
   const positionedSessions: Positioned<SessionDot>[] = input.sessions.map(

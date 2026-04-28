@@ -745,12 +745,12 @@ function ExpandableList({
                   >
                     <summary className="flex cursor-pointer list-none items-start justify-between gap-3 [&::-webkit-details-marker]:hidden">
                       <div className="flex-1">
-                        <p className="text-sm text-neutral-200">
+                        <p className="text-[11px] text-neutral-500">
+                          {formatDateCompact(item.created_at)}
+                        </p>
+                        <p className="mt-1 text-base font-semibold leading-snug text-white">
                           {emoji ? <span className="mr-1.5">{emoji}</span> : null}
                           {item.content}
-                        </p>
-                        <p className="mt-1 text-[11px] text-neutral-500">
-                          {formatDateCompact(item.created_at)}
                         </p>
                         <RecencyBar
                           lastEngagedAt={item.created_at}
