@@ -1022,48 +1022,65 @@ function BreakthroughSun({
   dot: Positioned<BreakthroughDot>;
   buildHref: (id: string) => string;
 }) {
+  // Split into two layered elements: the halo is a sibling with
+  // pointer-events-none so it never intercepts taps for nearby
+  // session/shift dots clustered around the sun. The Link wraps
+  // only the disc-sized SVG, so the breakthrough's tap target is
+  // ~h-5 w-5 (20px) instead of the h-7 w-7 (28px) the halo needs.
+  // Keeps the visible look identical (the disc SVG still has
+  // overflow:visible so the disc renders at the right size) while
+  // freeing up the surrounding pixels for clicks on neighbors.
+  const positionStyle = {
+    left: `${dot.x * 100}%`,
+    top: `${dot.y * 100}%`,
+    opacity: dot.opacity,
+  } as const;
   return (
-    <Link
-      href={buildHref(dot.id)}
-      // scroll={false} stops Next.js from scrolling to the URL's
-      // #constellation-map fragment on every click. Without this,
-      // a double-click first scrolls to the breakthrough's detail
-      // card (via onDoubleClick below) and then snaps back up to
-      // the constellation map when the second click's URL change
-      // re-applies the fragment scroll.
-      scroll={false}
-      aria-label={`Breakthrough: ${dot.galaxyName || dot.content}`}
-      title={`Breakthrough — ${dot.galaxyName || dot.content}`}
-      // No TAP_PADDING here — the sun's wrapper is already h-7 w-7
-      // (28px), which itself is much larger than the smaller dots'
-      // h-4 w-4 (16px). Adding p-1 on top would extend the hit area
-      // past the visible halo and capture hovers meant for nearby
-      // session/shift dots clustered inside the same galaxy.
-      className="absolute -translate-x-1/2 -translate-y-1/2"
-      style={{
-        left: `${dot.x * 100}%`,
-        top: `${dot.y * 100}%`,
-        opacity: dot.opacity,
-      }}
-      onDoubleClick={(e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        const target = document.getElementById(`bt-${dot.id}`);
-        if (target) {
-          target.scrollIntoView({ behavior: "smooth", block: "center" });
-        }
-      }}
-    >
-      <svg
-        viewBox="-12 -12 24 24"
-        className="block h-7 w-7 transition hover:scale-125"
-        style={{ overflow: "visible" }}
+    <>
+      <span
+        className="pointer-events-none absolute -translate-x-1/2 -translate-y-1/2"
+        style={positionStyle}
         aria-hidden
       >
-        <circle r={11} fill="url(#halo-sun)" />
-        <circle r={4.5} fill={BREAKTHROUGH_COLOR} />
-      </svg>
-    </Link>
+        <svg
+          viewBox="-12 -12 24 24"
+          className="block h-7 w-7"
+          style={{ overflow: "visible" }}
+        >
+          <circle r={11} fill="url(#halo-sun)" />
+        </svg>
+      </span>
+      <Link
+        href={buildHref(dot.id)}
+        // scroll={false} stops Next.js from scrolling to the URL's
+        // #constellation-map fragment on every click. Without this,
+        // a double-click first scrolls to the breakthrough's detail
+        // card (via onDoubleClick below) and then snaps back up to
+        // the constellation map when the second click's URL change
+        // re-applies the fragment scroll.
+        scroll={false}
+        aria-label={`Breakthrough: ${dot.galaxyName || dot.content}`}
+        title={`Breakthrough — ${dot.galaxyName || dot.content}`}
+        className="absolute -translate-x-1/2 -translate-y-1/2"
+        style={positionStyle}
+        onDoubleClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          const target = document.getElementById(`bt-${dot.id}`);
+          if (target) {
+            target.scrollIntoView({ behavior: "smooth", block: "center" });
+          }
+        }}
+      >
+        <svg
+          viewBox="-8 -8 16 16"
+          className="block h-5 w-5 transition hover:scale-125"
+          aria-hidden
+        >
+          <circle r={4.5} fill={BREAKTHROUGH_COLOR} />
+        </svg>
+      </Link>
+    </>
   );
 }
 
