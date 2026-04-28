@@ -173,31 +173,35 @@ const GALAXY_AGE_TAU_DAYS = 240;
 const GALAXY_RADIAL_JITTER = 0.05;
 
 // Within-galaxy scatter is a true 2D Gaussian centered on the sun.
-// σ scales gently with sqrt(memberCount) so a 1-member galaxy stays
-// tight while a 25-member galaxy has visible structure (bulge +
-// trailing halo) without ballooning past the universe's compact
-// feel. Uniform radial-with-density-exponent (V3) gave a uniform
-// ring once relaxation kicked in; Gaussian gives an organic cluster.
-const MEMBER_SIGMA_BASE = 0.025;
-const MEMBER_SIGMA_PER_SQRT = 0.005;
+// σ is sized so the typical inter-dot Gaussian distance exceeds
+// MIN_MEMBER_SEPARATION even for moderate galaxies — otherwise the
+// relaxation pass dominates and the result settles back into a
+// uniform disc (this was the V4 bug: σ=0.05 gave ~0.057 typical
+// spacing, just below the 0.06 threshold, so relaxation flattened
+// the bulge). Now: dense bulge near the sun, density falling off
+// with a long halo tail, instead of a flat ring at the rim.
+const MEMBER_SIGMA_BASE = 0.030;
+const MEMBER_SIGMA_PER_SQRT = 0.010;
 // Minimum distance from a member to its galaxy's sun. The sun's
 // halo + the member dot's own radius sit roughly inside this; below
 // it, members render under the halo and become impossible to tap.
 const GALAXY_CORE_RADIUS = 0.05;
 // Visible nebula radius for the renderer's glow. Scales with sqrt(n)
 // so it tracks the actual member spread (≈ 2σ captures 95% of dots).
-// Capped to keep old galaxies from clipping the panel edge.
-const GALAXY_HALO_RADIUS_BASE = 0.05;
-const GALAXY_HALO_RADIUS_PER_SQRT = 0.012;
-const GALAXY_HALO_RADIUS_MAX = 0.10;
+// Cap raised vs V4 so big galaxies' halo glow tracks the wider
+// scatter, but old galaxies still don't clip the panel edge given
+// the GALAXY_OLD_DIST = 0.46 cap.
+const GALAXY_HALO_RADIUS_BASE = 0.06;
+const GALAXY_HALO_RADIUS_PER_SQRT = 0.018;
+const GALAXY_HALO_RADIUS_MAX = 0.13;
 // Minimum visual separation between two members (panel-fraction).
-// Each dot's hit radius is ~10–12px on screen; on a typical
-// ~400px-wide constellation panel that's ~3% of width per dot
-// radius, so the centers need ≥ ~6% (0.06) apart to keep tappable
-// even when the user is fully zoomed out. Relaxation only nudges
-// pairs closer than this — the Gaussian's natural spread already
-// keeps most dots safely apart, so passes are gentle.
-const MIN_MEMBER_SEPARATION = 0.06;
+// Lowered from 0.06 (V4) to 0.04 so the Gaussian's natural density
+// shows through — at 0.06 the relaxation pass was forcing every
+// pair apart and re-creating a uniform-disc layout. 0.04 still
+// keeps two dots visually distinct (their visible discs don't
+// overlap); the user can pinch-zoom to tap individual stars in a
+// dense cluster, which is the natural gesture for a "galaxy."
+const MIN_MEMBER_SEPARATION = 0.04;
 // Galaxy aspect ratio range. Each galaxy gets a random aspect from
 // MIN..1 along one axis, simulating that we're seeing it from a
 // different angle than the others. Combined with the per-galaxy
@@ -210,8 +214,8 @@ const GALAXY_ASPECT_MIN = 0.55;
 // Same Gaussian recipe as galaxy members but slightly tighter (no
 // sun anchoring it, so it should read as a forming cluster rather
 // than a fully-spread galaxy).
-const INPROGRESS_SIGMA_BASE = 0.022;
-const INPROGRESS_SIGMA_PER_SQRT = 0.004;
+const INPROGRESS_SIGMA_BASE = 0.025;
+const INPROGRESS_SIGMA_PER_SQRT = 0.008;
 const INPROGRESS_MIN_DIST = 0.025;
 
 function galaxyDistanceFromUniverseCenter(
