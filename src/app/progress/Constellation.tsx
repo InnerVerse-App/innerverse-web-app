@@ -612,6 +612,13 @@ export function Constellation({
           touchAction: "none",
         }}
       >
+        {/* Selection label — shows the title of the currently-selected
+            dot. Single-tap on mobile doesn't trigger HTML title hover,
+            so this is the only way to confirm what was tapped. */}
+        <SelectionLabel
+          selectedAnchor={selectedAnchor}
+          layout={layout}
+        />
         <TransformWrapper
           ref={transformRef}
           initialScale={1}
@@ -925,6 +932,41 @@ export function Constellation({
         <Legend color={BREAKTHROUGH_COLOR} label="Breakthrough" size={14} />
       </div>
     </section>
+  );
+}
+
+function SelectionLabel({
+  selectedAnchor,
+  layout,
+}: {
+  selectedAnchor: SelectedAnchor | null | undefined;
+  layout: ConstellationLayout;
+}) {
+  if (!selectedAnchor) return null;
+  let text: string | null = null;
+  if (selectedAnchor.type === "session") {
+    const s = layout.sessions.find((x) => x.id === selectedAnchor.id);
+    if (s) {
+      const date = formatDateCompact(s.endedAt);
+      text = s.title ? `${s.title} · ${date}` : `Session · ${date}`;
+    }
+  } else if (selectedAnchor.type === "shift") {
+    const m = layout.mindsetShifts.find((x) => x.id === selectedAnchor.id);
+    text = m?.content ?? null;
+  } else if (selectedAnchor.type === "breakthrough") {
+    const b = layout.breakthroughs.find((x) => x.id === selectedAnchor.id);
+    text = b?.galaxyName?.trim() || b?.content || null;
+  } else if (selectedAnchor.type === "goal") {
+    const g = layout.goals.find((x) => x.id === selectedAnchor.id);
+    text = g?.title ?? null;
+  }
+  if (!text) return null;
+  return (
+    <div className="pointer-events-none absolute inset-x-0 top-2 z-30 flex justify-center px-4">
+      <div className="max-w-full truncate rounded-full border border-white/15 bg-black/70 px-3 py-1 text-xs text-white backdrop-blur">
+        {text}
+      </div>
+    </div>
   );
 }
 

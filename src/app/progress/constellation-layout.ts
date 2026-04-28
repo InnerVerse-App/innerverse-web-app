@@ -176,12 +176,21 @@ const GALAXY_RADIAL_JITTER = 0.05;
 // range, with denser packing near the core and sparser at the rim
 // to evoke an elliptical galaxy's profile. Tighter than V2 so
 // neighboring galaxies have visible empty space between them.
-const GALAXY_CORE_RADIUS = 0.015;
+// Minimum distance from a member dot to its galaxy's sun. Tuned
+// against the sun's halo (~3% of panel radius) plus the member
+// dot's own visible radius — members below this would render
+// directly under the sun's halo and be impossible to tap.
+const GALAXY_CORE_RADIUS = 0.05;
 const GALAXY_HALO_RADIUS_BASE = 0.045;
 const GALAXY_HALO_RADIUS_PER_MEMBER = 0.0010;
 const GALAXY_HALO_RADIUS_MAX = 0.07;
 // Minimum visual separation between two members (panel-fraction).
-const MIN_MEMBER_SEPARATION = 0.016;
+// Tuned so two dots' tap targets don't visually overlap at base
+// zoom. Each dot's hit radius is ~10–12px on screen; on a typical
+// ~400px-wide constellation panel that's ~3% of width per dot
+// radius, so the centers need ≥ ~6% (0.06) apart to keep tappable
+// even when the user is fully zoomed out.
+const MIN_MEMBER_SEPARATION = 0.06;
 // Density-falloff exponent. < 1 biases toward the core (denser
 // center). 0.4 is a strong-bulge cluster — clear core with the
 // outer halo only sparsely populated.
