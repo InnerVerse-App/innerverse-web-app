@@ -25,16 +25,17 @@ export type ExpandedDetail = {
   breakthroughs: { id: string; content: string; snippet: string }[];
 };
 
-const SHIFT_BULLET_COLOR = "#A78BFA";
-const BREAKTHROUGH_BULLET_COLOR = "#DCA114";
+const SHIFT_COLOR = "#A78BFA";
+const BREAKTHROUGH_COLOR = "#DCA114";
+const SESSION_COLOR = "#59A4C0"; // brand-primary hex equivalent
 const STAR_CLIP =
   "polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%)";
 
 // Renders the expanded body of a Progress / Goal card — narrative,
-// optional "what was noticed" line, and the contributor lists with
-// per-row snippets. Each session date links to its session detail
-// page; shift / breakthrough rows show content as the headline with
-// the snippet underneath.
+// optional "what was noticed" line, and the contributor lists. Each
+// contributor renders as a colored pill matching the badges on the
+// session card (amber star for breakthroughs, purple brain for
+// shifts, brand-primary chat icon for sessions).
 export function ExpandedDetailBody({ detail }: { detail: ExpandedDetail }) {
   return (
     <div className="flex flex-col gap-3">
@@ -51,24 +52,31 @@ export function ExpandedDetailBody({ detail }: { detail: ExpandedDetail }) {
           </p>
         </div>
       ) : null}
-      {detail.sessions.length > 0 ? (
+      {detail.breakthroughs.length > 0 ? (
         <div>
           <p className="mb-1.5 text-[10px] font-medium uppercase tracking-wide text-neutral-500">
-            Sessions
+            Breakthroughs along the way
           </p>
-          <ul className="flex flex-col gap-2">
-            {detail.sessions.map((s) => (
-              <li key={s.id} className="flex items-start gap-2">
-                <Link
-                  href={`/sessions/${s.id}`}
-                  className="inline-flex shrink-0 items-center rounded-full border border-white/10 bg-white/[0.03] px-2 py-0.5 text-[11px] text-neutral-300 transition hover:border-brand-primary/40 hover:text-brand-primary"
-                >
-                  {formatDateCompact(s.endedAt)}
-                </Link>
-                <span className="text-xs text-neutral-300">{s.snippet}</span>
-              </li>
+          <div className="flex flex-wrap gap-1.5">
+            {detail.breakthroughs.map((b) => (
+              <Link
+                key={b.id}
+                href={`/progress?constellation=${b.id}`}
+                className="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] transition hover:border-brand-primary/40 hover:text-brand-primary"
+                style={{
+                  borderColor: "rgba(220,161,20,0.4)",
+                  color: BREAKTHROUGH_COLOR,
+                }}
+              >
+                <span
+                  className="inline-block h-2 w-2 shrink-0"
+                  style={{ background: BREAKTHROUGH_COLOR, clipPath: STAR_CLIP }}
+                  aria-hidden
+                />
+                {b.content}
+              </Link>
             ))}
-          </ul>
+          </div>
         </div>
       ) : null}
       {detail.shifts.length > 0 ? (
@@ -76,46 +84,68 @@ export function ExpandedDetailBody({ detail }: { detail: ExpandedDetail }) {
           <p className="mb-1.5 text-[10px] font-medium uppercase tracking-wide text-neutral-500">
             Mindset shifts that paved the way
           </p>
-          <ul className="flex flex-col gap-2 text-xs">
+          <div className="flex flex-wrap gap-1.5">
             {detail.shifts.map((s) => (
-              <li key={s.id} className="flex items-start gap-2">
-                <span
-                  className="mt-1.5 inline-block h-1.5 w-1.5 shrink-0 rounded-full"
-                  style={{ background: SHIFT_BULLET_COLOR }}
+              <Link
+                key={s.id}
+                href={`/progress?shift=${s.id}`}
+                className="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] transition hover:border-brand-primary/40 hover:text-brand-primary"
+                style={{
+                  borderColor: "rgba(167,139,250,0.4)",
+                  color: SHIFT_COLOR,
+                }}
+              >
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth={1.8}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  className="h-3 w-3 shrink-0"
                   aria-hidden
-                />
-                <div className="flex-1">
-                  <p className="font-medium text-neutral-200">{s.content}</p>
-                  <p className="mt-0.5 text-neutral-400">{s.snippet}</p>
-                </div>
-              </li>
+                >
+                  <path d="M9.5 2A2.5 2.5 0 0 1 12 4.5v15a2.5 2.5 0 0 1-4.96.44 2.5 2.5 0 0 1-2.96-3.08 3 3 0 0 1-.34-5.58 2.5 2.5 0 0 1 1.32-4.24 2.5 2.5 0 0 1 1.98-3A2.5 2.5 0 0 1 9.5 2Z" />
+                  <path d="M14.5 2A2.5 2.5 0 0 0 12 4.5v15a2.5 2.5 0 0 0 4.96.44 2.5 2.5 0 0 0 2.96-3.08 3 3 0 0 0 .34-5.58 2.5 2.5 0 0 0-1.32-4.24 2.5 2.5 0 0 0-1.98-3A2.5 2.5 0 0 0 14.5 2Z" />
+                </svg>
+                {s.content}
+              </Link>
             ))}
-          </ul>
+          </div>
         </div>
       ) : null}
-      {detail.breakthroughs.length > 0 ? (
+      {detail.sessions.length > 0 ? (
         <div>
           <p className="mb-1.5 text-[10px] font-medium uppercase tracking-wide text-neutral-500">
-            Breakthroughs along the way
+            Sessions
           </p>
-          <ul className="flex flex-col gap-2 text-xs">
-            {detail.breakthroughs.map((b) => (
-              <li key={b.id} className="flex items-start gap-2">
-                <span
-                  className="mt-1 inline-block h-2 w-2 shrink-0"
-                  style={{
-                    background: BREAKTHROUGH_BULLET_COLOR,
-                    clipPath: STAR_CLIP,
-                  }}
+          <div className="flex flex-wrap gap-1.5">
+            {detail.sessions.map((s) => (
+              <Link
+                key={s.id}
+                href={`/sessions?session=${s.id}#s-${s.id}`}
+                className="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] transition hover:border-brand-primary/40 hover:text-brand-primary"
+                style={{
+                  borderColor: "rgba(89,164,192,0.4)",
+                  color: SESSION_COLOR,
+                }}
+              >
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth={1.8}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  className="h-3 w-3 shrink-0"
                   aria-hidden
-                />
-                <div className="flex-1">
-                  <p className="font-medium text-neutral-200">{b.content}</p>
-                  <p className="mt-0.5 text-neutral-400">{b.snippet}</p>
-                </div>
-              </li>
+                >
+                  <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
+                </svg>
+                {formatDateCompact(s.endedAt)}
+              </Link>
             ))}
-          </ul>
+          </div>
         </div>
       ) : null}
     </div>
