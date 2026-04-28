@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 
+import { PendingDots } from "@/app/_components/PendingDots";
 import { ProgressBar } from "@/app/_components/ProgressBar";
 import { startSession } from "@/app/sessions/actions";
 
@@ -47,7 +48,7 @@ export function StartSessionMenu({ goals, shifts, buttonLabel }: Props) {
       <button
         type="button"
         onClick={() => setPanel("options")}
-        className="flex w-full items-center justify-center gap-2 rounded-md bg-brand-primary px-6 py-3 text-sm font-semibold text-brand-primary-contrast shadow-lg transition hover:bg-brand-primary/90"
+        className="flex w-full items-center justify-center gap-2 rounded-md bg-brand-primary px-6 py-3 text-sm font-semibold text-brand-primary-contrast shadow-lg transition hover:bg-brand-primary/90 active:scale-[0.98]"
       >
         <span aria-hidden>⚡</span>
         {buttonLabel}
@@ -58,9 +59,14 @@ export function StartSessionMenu({ goals, shifts, buttonLabel }: Props) {
   return (
     <div className="rounded-lg border border-white/10 bg-white/[0.02] p-3">
       {pending ? (
-        <p className="px-2 py-3 text-center text-sm text-brand-primary">
-          Starting your session…
-        </p>
+        <div className="flex items-center justify-center gap-3 px-2 py-3 text-sm text-brand-primary">
+          <PendingDots
+            sizeClass="h-1.5 w-1.5"
+            colorClass="bg-brand-primary"
+            ariaLabel="Starting your session"
+          />
+          <span>Starting your session</span>
+        </div>
       ) : panel === "options" ? (
         <div className="flex flex-col gap-2">
           <p className="px-1 text-xs uppercase tracking-wide text-neutral-500">
