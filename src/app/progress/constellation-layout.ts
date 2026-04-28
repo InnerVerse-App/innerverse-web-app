@@ -464,14 +464,31 @@ export function computeLayout(input: {
   // galaxy ring by living in a mid-radius band, with enough angular
   // jitter to feel scattered. The tail length grows with engagement
   // recency — a freshly-touched goal has a longer streak.
+  // Slow daily orbit. Each comet rotates around the universe center
+  // at a hash-derived radius (set below) and a hash-derived angular
+  // velocity that averages ~1 full orbit per year. Quantized to UTC
+  // day boundaries so the position ticks once per day rather than
+  // animating continuously — the user opens the app, the comets are
+  // somewhere slightly different than yesterday. Per-comet speed
+  // varies ±25% so they don't rotate in lockstep.
+  const ORBIT_BASE_PERIOD_DAYS = 365;
+  const dayIndex = Math.floor(nowMs / 86_400_000);
+
   const positionedGoals: PositionedGoal[] = input.goals.map((g) => {
-    const headAngle = hashFloat(g.id, 41) * Math.PI * 2;
+    const baseAngle = hashFloat(g.id, 41) * Math.PI * 2;
+    // Per-comet orbital period, hash-derived so each comet's speed
+    // is stable across renders. Range ~273-456 days (3/4 to 5/4 of
+    // base) — visible variety without feeling chaotic.
+    const periodDays = ORBIT_BASE_PERIOD_DAYS * (0.75 + hashFloat(g.id, 59) * 0.5);
+    const orbitOffset = (dayIndex / periodDays) * Math.PI * 2;
+    const headAngle = baseAngle + orbitOffset;
     const headDist =
       0.22 + hashFloat(g.id, 47) * 0.14 + jitter(g.id, 43, 0.01);
     const { x, y } = polarToXY(0.5, 0.5, headAngle, headDist);
     // Tail direction: separate hash so the tail doesn't always point
     // toward the universe center. Adds ~30° of variation around the
-    // "trailing behind the orbit" baseline.
+    // "trailing behind the orbit" baseline. Inherits the orbital
+    // rotation via headAngle so the tail re-orients with the comet.
     const tailAngle =
       headAngle + Math.PI + (hashFloat(g.id, 53) - 0.5) * (Math.PI / 3);
     // Opacity tracks the unified-progress value for this goal so the
