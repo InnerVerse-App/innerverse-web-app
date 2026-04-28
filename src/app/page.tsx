@@ -1,8 +1,8 @@
 import Image from "next/image";
-import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@clerk/nextjs/server";
 import { SignInButton, SignUpButton } from "@clerk/nextjs";
+import { ContinueButton } from "@/app/_components/ContinueButton";
 import {
   getOnboardingState,
   isOnboardingComplete,
@@ -53,21 +53,21 @@ export default async function Home() {
 
         <div className="mt-2 flex flex-col items-center gap-3">
           {showContinue ? (
-            <Link
+            <ContinueButton
               href="/home"
-              className="w-64 rounded-full bg-brand-primary px-6 py-3 text-center text-sm font-semibold text-brand-primary-contrast shadow-lg transition hover:bg-brand-primary/90"
+              className="w-64 rounded-full bg-brand-primary px-6 py-3 text-center text-sm font-semibold text-brand-primary-contrast shadow-lg hover:bg-brand-primary/90"
             >
               Continue →
-            </Link>
+            </ContinueButton>
           ) : (
             <>
               <SignUpButton forceRedirectUrl="/home" signInForceRedirectUrl="/home">
-                <button className="w-64 rounded-full bg-brand-primary px-6 py-3 text-sm font-semibold text-brand-primary-contrast shadow-lg transition hover:bg-brand-primary/90">
+                <button className="w-64 rounded-full bg-brand-primary px-6 py-3 text-sm font-semibold text-brand-primary-contrast shadow-lg transition hover:bg-brand-primary/90 active:scale-[0.98]">
                   Get started
                 </button>
               </SignUpButton>
               <SignInButton forceRedirectUrl="/home" signUpForceRedirectUrl="/home">
-                <button className="text-sm font-medium text-white/90 underline-offset-4 transition hover:text-white hover:underline">
+                <button className="text-sm font-medium text-white/90 underline-offset-4 transition hover:text-white hover:underline active:scale-[0.98]">
                   Already have an account? Sign in
                 </button>
               </SignInButton>
