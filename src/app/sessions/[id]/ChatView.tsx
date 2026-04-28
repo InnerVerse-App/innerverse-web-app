@@ -194,7 +194,7 @@ export function ChatView({
   }
 
   return (
-    <div className="flex min-h-[100dvh] flex-col bg-brand-dark text-neutral-200">
+    <div className="flex min-h-[100dvh] flex-col overflow-x-hidden bg-brand-dark text-neutral-200">
       <header className="sticky top-0 z-10 flex items-center gap-3 border-b border-white/10 bg-brand-dark px-4 py-3">
         <Link
           href="/home"
@@ -242,7 +242,7 @@ export function ChatView({
         onSubmit={send}
         className="sticky bottom-0 border-t border-white/10 bg-brand-dark px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]"
       >
-        <div className="mx-auto flex max-w-2xl items-end gap-2">
+        <div className="mx-auto flex w-full max-w-2xl items-end gap-2">
           <textarea
             ref={inputRef}
             value={input}
@@ -251,7 +251,13 @@ export function ChatView({
             disabled={streaming || ended}
             placeholder={ended ? "Session ended" : "Type here…"}
             rows={1}
-            className="flex-1 resize-none overflow-y-auto rounded-3xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-white placeholder:text-neutral-500 focus:outline-none focus:ring-2 focus:ring-brand-primary disabled:opacity-50"
+            // min-w-0 lets the flex child shrink below its intrinsic
+            // width — without it the textarea's default cols=20 plus
+            // the send button can push the row past the viewport on
+            // narrow phones, which makes the page horizontally pan.
+            // break-words guards against pasted unbreakable strings
+            // forcing horizontal overflow inside the textarea.
+            className="min-w-0 flex-1 resize-none overflow-y-auto break-words rounded-3xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-white placeholder:text-neutral-500 focus:outline-none focus:ring-2 focus:ring-brand-primary disabled:opacity-50"
             style={{ maxHeight: "8rem" }}
           />
           <button
@@ -301,7 +307,12 @@ function MessageBubble({ message }: { message: Message }) {
     <div className={`flex w-full ${fromAi ? "justify-start" : "justify-end"}`}>
       <div className="flex max-w-[80%] flex-col">
         <div
-          className={`rounded-2xl px-4 py-2.5 text-sm ${
+          // whitespace-pre-wrap preserves newlines from the AI's
+          // streamed response; break-words wraps long unbreakable
+          // strings (URLs, run-on tokens) so a single long word
+          // can't push the bubble past 80% and force the page to
+          // horizontally pan.
+          className={`whitespace-pre-wrap break-words rounded-2xl px-4 py-2.5 text-sm ${
             fromAi
               ? "rounded-bl-sm bg-white/5 text-neutral-100"
               : "rounded-br-sm bg-brand-primary text-brand-primary-contrast"
