@@ -61,6 +61,7 @@ type LegacySectionData = {
 type SessionRow = {
   id: string;
   ended_at: string;
+  progress_summary_short: string | null;
 };
 
 // V.5a contributor arrays come straight from public.breakthroughs.
@@ -158,7 +159,7 @@ async function loadConstellation(
 }> {
   const sessionsRes = await ctx.client
     .from("sessions")
-    .select("id, ended_at")
+    .select("id, ended_at, progress_summary_short")
     .not("ended_at", "is", null)
     .order("ended_at", { ascending: false })
     .limit(CONSTELLATION_SESSION_LIMIT);
@@ -261,12 +262,17 @@ async function loadConstellation(
 
   const layout = computeLayout({
     ageWindowDays,
-    sessions: sessionRows.map((s) => ({ id: s.id, endedAt: s.ended_at })),
+    sessions: sessionRows.map((s) => ({
+      id: s.id,
+      endedAt: s.ended_at,
+      title: s.progress_summary_short ?? "",
+    })),
     breakthroughs: breakthroughRows.map((b) => ({
       id: b.id,
       sessionId: b.session_id,
       content: b.content,
       createdAt: b.created_at,
+      galaxyName: b.galaxy_name ?? "",
     })),
     mindsetShifts: insightRows.map((m) => ({
       id: m.id,
