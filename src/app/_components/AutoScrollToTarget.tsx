@@ -10,6 +10,13 @@ import { useEffect } from "react";
 // when they arrived via a highlight URL param (?constellation=,
 // ?shift=, ?goal=, ?session=).
 //
+// Only scrolls when the URL hash matches the target id (e.g. URL
+// `?constellation=X#bt-X` with targetId=`bt-X`). This is the signal
+// that the user navigated TO that card from elsewhere (a session
+// pill links with the hash). Clicking a dot on the same /progress
+// page sets the query param without a matching hash, so we don't
+// re-scroll for in-page selection.
+//
 // Delay before scrolling: gives in-page animations (e.g. the
 // constellation auto-zoom on /progress) time to settle so the
 // scroll runs from a stable layout.
@@ -22,6 +29,8 @@ type Props = {
 export function AutoScrollToTarget({ targetId, delayMs = 600 }: Props) {
   useEffect(() => {
     if (!targetId) return;
+    if (typeof window === "undefined") return;
+    if (window.location.hash !== `#${targetId}`) return;
     const t = setTimeout(() => {
       const el = document.getElementById(targetId);
       if (!el) return;
