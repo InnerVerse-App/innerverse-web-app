@@ -32,7 +32,7 @@ const TABS: Tab[] = [
   },
   {
     key: "progress",
-    label: "Your InnerVerse",
+    label: "InnerVerse",
     href: "/progress",
     // Galaxy / universe icon: a central core with a single broad
     // spiral arm sweeping around it, evoking the star map without
@@ -116,7 +116,7 @@ export function BottomNav({
           const content = (
             <>
               {tab.icon}
-              <span>{tab.label}</span>
+              <span className="text-center leading-tight">{tab.label}</span>
             </>
           );
           if (tab.href) {
