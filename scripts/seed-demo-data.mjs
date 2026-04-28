@@ -309,6 +309,7 @@ async function insertGoals() {
     progress_percent: g.progress_percent,
     progress_rationale: g.progress_rationale,
     is_predefined: g.is_predefined,
+    completion_type: "practice",
   }));
   const { data, error } = await sb.from("goals").insert(rows).select("id, title");
   if (error) throw error;

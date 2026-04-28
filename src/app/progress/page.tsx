@@ -585,8 +585,20 @@ export default async function ProgressPage({
     return { narrative, noticedAt, sessions, shifts: [], breakthroughs: [] };
   };
 
+  // Scroll the target item into view when arriving from a session
+  // pill (?constellation=<id> or ?shift=<id>). Constellation map
+  // stays at the top — the user just lands on the matched item
+  // expanded + highlighted within the lists below.
+  const autoScrollTargetId =
+    selectedAnchor?.type === "breakthrough"
+      ? `bt-${selectedAnchor.id}`
+      : selectedAnchor?.type === "shift"
+        ? `ms-${selectedAnchor.id}`
+        : null;
+
   return (
     <PageShell active="progress">
+      <AutoScrollToTarget targetId={autoScrollTargetId} />
       <h1 className="text-3xl font-bold text-white">Your Progress</h1>
       <p className="mt-1 text-sm text-neutral-400">
         Track your personal growth development.

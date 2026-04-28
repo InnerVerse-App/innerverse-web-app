@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { ProgressBar } from "@/app/_components/ProgressBar";
+import { RecencyBar } from "@/app/_components/RecencyBar";
 import { startSession } from "@/app/sessions/actions";
 import { formatDateCompact } from "@/lib/format";
 import type { ActiveGoal } from "@/lib/goals";
@@ -16,11 +17,14 @@ export type GoalCardData = Pick<
   | "progress_rationale"
   | "last_session_id"
   | "is_predefined"
+  | "completion_type"
 > & {
   last_session_ended_at: string | null;
   current_next_step_content: string | null;
   current_next_step_done: boolean;
 };
+
+const GOAL_RECENCY_COLOR = "#4ADE80";
 
 type Props = {
   goal: GoalCardData;
@@ -84,11 +88,35 @@ export function GoalCard({ goal }: Props) {
       </div>
 
       <div className="mt-4">
-        <div className="flex items-center justify-between text-sm">
-          <span className="text-neutral-400">Progress</span>
-          <span className="text-neutral-300">{goal.progress_percent ?? 0}%</span>
-        </div>
-        <ProgressBar percent={goal.progress_percent ?? 0} />
+        {goal.completion_type === "milestone" ? (
+          <>
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-neutral-400">Progress</span>
+              <span className="text-neutral-300">
+                {goal.progress_percent ?? 0}%
+              </span>
+            </div>
+            <ProgressBar
+              percent={goal.progress_percent ?? 0}
+              variant="goal"
+            />
+          </>
+        ) : (
+          <>
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-neutral-400">Recent activity</span>
+              <span className="text-xs text-neutral-500">
+                {goal.last_session_ended_at
+                  ? formatDateCompact(goal.last_session_ended_at)
+                  : "Not yet engaged"}
+              </span>
+            </div>
+            <RecencyBar
+              lastEngagedAt={goal.last_session_ended_at}
+              color={GOAL_RECENCY_COLOR}
+            />
+          </>
+        )}
       </div>
 
       {goal.progress_rationale ? (

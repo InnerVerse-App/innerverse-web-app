@@ -20,6 +20,10 @@ export type ActiveGoal = {
   progress_rationale: string | null;
   last_session_id: string | null;
   is_predefined: boolean;
+  // milestone = goal has a defined finish line (progress_percent +
+  // bar makes sense). practice = ongoing/open-ended (show recency
+  // instead — most coaching goals are this).
+  completion_type: "milestone" | "practice";
 };
 
 // Postgres SQLSTATE 23505 = unique_violation. Swallowed when a
@@ -163,7 +167,7 @@ export async function loadActiveGoalsWithLazySeed(
     client
       .from("goals")
       .select(
-        "id, title, description, status, progress_percent, progress_rationale, last_session_id, is_predefined",
+        "id, title, description, status, progress_percent, progress_rationale, last_session_id, is_predefined, completion_type",
       )
       .is("archived_at", null)
       .order("created_at", { ascending: false }),
@@ -184,6 +188,10 @@ export async function loadActiveGoalsWithLazySeed(
       user_id: userId,
       title,
       is_predefined: true,
+      // Predefined onboarding goals are open-ended growth practices
+      // (e.g. "Increase self-awareness"). Don't default them to
+      // milestone, which would surface a misleading 0% progress bar.
+      completion_type: "practice",
     }));
     const { error } = await client.from("goals").insert(insertRows);
     if (error && error.code !== PG_UNIQUE_VIOLATION) {
@@ -197,7 +205,7 @@ export async function loadActiveGoalsWithLazySeed(
   const finalRes = await client
     .from("goals")
     .select(
-      "id, title, description, status, progress_percent, progress_rationale, last_session_id, is_predefined",
+      "id, title, description, status, progress_percent, progress_rationale, last_session_id, is_predefined, completion_type",
     )
     .is("archived_at", null)
     .order("created_at", { ascending: false });
