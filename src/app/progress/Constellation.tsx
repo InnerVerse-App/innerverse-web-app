@@ -438,21 +438,39 @@ export function Constellation({
   const selectedLinks = selectedConstellationLinks;
 
   // Auto-zoom the constellation panel to fit the selected constellation.
-  // Measure chainPoints' bounding box (in 0–100 viewBox space), convert
-  // to pixel space using the panel's actual size, then call
-  // setTransform on react-zoom-pan-pinch to pan + zoom. Stable string
-  // key prevents the effect from firing every render with the same data.
+  // Only fires on initial page mount when the URL hash matches the
+  // selected anchor (i.e., the user navigated TO this anchor from a
+  // pill elsewhere — `/progress?constellation=X#bt-X`). Subsequent
+  // dot taps within /progress change the URL without that hash, so
+  // the user's manual pinch-zoom is preserved on mobile.
+  //
+  // The reset-to-default-on-deselect path (clicking a clear button
+  // or selecting nothing) is also gated on the hash so we don't
+  // yank the user's zoom out from under them.
   const chainKey = chainPoints
     .map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`)
     .join("|");
+  const didInitialAutoZoomRef = useRef(false);
   useEffect(() => {
+    if (didInitialAutoZoomRef.current) return;
+    if (typeof window === "undefined") return;
+    if (!selectedAnchor) return;
+    const expectedHash =
+      selectedAnchor.type === "breakthrough"
+        ? `#bt-${selectedAnchor.id}`
+        : selectedAnchor.type === "shift"
+          ? `#ms-${selectedAnchor.id}`
+          : selectedAnchor.type === "session"
+            ? `#s-${selectedAnchor.id}`
+            : selectedAnchor.type === "goal"
+              ? `#g-${selectedAnchor.id}`
+              : null;
+    if (!expectedHash) return;
+    if (window.location.hash !== expectedHash) return;
     const ctrl = transformRef.current;
     const panel = panelRef.current;
-    if (!ctrl) return;
-    if (!selectedAnchor || chainPoints.length < 2 || !panel) {
-      ctrl.resetTransform(450);
-      return;
-    }
+    if (!ctrl || !panel) return;
+    if (chainPoints.length < 2) return;
     const rect = panel.getBoundingClientRect();
     const w = rect.width;
     const h = rect.height;
@@ -482,6 +500,7 @@ export function Constellation({
     const translateX = w / 2 - centerXFrac * w * desiredScale;
     const translateY = h / 2 - centerYFrac * h * desiredScale;
     ctrl.setTransform(translateX, translateY, desiredScale, 450);
+    didInitialAutoZoomRef.current = true;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedAnchor?.type, selectedAnchor?.id, chainKey]);
 
