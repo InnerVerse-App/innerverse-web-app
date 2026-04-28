@@ -132,20 +132,72 @@ export async function countMessages(
   return count ?? 0;
 }
 
-// Closes a session: sets ended_at and is_substantive based on the
-// exchange threshold. Returns the final row. Pure flip — no OpenAI
-// call, no analysis writes. Chunk 6.3 layers session-end analysis on
-// top by calling this after the JSON write.
+// True when the session has zero messages from the client (only the
+// AI's opening, if any). These are sessions the user started and
+// abandoned without typing — we delete them on end-or-close so the
+// Sessions tab doesn't fill up with empty placeholders.
+export async function hasUserMessages(
+  ctx: UserSupabase,
+  sessionId: string,
+): Promise<boolean> {
+  const { count, error } = await ctx.client
+    .from("messages")
+    .select("id", { count: "exact", head: true })
+    .eq("session_id", sessionId)
+    .eq("is_sent_by_ai", false);
+  if (error) throw error;
+  return (count ?? 0) > 0;
+}
+
+// Cascade-deletes a session row + its messages. Used for empty
+// sessions where the user never typed anything — the row is just
+// noise. Other rows that FK to sessions.id (insights, breakthroughs,
+// session_themes, etc.) cascade automatically per the schema, but
+// none should exist for an empty session anyway.
+export async function deleteSession(
+  ctx: UserSupabase,
+  sessionId: string,
+): Promise<void> {
+  // Messages first to avoid orphaning if the cascade isn't set on
+  // every related table — defensive even though sessions FK rows
+  // do cascade per the migrations.
+  const msgRes = await ctx.client
+    .from("messages")
+    .delete()
+    .eq("session_id", sessionId);
+  if (msgRes.error) throw msgRes.error;
+  const sessRes = await ctx.client
+    .from("sessions")
+    .delete()
+    .eq("id", sessionId);
+  if (sessRes.error) throw sessRes.error;
+}
+
+// End a session. Three outcomes depending on engagement:
+//   * Empty session (user never typed) → DELETE the row + its
+//     messages. Session never made it past the opening; no value
+//     in keeping it cluttering the Sessions tab. Returns null.
+//   * Has user messages but below the substantive threshold →
+//     mark ended, is_substantive=false. Returns the row.
+//   * Substantive (≥ SUBSTANTIVE_MESSAGE_THRESHOLD) → mark ended,
+//     is_substantive=true. Returns the row. The caller (session-end
+//     analyzer) layers the gpt-5 RPC write on top.
 //
-// Logs the message-count → is_substantive decision so we can spot
-// the bug where a real conversation gets tagged is_substantive=false
-// (seen once on a 40-exchange session in prod; root cause unknown,
-// likely countMessages returning a wrong count under some race).
-// The counterpart finalize beacon does the same.
+// Idempotency: callers race in two cases — user double-tap of End,
+// the pagehide beacon firing during the End-button submit, the cron
+// sweep running while the user is mid-tap. The DELETE is naturally
+// idempotent (a missing row is a no-op). The UPDATE is gated on
+// ended_at IS NULL so a second close-attempt finds nothing to update.
 export async function endSession(
   ctx: UserSupabase,
   sessionId: string,
-): Promise<SessionRow> {
+): Promise<SessionRow | null> {
+  const userTyped = await hasUserMessages(ctx, sessionId);
+  if (!userTyped) {
+    console.log("endSession delete (empty session)", { sessionId });
+    await deleteSession(ctx, sessionId);
+    return null;
+  }
   const messageCount = await countMessages(ctx, sessionId);
   const isSubstantive = messageCount >= SUBSTANTIVE_MESSAGE_THRESHOLD;
   console.log("endSession close", {

@@ -165,6 +165,12 @@ export async function endSession(sessionId: string): Promise<void> {
 
   const sessionRow = await endSessionWrite(ctx, sessionId);
 
+  // Empty session — already deleted inside endSessionWrite. Nothing
+  // to analyze, nothing to summarize. Bounce home.
+  if (!sessionRow) {
+    redirect("/home");
+  }
+
   if (sessionRow.is_substantive) {
     after(async () => {
       try {
