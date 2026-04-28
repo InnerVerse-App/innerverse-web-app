@@ -450,8 +450,9 @@ export default async function ProgressPage({
         <h1 className="text-3xl font-bold text-white">Your InnerVerse</h1>
         <p className="mt-1 text-sm leading-relaxed text-neutral-400">
           Welcome to your star map. This is a picture of your own
-          personal journey — sessions appear as stars, the
-          breakthroughs that emerge become suns at the heart of
+          personal journey — sessions appear as stars, mindset shifts
+          glow as purple stars within your constellations, the
+          breakthroughs that emerge become suns at the heart of those
           constellations, and the goals you&apos;re tending wander as
           comets. Tap any of them to see what it&apos;s connected to.{" "}
           <span className="text-amber-400">(demo mode)</span>
@@ -626,10 +627,11 @@ export default async function ProgressPage({
       <h1 className="text-3xl font-bold text-white">Your InnerVerse</h1>
       <p className="mt-1 text-sm leading-relaxed text-neutral-400">
         Welcome to your star map. This is a picture of your own
-        personal journey — sessions appear as stars, the breakthroughs
-        that emerge become suns at the heart of constellations, and
-        the goals you&apos;re tending wander as comets. Tap any of
-        them to see what it&apos;s connected to.
+        personal journey — sessions appear as stars, mindset shifts
+        glow as purple stars within your constellations, the
+        breakthroughs that emerge become suns at the heart of those
+        constellations, and the goals you&apos;re tending wander as
+        comets. Tap any of them to see what it&apos;s connected to.
       </p>
 
       <Constellation

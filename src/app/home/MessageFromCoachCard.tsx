@@ -6,53 +6,71 @@ type Props = {
 
 // Collapsed by default — the cumulative growth narrative can run
 // 4-7 paragraphs and would push everything below it off the screen.
-// Click expands the body inline; click again collapses. Native
-// <details>/<summary> matches the same expand pattern used in the
-// Sessions / Progress / Goals lists.
+// Collapsed state shows the title + a 2-3 line preview so the user
+// is drawn in to expand. Click expands the body inline; click again
+// collapses.
+const PREVIEW_CHARS = 220;
+
 export function MessageFromCoachCard({ message }: Props) {
   const paragraphs = message
     .split(/\n{2,}/)
     .map((p) => p.trim())
     .filter(Boolean);
 
+  // Preview is the opening of the first paragraph, clamped to one
+  // sentence-or-two worth of text.
+  const first = paragraphs[0] ?? "";
+  const preview =
+    first.length > PREVIEW_CHARS
+      ? first.slice(0, PREVIEW_CHARS).replace(/\s+\S*$/, "") + "…"
+      : first;
+
   return (
     <section className="mt-6 rounded-xl border border-white/10 bg-white/[0.02]">
       <details className="group">
-        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 p-5 sm:p-6 [&::-webkit-details-marker]:hidden">
-          <div className="flex items-center gap-3">
-            <svg
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth={1.8}
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              className="h-5 w-5 shrink-0 text-brand-primary"
+        <summary className="flex cursor-pointer list-none flex-col gap-3 p-5 sm:p-6 [&::-webkit-details-marker]:hidden">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth={1.8}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="h-5 w-5 shrink-0 text-brand-primary"
+                aria-hidden
+              >
+                <path d="M12 3l1.5 4.5L18 9l-4.5 1.5L12 15l-1.5-4.5L6 9l4.5-1.5L12 3z" />
+                <path d="M19 14l0.6 1.8L21.5 16.5l-1.8 0.6L19 19l-0.6-1.8L16.5 16.5l1.8-0.6L19 14z" />
+              </svg>
+              <h2 className="text-lg font-semibold text-white sm:text-xl">
+                Message from your Coach
+              </h2>
+            </div>
+            <span
+              className="inline-block shrink-0 text-neutral-500 transition group-open:rotate-180"
               aria-hidden
             >
-              <path d="M12 3l1.5 4.5L18 9l-4.5 1.5L12 15l-1.5-4.5L6 9l4.5-1.5L12 3z" />
-              <path d="M19 14l0.6 1.8L21.5 16.5l-1.8 0.6L19 19l-0.6-1.8L16.5 16.5l1.8-0.6L19 14z" />
-            </svg>
-            <h2 className="text-lg font-semibold text-white sm:text-xl">
-              Message from your Coach
-            </h2>
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth={1.8}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="h-5 w-5"
+              >
+                <path d="m6 9 6 6 6-6" />
+              </svg>
+            </span>
           </div>
-          <span
-            className="inline-block shrink-0 text-neutral-500 transition group-open:rotate-180"
-            aria-hidden
-          >
-            <svg
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth={1.8}
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              className="h-5 w-5"
-            >
-              <path d="m6 9 6 6 6-6" />
-            </svg>
-          </span>
+          {/* Preview shown only while collapsed; hidden once <details> opens. */}
+          {preview ? (
+            <p className="line-clamp-3 text-sm leading-relaxed text-neutral-400 group-open:hidden">
+              {preview}
+            </p>
+          ) : null}
         </summary>
         <div className="border-t border-white/5 px-5 pb-5 pt-4 sm:px-6 sm:pb-6">
           <div className="flex flex-col gap-3 text-sm leading-relaxed text-neutral-300">

@@ -61,12 +61,12 @@ export default async function Home() {
             </Link>
           ) : (
             <>
-              <SignUpButton>
+              <SignUpButton forceRedirectUrl="/home" signInForceRedirectUrl="/home">
                 <button className="w-64 rounded-full bg-brand-primary px-6 py-3 text-sm font-semibold text-brand-primary-contrast shadow-lg transition hover:bg-brand-primary/90">
                   Get started
                 </button>
               </SignUpButton>
-              <SignInButton>
+              <SignInButton forceRedirectUrl="/home" signUpForceRedirectUrl="/home">
                 <button className="text-sm font-medium text-white/90 underline-offset-4 transition hover:text-white hover:underline">
                   Already have an account? Sign in
                 </button>
