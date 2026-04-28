@@ -795,46 +795,15 @@ export function Constellation({
                     <CrossGalaxyChain breakthroughs={layout.breakthroughs} />
                   ) : null}
 
-                  {/* Render order is largest-first / smallest-last so
-                      that when hit areas overlap (a session positioned
-                      close to its breakthrough's sun, for example) the
-                      smaller dot — the one the user is more likely
-                      trying to click — wins the pointer event. */}
-                  {layout.breakthroughs.map((b) => (
-                    <BreakthroughSun
-                      key={b.id}
-                      dot={
-                        boostedIds.has(b.id) ? { ...b, opacity: 1 } : b
-                      }
-                      buildHref={(id) =>
-                        buildUrl({ constellation: id, shift: null, goal: null })
-                      }
-                    />
-                  ))}
-                  {layout.goals.map((g) => (
-                    <GoalComet
-                      key={g.id}
-                      dot={
-                        boostedIds.has(g.id) ? { ...g, opacity: 1 } : g
-                      }
-                      buildGoalHref={(id) =>
-                        // Single-tap selects the goal as anchor on the
-                        // map. Existing /goals tab is the path to the
-                        // goal's full detail.
-                        buildUrl({
-                          goal: id,
-                          constellation: null,
-                          shift: null,
-                          session: null,
-                        })
-                      }
-                    />
-                  ))}
-
                   {/* Sessions + shifts share a fade-in wrapper so they
                       only become visible once the user has zoomed in
                       past the universe view. At full zoom-out the user
-                      sees galaxy glows and suns, not individual stars. */}
+                      sees galaxy glows and suns, not individual stars.
+                      Render order: smaller-first / larger-last so the
+                      visually-dominant dots (sun, comet head) sit on
+                      top — but the larger dots have tightened hit
+                      areas so they don't over-cover their smaller
+                      neighbors. */}
                   <div className="constellation-zoom-fade-in absolute inset-0">
                     {layout.mindsetShifts.map((m) => (
                       <MindsetShiftStar
@@ -868,6 +837,37 @@ export function Constellation({
                       />
                     ))}
                   </div>
+
+                  {layout.goals.map((g) => (
+                    <GoalComet
+                      key={g.id}
+                      dot={
+                        boostedIds.has(g.id) ? { ...g, opacity: 1 } : g
+                      }
+                      buildGoalHref={(id) =>
+                        // Single-tap selects the goal as anchor on the
+                        // map. Existing /goals tab is the path to the
+                        // goal's full detail.
+                        buildUrl({
+                          goal: id,
+                          constellation: null,
+                          shift: null,
+                          session: null,
+                        })
+                      }
+                    />
+                  ))}
+                  {layout.breakthroughs.map((b) => (
+                    <BreakthroughSun
+                      key={b.id}
+                      dot={
+                        boostedIds.has(b.id) ? { ...b, opacity: 1 } : b
+                      }
+                      buildHref={(id) =>
+                        buildUrl({ constellation: id, shift: null, goal: null })
+                      }
+                    />
+                  ))}
 
                   {isEmpty ? (
                     <div className="absolute inset-0 flex items-center justify-center px-8 text-center">
@@ -1015,7 +1015,12 @@ function BreakthroughSun({
       scroll={false}
       aria-label={`Breakthrough: ${dot.galaxyName || dot.content}`}
       title={`Breakthrough — ${dot.galaxyName || dot.content}`}
-      className={`absolute -translate-x-1/2 -translate-y-1/2 ${TAP_PADDING}`}
+      // No TAP_PADDING here — the sun's wrapper is already h-7 w-7
+      // (28px), which itself is much larger than the smaller dots'
+      // h-4 w-4 (16px). Adding p-1 on top would extend the hit area
+      // past the visible halo and capture hovers meant for nearby
+      // session/shift dots clustered inside the same galaxy.
+      className="absolute -translate-x-1/2 -translate-y-1/2"
       style={{
         left: `${dot.x * 100}%`,
         top: `${dot.y * 100}%`,
