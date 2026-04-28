@@ -30,6 +30,31 @@ import { POST_SESSION_RESPONSE_FIELD } from "./[id]/complete/fields";
 // truncated server-side.
 const MAX_RESPONSE_LENGTH = 5000;
 
+// Fire-and-forget POST to the growth-narrative endpoint. Decouples
+// the narrative call from the analyzer's after() budget so each
+// gets its own 60s function-time ceiling on Vercel Hobby. Failures
+// are non-fatal — the narrative endpoint logs to Sentry and the
+// last-good narrative on coaching_state stays visible.
+function triggerGrowthNarrative(sessionId: string): void {
+  const base =
+    process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : process.env.NEXT_PUBLIC_APP_URL ?? "";
+  if (!base || !process.env.CRON_SECRET) {
+    // No base URL or no shared secret available → can't trigger.
+    // Backfill / cron pickup are the recovery path.
+    return;
+  }
+  const url = `${base}/api/sessions/${sessionId}/generate-narrative`;
+  // Don't await — let the trigger complete asynchronously alongside
+  // the after() handler returning.
+  fetch(url, {
+    method: "POST",
+    headers: { authorization: `Bearer ${process.env.CRON_SECRET}` },
+  }).catch(() => {
+    // Network / DNS failure is logged inside the endpoint when it
+    // does receive a request; nothing actionable here.
+  });
+}
+
 // Resolve the user's first name for the coaching prompt's
 // `Client: <user_name>` field. Three-tier fallback:
 //   1. users.display_name — populated by the Clerk webhook on
@@ -148,7 +173,13 @@ export async function endSession(sessionId: string): Promise<void> {
         // runSessionEndAnalysis already logs + captures to Sentry.
         // Swallow here so the background task doesn't crash the
         // serverless invocation after the response has been sent.
+        return; // analyzer failed → don't fire narrative
       }
+      // Analyzer succeeded — fire the growth narrative pipeline as a
+      // separate function invocation so it gets its own 60s budget.
+      // Fire-and-forget: failures are captured server-side and the
+      // last-good narrative stays on coaching_state.
+      triggerGrowthNarrative(sessionId);
     });
     redirect(`/sessions/${sessionId}/complete`);
   }

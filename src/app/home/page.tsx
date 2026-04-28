@@ -332,15 +332,29 @@ export default async function HomePage({
   // recency bar on TopGoalCard. Null when there's no top goal, no last
   // session id on the goal, or the lookup fails.
   let topGoalLastSessionEndedAt: string | null = null;
-  if (!isDemo && topGoal?.last_session_id) {
+  // Cumulative growth narrative — read from coaching_state if the
+  // separate narrative pipeline has populated it. Falls back to the
+  // most recent session's coach_message until the user has had at
+  // least one session-end-with-narrative run.
+  let growthNarrative: string | null = null;
+  if (!isDemo) {
     const ctx = await supabaseForUser();
     if (ctx) {
-      const { data } = await ctx.client
-        .from("sessions")
-        .select("ended_at")
-        .eq("id", topGoal.last_session_id)
-        .maybeSingle();
-      topGoalLastSessionEndedAt = data?.ended_at ?? null;
+      const [lastSessionRes, coachingStateRes] = await Promise.all([
+        topGoal?.last_session_id
+          ? ctx.client
+              .from("sessions")
+              .select("ended_at")
+              .eq("id", topGoal.last_session_id)
+              .maybeSingle()
+          : Promise.resolve({ data: null, error: null }),
+        ctx.client
+          .from("coaching_state")
+          .select("growth_narrative")
+          .maybeSingle(),
+      ]);
+      topGoalLastSessionEndedAt = lastSessionRes.data?.ended_at ?? null;
+      growthNarrative = coachingStateRes.data?.growth_narrative?.trim() || null;
     }
   }
 
@@ -384,8 +398,10 @@ export default async function HomePage({
         />
       </div>
 
-      {lastSession?.coach_message ? (
-        <MessageFromCoachCard message={lastSession.coach_message} />
+      {growthNarrative || lastSession?.coach_message ? (
+        <MessageFromCoachCard
+          message={growthNarrative ?? lastSession?.coach_message ?? ""}
+        />
       ) : null}
       <PersonalGrowthProgressCard
         items={recentGrowth}

@@ -24,7 +24,11 @@ export type SessionErrorStage =
   | "cron_sweep_scan"
   | "cron_sweep_close"
   | "cron_sweep_analyze"
-  | "cron_sweep_retry_analyze";
+  | "cron_sweep_retry_analyze"
+  | "growth_narrative_openai"
+  | "growth_narrative_truncated"
+  | "growth_narrative_refusal"
+  | "growth_narrative_db_write";
 
 export function captureSessionError(
   err: unknown,
