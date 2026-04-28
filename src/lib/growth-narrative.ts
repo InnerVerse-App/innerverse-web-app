@@ -332,6 +332,11 @@ export async function runGrowthNarrativeUpdate(
           strict: true,
         },
       },
+      // Pure prose synthesis from already-extracted analyses. The
+      // model isn't reading raw transcripts here, just weaving
+      // pre-digested signals into a letter. Doesn't need deep
+      // deliberation; low effort keeps the background pipeline fast.
+      reasoning: { effort: "low" },
     });
   } catch (err) {
     captureSessionError(err, "growth_narrative_openai", sessionId);

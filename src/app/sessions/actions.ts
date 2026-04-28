@@ -124,6 +124,11 @@ export async function startSession(formData?: FormData): Promise<void> {
       model: MODEL_SESSION_START,
       input,
       max_output_tokens: MAX_OUTPUT_TOKENS,
+      // Opener is mechanical (greeting + acknowledge focus + warm
+      // open-ended question). Doesn't need deep deliberation. Low
+      // effort cuts ~40% off the latency the user feels right
+      // after tapping Start.
+      reasoning: { effort: "low" },
     });
     openingText = response.output_text;
     responseId = response.id;
