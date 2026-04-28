@@ -35,6 +35,10 @@
 export type SessionDot = {
   id: string;
   endedAt: string;
+  // AI-written one-line summary (progress_summary_short). Used as
+  // the dot's hover title. Empty string for demo data without a
+  // title stub.
+  title?: string;
 };
 
 export type BreakthroughDot = {
@@ -42,6 +46,9 @@ export type BreakthroughDot = {
   sessionId: string;
   content: string;
   createdAt: string;
+  // V.7.1 evocative constellation name. Preferred over content for
+  // dot tooltips and labels. Optional for demo data.
+  galaxyName?: string;
 };
 
 export type MindsetShiftDot = {

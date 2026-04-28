@@ -265,7 +265,7 @@ export default async function SessionsListPage({
                             {s.ended_at ? "Completed" : "In progress"}
                           </span>
                         </div>
-                        <p className="mt-2 text-base font-semibold leading-snug text-white">
+                        <p className="mt-2 line-clamp-2 text-base font-semibold leading-snug text-white">
                           {briefTitle}
                         </p>
                       </div>

@@ -172,7 +172,7 @@ Output ONLY this JSON. No commentary before or after.
 ```json
 {
   "session_summary": "string — neutral, 2–4 sentences",
-  "progress_summary_short": "string — 1 sentence, progress-framed",
+  "progress_summary_short": "string — 1 short sentence (≤ 90 chars), progress-framed. Used as the session card's title in the Sessions tab; long sentences will get visually truncated.",
   "coach_message": "string — the short cross-session memory hook (1–3 sentences). Distinct from coach_narrative.",
   "coach_narrative": "string — the streamed multi-paragraph narrative the user reads (markdown-friendly, NO json escaping needed beyond standard string)",
 

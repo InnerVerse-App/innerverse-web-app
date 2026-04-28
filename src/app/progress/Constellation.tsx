@@ -946,8 +946,16 @@ function SessionStar({
   return (
     <Link
       href={buildSessionHref(dot.id)}
-      aria-label={`Session from ${dateLabel} (double-click to view in Sessions tab)`}
-      title={`Session — ${dateLabel} (double-click to view in Sessions tab)`}
+      aria-label={
+        dot.title
+          ? `${dot.title} — ${dateLabel} (double-click to view in Sessions tab)`
+          : `Session from ${dateLabel} (double-click to view in Sessions tab)`
+      }
+      title={
+        dot.title
+          ? `${dot.title} — ${dateLabel}`
+          : `Session — ${dateLabel}`
+      }
       className={`absolute -translate-x-1/2 -translate-y-1/2 ${TAP_PADDING}`}
       style={{
         left: `${dot.x * 100}%`,
@@ -999,8 +1007,8 @@ function BreakthroughSun({
       // the constellation map when the second click's URL change
       // re-applies the fragment scroll.
       scroll={false}
-      aria-label={`Breakthrough: ${dot.content}`}
-      title={`Breakthrough — ${dot.content}`}
+      aria-label={`Breakthrough: ${dot.galaxyName || dot.content}`}
+      title={`Breakthrough — ${dot.galaxyName || dot.content}`}
       className={`absolute -translate-x-1/2 -translate-y-1/2 ${TAP_PADDING}`}
       style={{
         left: `${dot.x * 100}%`,
