@@ -328,6 +328,22 @@ export default async function HomePage({
   const topGoal = activeGoals[0] ?? null;
   const menuGoals = activeGoalsForMenu(activeGoals);
 
+  // Resolve the top goal's last_session_ended_at for the practice-type
+  // recency bar on TopGoalCard. Null when there's no top goal, no last
+  // session id on the goal, or the lookup fails.
+  let topGoalLastSessionEndedAt: string | null = null;
+  if (!isDemo && topGoal?.last_session_id) {
+    const ctx = await supabaseForUser();
+    if (ctx) {
+      const { data } = await ctx.client
+        .from("sessions")
+        .select("ended_at")
+        .eq("id", topGoal.last_session_id)
+        .maybeSingle();
+      topGoalLastSessionEndedAt = data?.ended_at ?? null;
+    }
+  }
+
   return (
     <PageShell active="home" navHrefSuffix={isDemo ? "?demo=1" : ""}>
       <h1 className="text-3xl font-bold text-white sm:text-4xl">
@@ -362,7 +378,10 @@ export default async function HomePage({
           goalCount={goalCount}
           endedTimestamps={endedTimestamps}
         />
-        <TopGoalCard topGoal={topGoal} />
+        <TopGoalCard
+          topGoal={topGoal}
+          topGoalLastSessionEndedAt={topGoalLastSessionEndedAt}
+        />
       </div>
 
       <PersonalGrowthProgressCard

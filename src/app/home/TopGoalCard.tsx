@@ -1,16 +1,25 @@
 import Link from "next/link";
 
 import { ProgressBar } from "@/app/_components/ProgressBar";
+import { RecencyBar } from "@/app/_components/RecencyBar";
 import type { ActiveGoal } from "@/lib/goals";
 
 type Props = {
   topGoal: ActiveGoal | null;
+  // Most-recent session ended_at on the top goal; used by the recency
+  // bar for practice-type goals. Null when the goal has never been
+  // engaged or when we couldn't resolve the timestamp.
+  topGoalLastSessionEndedAt?: string | null;
 };
 
 // Glance view — Goals tab shows the full rationale.
 const RATIONALE_HOME_MAX = 120;
+const GOAL_RECENCY_COLOR = "#4ADE80";
 
-export function TopGoalCard({ topGoal }: Props) {
+export function TopGoalCard({
+  topGoal,
+  topGoalLastSessionEndedAt = null,
+}: Props) {
   return (
     <section className="rounded-xl border border-white/10 bg-white/[0.02] p-4">
       <div className="flex items-center gap-2">
@@ -36,15 +45,24 @@ export function TopGoalCard({ topGoal }: Props) {
             <p className="break-words text-sm font-medium text-white">
               {topGoal.title}
             </p>
-            {topGoal.progress_percent !== null ? (
+            {topGoal.completion_type === "milestone" &&
+            topGoal.progress_percent !== null ? (
               <span className="shrink-0 text-xs text-neutral-400">
                 {topGoal.progress_percent}%
               </span>
             ) : null}
           </div>
-          {topGoal.progress_percent !== null ? (
-            <ProgressBar percent={topGoal.progress_percent} />
-          ) : null}
+          {topGoal.completion_type === "milestone" ? (
+            <ProgressBar
+              percent={topGoal.progress_percent ?? 0}
+              variant="goal"
+            />
+          ) : (
+            <RecencyBar
+              lastEngagedAt={topGoalLastSessionEndedAt}
+              color={GOAL_RECENCY_COLOR}
+            />
+          )}
           {topGoal.progress_rationale ? (
             <p className="mt-2 text-xs text-neutral-400">
               {topGoal.progress_rationale.length > RATIONALE_HOME_MAX

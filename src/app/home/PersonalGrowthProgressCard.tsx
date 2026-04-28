@@ -48,7 +48,7 @@ export function PersonalGrowthProgressCard({
         </h2>
       </div>
       <p className="mt-1 text-xs text-neutral-500">
-        Themes from your most-analyzed sessions. Tap any to open the
+        Themes from your most recent sessions. Tap any to open the
         session.
       </p>
       {items.length === 0 ? (
@@ -79,7 +79,7 @@ export function PersonalGrowthProgressCard({
             })}
           </ul>
           <Link
-            href="/progress"
+            href={sessionsBase}
             className="mt-5 block rounded-md border border-white/10 px-4 py-2 text-center text-sm text-brand-primary transition hover:border-brand-primary/40 hover:bg-white/5"
           >
             See more progress
