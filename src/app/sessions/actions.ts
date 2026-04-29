@@ -19,6 +19,7 @@ import {
 } from "@/lib/sessions";
 import { runSessionEndAnalysis } from "@/lib/session-end";
 import { runSessionResponseAnalysis } from "@/lib/session-response";
+import { runStyleCalibrationUpdate } from "@/lib/style-calibration";
 import { supabaseForUser, type UserSupabase } from "@/lib/supabase";
 
 import {
@@ -287,12 +288,31 @@ export async function submitSessionResponse(
   // Fire Call 2 (response-parser) in the background only when the
   // user actually wrote a narrative response — that's the only field
   // the parser acts on. Slider values + private reflection are
-  // captured for the calibration aggregator (separate pipeline) and
-  // for the user's own record; they don't drive the parser.
+  // captured for the calibration aggregator and for the user's own
+  // record; they don't drive the parser.
   if (responseText.length > 0) {
     after(async () => {
       try {
         await runSessionResponseAnalysis(ctx, sessionId);
+      } catch {
+        // already logged + captured
+      }
+    });
+  }
+
+  // Fire the style-calibration aggregator whenever any slider was
+  // touched OR a narrative response was written. Skipped only on
+  // totally-empty submits (which we already short-circuited above
+  // via the anySignal guard, but the explicit condition here keeps
+  // the trigger logic local and reviewable). Failures are non-fatal:
+  // existing coaching_state values stay in place if the aggregator
+  // refuses or its output fails validation.
+  const anySliderTouched =
+    aligned !== null || helpful !== null || tone !== null;
+  if (anySliderTouched || responseText.length > 0) {
+    after(async () => {
+      try {
+        await runStyleCalibrationUpdate(ctx, sessionId);
       } catch {
         // already logged + captured
       }

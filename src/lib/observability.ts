@@ -29,7 +29,12 @@ export type SessionErrorStage =
   | "growth_narrative_openai"
   | "growth_narrative_truncated"
   | "growth_narrative_refusal"
-  | "growth_narrative_db_write";
+  | "growth_narrative_db_write"
+  | "style_calibration_openai"
+  | "style_calibration_truncated"
+  | "style_calibration_refusal"
+  | "style_calibration_shape"
+  | "style_calibration_db_write";
 
 export function captureSessionError(
   err: unknown,
