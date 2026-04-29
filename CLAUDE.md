@@ -18,9 +18,12 @@ wrong — update `decisions.md` first, then adjust.
 
 Other reference material under `reference/`:
 
-- `prompt-coaching-chat.md` — the live session-start system prompt (v1 coach)
-- `prompt-session-end-v3.md` — session-end analysis prompt (returns structured JSON)
-- `prompt-v11.3.md` — stored in the legacy Bubble app but not wired to any live call; kept for future prompt iteration
+- `prompt-session-opener.md` — focus-aware opening rules; governs the coach's first message only
+- `prompt-v11.3.md` — master coaching prompt (operator-authored); governs every turn after the opener, sent verbatim
+- `prompt-session-end-v7.md` — session-end analysis prompt (returns structured JSON)
+- `prompt-session-response-v2.md` — post-session reflection parser
+- `prompt-growth-narrative-v1.md` — cumulative "Message from your Coach" letter
+- `archive/` — superseded prompts (prompt-coaching-chat.md, session-end v5/v6, session-response v1) kept for diff/reference, not loaded by any live code
 - `app-data-export.json` — privacy policy, terms, legacy Bubble config
 - `screenshots/` — UI, data-type, backend-workflow, API-connector, Figma
 - `logos/` — brand assets
