@@ -12,6 +12,7 @@ import Link from "next/link";
 import { BackArrowIcon } from "@/app/_components/icons";
 import { formatTime } from "@/lib/format";
 import { endSession } from "../actions";
+import { VoiceComposer } from "./VoiceComposer";
 
 type Message = {
   id: string;
@@ -38,6 +39,11 @@ export function ChatView({
   const [streaming, setStreaming] = useState(false);
   const [endingSession, setEndingSession] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Voice mode swaps the textarea + send button for a push-to-talk
+  // interface backed by Whisper (transcribe) + OpenAI TTS (speak).
+  // Local-only state for now — no preference persistence across
+  // sessions yet. PR 3 will add VAD; PR 5 will add interrupt.
+  const [voiceMode, setVoiceMode] = useState(false);
 
   const bottomRef = useRef<HTMLDivElement | null>(null);
   // Auto-focus the textarea when the coach finishes streaming so the
@@ -111,18 +117,27 @@ export function ChatView({
     return () => window.removeEventListener("pagehide", handler);
   }, [ended, sessionId]);
 
-  async function send(e: FormEvent) {
-    e.preventDefault();
-    const content = input.trim();
-    if (!content || streaming || ended) return;
+  // Core send logic. Appends the user/AI bubbles, streams the response
+  // from /api/sessions/[id]/messages into the AI bubble, and returns
+  // the final accumulated AI response text on success. Throws on
+  // failure so callers (form submit + voice composer) can surface the
+  // appropriate UI.
+  //
+  // Both the form `onSubmit` handler and the VoiceComposer's
+  // sendChat callback funnel through here, so there's exactly one
+  // implementation of "exchange a turn with the coach."
+  async function sendChat(content: string): Promise<string> {
+    const trimmed = content.trim();
+    if (!trimmed) throw new Error("empty message");
+    if (streaming) throw new Error("already streaming");
+    if (ended) throw new Error("session ended");
 
     setError(null);
-    setInput("");
 
     const userMsg: Message = {
       id: `local-user-${Date.now()}`,
       fromAi: false,
-      content,
+      content: trimmed,
       createdAt: new Date().toISOString(),
     };
     const aiMsgId = `local-ai-${Date.now()}`;
@@ -138,11 +153,12 @@ export function ChatView({
     const controller = new AbortController();
     streamAbortRef.current = controller;
 
+    let accumulated = "";
     try {
       const res = await fetch(`/api/sessions/${sessionId}/messages`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content }),
+        body: JSON.stringify({ content: trimmed }),
         signal: controller.signal,
       });
       if (!res.ok || !res.body) {
@@ -154,23 +170,45 @@ export function ChatView({
         const { done, value } = await reader.read();
         if (done) break;
         const chunk = decoder.decode(value, { stream: true });
+        accumulated += chunk;
         setMessages((prev) =>
           prev.map((m) =>
             m.id === aiMsgId ? { ...m, content: m.content + chunk } : m,
           ),
         );
       }
+      return accumulated;
     } catch (err) {
-      // Abort on unmount is the intended cancel path — not an error.
-      if (err instanceof DOMException && err.name === "AbortError") return;
+      // Abort on unmount is the intended cancel path. Surface as an
+      // empty-string return so the voice composer can treat it as
+      // "no response, no audio to play" rather than an error toast.
+      if (err instanceof DOMException && err.name === "AbortError") {
+        return "";
+      }
       console.error("ChatView: send failed", err);
       setError("Something went wrong. Please try again.");
       setMessages((prev) => prev.filter((m) => m.id !== aiMsgId));
+      throw err;
     } finally {
       if (streamAbortRef.current === controller) {
         streamAbortRef.current = null;
       }
       setStreaming(false);
+    }
+  }
+
+  // Form-submit wrapper around sendChat. Reads from the textarea state,
+  // clears the input on success, and swallows errors (sendChat already
+  // sets the error state).
+  async function send(e: FormEvent): Promise<void> {
+    e.preventDefault();
+    const content = input.trim();
+    if (!content || streaming || ended) return;
+    setInput("");
+    try {
+      await sendChat(content);
+    } catch {
+      // already surfaced via setError inside sendChat
     }
   }
 
@@ -238,53 +276,74 @@ export function ChatView({
         </div>
       </main>
 
-      <form
-        onSubmit={send}
-        className="sticky bottom-0 border-t border-white/10 bg-brand-dark px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]"
-      >
-        <div className="mx-auto flex w-full max-w-2xl items-end gap-2">
-          <textarea
-            ref={inputRef}
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={onKeyDown}
-            disabled={streaming || ended}
-            placeholder={ended ? "Session ended" : "Type here…"}
-            rows={1}
-            // min-w-0 lets the flex child shrink below its intrinsic
-            // width — without it the textarea's default cols=20 plus
-            // the send button can push the row past the viewport on
-            // narrow phones, which makes the page horizontally pan.
-            // break-words guards against pasted unbreakable strings
-            // forcing horizontal overflow inside the textarea.
-            className="min-w-0 flex-1 resize-none overflow-y-auto break-words rounded-3xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-white placeholder:text-neutral-500 focus:outline-none focus:ring-2 focus:ring-brand-primary disabled:opacity-50"
-            style={{ maxHeight: "8rem" }}
-          />
+      <div className="sticky bottom-0 border-t border-white/10 bg-brand-dark px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]">
+        <div className="mx-auto flex w-full max-w-2xl flex-col gap-2">
+          {voiceMode ? (
+            <VoiceComposer
+              sessionId={sessionId}
+              disabled={ended}
+              sendChat={sendChat}
+            />
+          ) : (
+            <form onSubmit={send}>
+              <div className="flex w-full items-end gap-2">
+                <textarea
+                  ref={inputRef}
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  onKeyDown={onKeyDown}
+                  disabled={streaming || ended}
+                  placeholder={ended ? "Session ended" : "Type here…"}
+                  rows={1}
+                  // min-w-0 lets the flex child shrink below its intrinsic
+                  // width — without it the textarea's default cols=20 plus
+                  // the send button can push the row past the viewport on
+                  // narrow phones, which makes the page horizontally pan.
+                  // break-words guards against pasted unbreakable strings
+                  // forcing horizontal overflow inside the textarea.
+                  className="min-w-0 flex-1 resize-none overflow-y-auto break-words rounded-3xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-white placeholder:text-neutral-500 focus:outline-none focus:ring-2 focus:ring-brand-primary disabled:opacity-50"
+                  style={{ maxHeight: "8rem" }}
+                />
+                <button
+                  type="submit"
+                  disabled={streaming || ended || !input.trim()}
+                  className="rounded-full bg-brand-primary p-2.5 text-brand-primary-contrast transition hover:bg-brand-primary/90 disabled:opacity-50"
+                  aria-label="Send"
+                >
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth={2}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    className="h-5 w-5"
+                    aria-hidden
+                  >
+                    <path d="M22 2L11 13" />
+                    <path d="M22 2l-7 20-4-9-9-4 20-7z" />
+                  </svg>
+                </button>
+              </div>
+            </form>
+          )}
+          {/* Mode toggle. Quiet text link below the input area —
+              discoverable but unobtrusive. Disabled while a turn is
+              actively in flight so we don't lose mid-streaming state
+              by switching mode. */}
           <button
-            type="submit"
-            disabled={streaming || ended || !input.trim()}
-            className="rounded-full bg-brand-primary p-2.5 text-brand-primary-contrast transition hover:bg-brand-primary/90 disabled:opacity-50"
-            aria-label="Send"
+            type="button"
+            onClick={() => setVoiceMode((v) => !v)}
+            disabled={streaming}
+            className="self-center text-xs text-neutral-500 underline-offset-4 transition hover:text-neutral-200 hover:underline disabled:opacity-50"
           >
-            <svg
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth={2}
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              className="h-5 w-5"
-              aria-hidden
-            >
-              <path d="M22 2L11 13" />
-              <path d="M22 2l-7 20-4-9-9-4 20-7z" />
-            </svg>
+            {voiceMode ? "Type instead" : "Talk to your coach"}
           </button>
+          {error ? (
+            <p className="mt-1 text-center text-xs text-red-400">{error}</p>
+          ) : null}
         </div>
-        {error ? (
-          <p className="mx-auto mt-2 max-w-2xl text-xs text-red-400">{error}</p>
-        ) : null}
-      </form>
+      </div>
     </div>
   );
 }
