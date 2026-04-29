@@ -335,11 +335,13 @@ export async function runGrowthNarrativeUpdate(
           strict: true,
         },
       },
-      // Pure prose synthesis from already-extracted analyses. The
-      // model isn't reading raw transcripts here, just weaving
-      // pre-digested signals into a letter. Doesn't need deep
-      // deliberation; low effort keeps the background pipeline fast.
-      reasoning: { effort: "low" },
+      // Synthesizing across up to 60 sessions of history — reading
+      // the arc, choosing what to thread together, writing 4-7
+      // paragraphs of prose the user actually reads on the home
+      // screen. That's a deliberation-heavy task. Background call,
+      // so latency cost is invisible to the user; quality is the
+      // binding constraint.
+      reasoning: { effort: "medium" },
     });
   } catch (err) {
     captureSessionError(err, "growth_narrative_openai", sessionId);
