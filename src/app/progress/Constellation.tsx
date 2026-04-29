@@ -1417,20 +1417,24 @@ function GalaxyGlow({ galaxy }: { galaxy: GalaxyMeta }) {
         borderRadius: "50%",
         transform: `translate(-50%, -50%) rotate(${galaxy.tiltDeg}deg)`,
         backgroundImage: [
-          // Bright warm bulge — concentrated around the sun.
-          "radial-gradient(ellipse 28% 55% at center, rgba(255,200,90,0.32) 0%, rgba(220,161,20,0.16) 25%, rgba(220,161,20,0) 55%)",
-          // Spiral-arm swirl. Conic-gradient with two wedges 180°
-          // apart, each ~60° wide with soft edges. Renders as two
-          // bright arms radiating from the bulge — combined with the
-          // tilt + radial fade reads as a spiral structure even
-          // though the wedges are technically straight.
-          "conic-gradient(from 18deg at center, rgba(186,104,200,0) 0deg, rgba(186,104,200,0.16) 30deg, rgba(186,104,200,0) 70deg, rgba(186,104,200,0) 200deg, rgba(186,104,200,0.16) 230deg, rgba(186,104,200,0) 270deg, rgba(186,104,200,0) 360deg)",
-          // Pink/magenta arm-ring annulus.
-          "radial-gradient(ellipse 75% 90% at center, rgba(186,104,200,0) 25%, rgba(186,104,200,0.10) 45%, rgba(167,139,250,0.06) 65%, rgba(167,139,250,0) 85%)",
-          // Cool blue/violet outer disc — fades fully to transparent
-          // at 65% (well inside the elliptical clip), so the visible
-          // disc edge is the gradient fade not a hard clip line.
-          "radial-gradient(ellipse 100% 100% at center, rgba(89,140,200,0.10) 0%, rgba(89,164,192,0.05) 35%, rgba(89,164,192,0) 65%)",
+          // Bright warm bulge — concentrated around the sun. Saturated
+          // to match the vivid yellow-orange cores in the operator's
+          // reference photos (Andromeda, M81, the spiral artist
+          // render).
+          "radial-gradient(ellipse 26% 55% at center, rgba(255,210,110,0.55) 0%, rgba(255,180,80,0.30) 18%, rgba(220,161,20,0.12) 38%, rgba(220,161,20,0) 60%)",
+          // Two asymmetric arm-highlights on diagonally opposite sides
+          // of the bulge. Real spiral galaxies have bright stellar
+          // populations along their arms — these blob-pairs reproduce
+          // that pattern without needing curved SVG paths. Combined
+          // with the disc tilt the brain reads them as spiral arms.
+          "radial-gradient(ellipse 32% 18% at 76% 30%, rgba(186,104,200,0.32) 0%, rgba(186,104,200,0.12) 50%, rgba(186,104,200,0) 100%)",
+          "radial-gradient(ellipse 32% 18% at 24% 70%, rgba(186,104,200,0.32) 0%, rgba(186,104,200,0.12) 50%, rgba(186,104,200,0) 100%)",
+          // Pink/magenta arm-ring annulus — bumped opacity so it reads
+          // as a deliberate band rather than barely-there.
+          "radial-gradient(ellipse 75% 90% at center, rgba(186,104,200,0) 25%, rgba(186,104,200,0.18) 48%, rgba(167,139,250,0.10) 68%, rgba(167,139,250,0) 88%)",
+          // Cool blue/violet outer disc — fades to transparent at 65%
+          // so the visible edge is a gradient fade, not the clip line.
+          "radial-gradient(ellipse 100% 100% at center, rgba(120,170,220,0.14) 0%, rgba(89,164,192,0.06) 35%, rgba(89,164,192,0) 65%)",
         ].join(", "),
       }}
       aria-hidden
