@@ -831,6 +831,40 @@ export function Constellation({
                       </radialGradient>
                     </defs>
                   </svg>
+                  {/* Faint Milky Way-style band crossing the panel
+                      diagonally. Single absolutely-positioned span,
+                      blurred to soften the rectangular edges into a
+                      smooth dust-cloud look. Layered gradients: a
+                      vertical fade for soft top/bottom edges, a
+                      horizontal fade for the band's length-wise
+                      brightness curve (subtle bulge near the middle
+                      mimicking the galactic core in edge-on photos
+                      of the actual Milky Way). Sits below FAR_STARS
+                      so stars pop in front of the dust. Position
+                      and tilt are fixed (no per-render randomization
+                      — users see the same Milky Way each time). */}
+                  <span
+                    className="pointer-events-none absolute"
+                    style={{
+                      left: "-25%",
+                      top: "65%",
+                      width: "150%",
+                      height: "10%",
+                      transform: "translate(0, -50%) rotate(-18deg)",
+                      backgroundImage: [
+                        // Vertical fade: soft top and bottom edges so the
+                        // band has natural feathering even before the blur.
+                        "linear-gradient(to bottom, transparent 0%, rgba(167,139,250,0.20) 50%, transparent 100%)",
+                        // Horizontal fade: bright in the middle (the dust
+                        // bulge), fades to transparent at both ends.
+                        "linear-gradient(to right, transparent 0%, rgba(186,104,200,0.16) 25%, rgba(167,139,250,0.22) 50%, rgba(89,140,200,0.14) 75%, transparent 100%)",
+                      ].join(", "),
+                      backgroundBlendMode: "screen",
+                      filter: "blur(8px)",
+                      opacity: 0.6,
+                    }}
+                    aria-hidden
+                  />
                   {FAR_STARS.map((s, i) => (
                     <span
                       key={`bg-${i}`}
