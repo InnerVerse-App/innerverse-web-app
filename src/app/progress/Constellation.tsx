@@ -1402,6 +1402,14 @@ function BreakthroughSun({
 function GalaxyGlow({ galaxy }: { galaxy: GalaxyMeta }) {
   const widthPct = galaxy.radius * 100 * 3.2;
   const heightPct = galaxy.radius * 100 * 1.1;
+  // Soft feathered-ellipse mask. Replaces the previous border-radius
+  // clip (which was elliptical but had a hard line). White is fully
+  // visible; transparent is fully hidden. Opaque inner 30% → smooth
+  // alpha falloff → fully transparent at 100% — gives a fluffy disc
+  // with no edge to point at. Same string fed to both -webkit-mask-
+  // image and mask-image for cross-browser support.
+  const softMask =
+    "radial-gradient(ellipse 95% 88% at 50% 50%, rgba(255,255,255,1) 0%, rgba(255,255,255,1) 30%, rgba(255,255,255,0.75) 55%, rgba(255,255,255,0.35) 78%, rgba(255,255,255,0) 100%)";
   return (
     <span
       className="pointer-events-none absolute"
@@ -1410,31 +1418,27 @@ function GalaxyGlow({ galaxy }: { galaxy: GalaxyMeta }) {
         top: `${galaxy.centerY * 100}%`,
         width: `${widthPct}%`,
         height: `${heightPct}%`,
-        // border-radius: 50% clips the span to an ellipse matching the
-        // 100%×100% gradient ellipses inside. Combined with the
-        // gradients fading well within the ellipse (terminating at
-        // ~70% rather than the bounds), the rim looks soft.
-        borderRadius: "50%",
+        WebkitMaskImage: softMask,
+        maskImage: softMask,
         transform: `translate(-50%, -50%) rotate(${galaxy.tiltDeg}deg)`,
         backgroundImage: [
-          // Bright warm bulge — concentrated around the sun. Saturated
-          // to match the vivid yellow-orange cores in the operator's
-          // reference photos (Andromeda, M81, the spiral artist
-          // render).
+          // Bright warm bulge — saturated to match reference photos.
           "radial-gradient(ellipse 26% 55% at center, rgba(255,210,110,0.55) 0%, rgba(255,180,80,0.30) 18%, rgba(220,161,20,0.12) 38%, rgba(220,161,20,0) 60%)",
-          // Two asymmetric arm-highlights on diagonally opposite sides
-          // of the bulge. Real spiral galaxies have bright stellar
-          // populations along their arms — these blob-pairs reproduce
-          // that pattern without needing curved SVG paths. Combined
-          // with the disc tilt the brain reads them as spiral arms.
+          // Two main arm-highlight blobs at diagonally opposite poles.
           "radial-gradient(ellipse 32% 18% at 76% 30%, rgba(186,104,200,0.32) 0%, rgba(186,104,200,0.12) 50%, rgba(186,104,200,0) 100%)",
           "radial-gradient(ellipse 32% 18% at 24% 70%, rgba(186,104,200,0.32) 0%, rgba(186,104,200,0.12) 50%, rgba(186,104,200,0) 100%)",
-          // Pink/magenta arm-ring annulus — bumped opacity so it reads
-          // as a deliberate band rather than barely-there.
+          // Third smaller asymmetric highlight (violet, off-axis from
+          // the two main blobs) so the disc isn't perfectly mirrored.
+          // Real spiral arms aren't symmetric.
+          "radial-gradient(ellipse 16% 14% at 38% 25%, rgba(167,139,250,0.20) 0%, rgba(167,139,250,0.06) 60%, rgba(167,139,250,0) 100%)",
+          // Subtle dust-lane darkening — a faint dark streak across
+          // the disc near the bulge plane, evoking the dust lanes
+          // visible in tilted spiral galaxies (M81, NGC 891).
+          "radial-gradient(ellipse 55% 5% at 50% 56%, rgba(8,4,18,0.30) 0%, rgba(8,4,18,0.12) 50%, rgba(8,4,18,0) 100%)",
+          // Pink/magenta arm-ring annulus.
           "radial-gradient(ellipse 75% 90% at center, rgba(186,104,200,0) 25%, rgba(186,104,200,0.18) 48%, rgba(167,139,250,0.10) 68%, rgba(167,139,250,0) 88%)",
-          // Cool blue/violet outer disc — fades to transparent at 65%
-          // so the visible edge is a gradient fade, not the clip line.
-          "radial-gradient(ellipse 100% 100% at center, rgba(120,170,220,0.14) 0%, rgba(89,164,192,0.06) 35%, rgba(89,164,192,0) 65%)",
+          // Cool blue/violet outer disc fill.
+          "radial-gradient(ellipse 100% 100% at center, rgba(120,170,220,0.14) 0%, rgba(89,164,192,0.06) 45%, rgba(89,164,192,0) 80%)",
         ].join(", "),
       }}
       aria-hidden
