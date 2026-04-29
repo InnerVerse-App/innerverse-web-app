@@ -8,7 +8,7 @@ import type { UserSupabase } from "@/lib/supabase";
 // Session-end context payload
 // =================================================================
 // Builds the structured-text developer message that goes into Call 1
-// alongside prompt-session-end-v7-gpt-5.2.md and the session transcript.
+// alongside prompt-session-end-v7-gpt-5.4.md and the session transcript.
 // Everything the prompt names under "What you receive" (active
 // goals, theme vocabulary, recent shifts/breakthroughs, coach
 // persona, client first name) gets loaded here and serialized into

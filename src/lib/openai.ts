@@ -5,38 +5,28 @@ import OpenAI from "openai";
 // Model pins (reference/decisions.md § Tech Stack → Model usage).
 // Changing these is a deliberate coaching-parity decision, not a free swap.
 //
-// 2026-04-29 — split assignment. Each call is sized to the task:
-//   * Chat (live coaching dialogue) — gpt-5.2. Newest flagship.
-//     Coaching nuance is the product; we accept the premium here.
-//   * Session-end analyzer — gpt-5.2. Every Sessions card, theme
-//     rating, breakthrough, mindset shift, growth-narrative input,
-//     and goal increment cascades from this single call. Saving
-//     pennies here would risk a quality regression that touches
-//     everything downstream.
-//   * Growth narrative — gpt-5. User-facing prose ("Message from
-//     your Coach" on the home screen), not pure background synthesis.
-//     gpt-5 keeps the writing quality where the user reads it.
-//   * Opener / response parser / style calibration — gpt-5-mini.
-//     All three are mechanical or developer-message-only tasks where
-//     the cheap mini tier is plenty (opener is mechanical; response
-//     parser emits structured JSON against a strict schema; calibration
-//     emits a developer-message guidance string the next coach reads,
-//     never the user).
-//
-// Previous: gpt-5.4-mini across the board (2026-04-28 migration).
-// gpt-5.4-mini doesn't appear in OpenAI's 2026-04-29 pricing table
-// — possible sunset — and even if it lingers, this split sharpens
-// the quality vs cost tradeoff per call.
+// 2026-04-29 (later) — consolidate on the 5.4 family. gpt-5 has been
+// retired by OpenAI and gpt-5.2 is being phased out next, so the
+// mid-day mix of {5.4, 5.2, 5, 5-mini} can no longer hold. Two tiers:
+//   * gpt-5.4 — every call where output quality matters: live chat,
+//     session-end analyzer (its output cascades everywhere downstream),
+//     response parser (data-integrity stakes — wrong disagreement
+//     classification silently deletes real user progress), and
+//     growth narrative (user reads it on the home screen).
+//   * gpt-5.4-mini — the truly unimportant calls: the mechanical
+//     session opener (greeting + acknowledge focus), and the style
+//     calibration aggregator (internal synthesis from pre-digested
+//     signals, never user-facing).
 //
 // Quality bar to hold against: the coaching nuance we relied on
-// gpt-5 for in production. If any specific call regresses on its
-// new pin, swap that one (not the others).
-export const MODEL_SESSION_START = "gpt-5-mini";
+// gpt-5 for in production. If any specific call regresses, the
+// next move is to bump reasoning effort on it before swapping models.
+export const MODEL_SESSION_START = "gpt-5.4-mini";
 export const MODEL_SESSION_CHAT = "gpt-5.4";
-export const MODEL_SESSION_END = "gpt-5.2";
-export const MODEL_SESSION_RESPONSE = "gpt-5-mini";
-export const MODEL_GROWTH_NARRATIVE = "gpt-5";
-export const MODEL_STYLE_CALIBRATION = "gpt-5-mini";
+export const MODEL_SESSION_END = "gpt-5.4";
+export const MODEL_SESSION_RESPONSE = "gpt-5.4";
+export const MODEL_GROWTH_NARRATIVE = "gpt-5.4";
+export const MODEL_STYLE_CALIBRATION = "gpt-5.4-mini";
 
 // Bumped from 2000 (v5) to 4000 (v6) to 6000 (v7) as the prompts
 // have grown. v7 adds per-theme rationales + per-sub-score
