@@ -646,8 +646,37 @@ export function Constellation({
         ref={panelRef}
         className="relative mt-4 aspect-square w-full overflow-hidden rounded-xl"
         style={{
-          background:
-            "radial-gradient(circle at center, rgba(89,164,192,0.12) 0%, transparent 35%), radial-gradient(ellipse at 75% 25%, rgba(89,164,192,0.06) 0%, transparent 50%), radial-gradient(ellipse at 25% 75%, rgba(89,164,192,0.05) 0%, transparent 50%), radial-gradient(circle at center, #02101c 0%, #00050a 80%)",
+          // Multi-layer cosmic atmosphere. All radial-gradients live on
+          // the panel's (un-transformed) background, so they survive the
+          // zoom/pan stack cleanly — the previous Milky Way attempt put
+          // a blurred element inside the TransformComponent and got
+          // clipped into a hard rectangle. Painted top → bottom:
+          //   1. Three overlapping ellipses across the top ~15% form a
+          //      Milky-Way-style stellar band (magenta → violet → blue)
+          //      that stays well above the central data cluster.
+          //   2. A wide thin lower-edge dust hint to balance.
+          //   3. Side wisps at the left + right edges for atmospheric
+          //      depth.
+          //   4. Existing center + corner blue glows (amped slightly).
+          //   5. Base dark teal gradient.
+          background: [
+            // Milky-Way upper band (three overlapping ellipses give it
+            // an organic, non-rectangular silhouette).
+            "radial-gradient(ellipse 28% 8% at 28% 12%, rgba(186,104,200,0.22) 0%, transparent 75%)",
+            "radial-gradient(ellipse 32% 9% at 56% 10%, rgba(167,139,250,0.24) 0%, transparent 75%)",
+            "radial-gradient(ellipse 26% 7% at 82% 14%, rgba(120,160,220,0.18) 0%, transparent 75%)",
+            // Lower-edge dust hint.
+            "radial-gradient(ellipse 50% 10% at 50% 92%, rgba(167,139,250,0.10) 0%, transparent 80%)",
+            // Side wisps.
+            "radial-gradient(ellipse 18% 32% at 6% 55%, rgba(186,104,200,0.10) 0%, transparent 70%)",
+            "radial-gradient(ellipse 18% 32% at 96% 70%, rgba(89,140,200,0.12) 0%, transparent 70%)",
+            // Existing center + corner blue glows (slightly amped).
+            "radial-gradient(circle at center, rgba(89,164,192,0.14) 0%, transparent 38%)",
+            "radial-gradient(ellipse at 75% 25%, rgba(89,164,192,0.07) 0%, transparent 50%)",
+            "radial-gradient(ellipse at 25% 75%, rgba(89,164,192,0.06) 0%, transparent 50%)",
+            // Base.
+            "radial-gradient(circle at center, #02101c 0%, #00050a 80%)",
+          ].join(", "),
           touchAction: "none",
         }}
       >
