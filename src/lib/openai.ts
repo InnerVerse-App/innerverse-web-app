@@ -28,6 +28,16 @@ export const MODEL_SESSION_RESPONSE = "gpt-5.4";
 export const MODEL_GROWTH_NARRATIVE = "gpt-5.4";
 export const MODEL_STYLE_CALIBRATION = "gpt-5.4-mini";
 
+// Voice mode models. Whisper for speech-to-text (user → coach),
+// TTS-1-HD for the coach's voice (coach → user). Voice "nova" picked
+// for warmth and professional pacing — coaching needs a calm,
+// grounded voice without being saccharine. Speed slightly under 1
+// so the coach doesn't sound rushed.
+export const MODEL_TRANSCRIBE = "whisper-1";
+export const MODEL_TTS = "tts-1-hd";
+export const TTS_VOICE = "nova";
+export const TTS_SPEED = 0.95;
+
 // Bumped from 2000 (v5) to 4000 (v6) to 6000 (v7) as the prompts
 // have grown. v7 adds per-theme rationales + per-sub-score
 // rationales, which roughly doubled the typical output size on the
