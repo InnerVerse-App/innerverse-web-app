@@ -34,7 +34,11 @@ export type SessionErrorStage =
   | "style_calibration_truncated"
   | "style_calibration_refusal"
   | "style_calibration_shape"
-  | "style_calibration_db_write";
+  | "style_calibration_db_write"
+  | "voice_transcribe_openai"
+  | "voice_transcribe_input"
+  | "voice_speak_openai"
+  | "voice_speak_input";
 
 export function captureSessionError(
   err: unknown,
