@@ -1253,18 +1253,49 @@ function BreakthroughSun({
 // around the sun. The galaxy's IDENTITY comes from the cluster of
 // stars, not the glow; the glow just gives the impression of an
 // unresolved disc behind them. No more orange-nebula bleed.
+// Stable per-galaxy tilt so each formed galaxy has its own visual
+// orientation in the sky. FNV-1a-ish 32-bit string hash → 0..179
+// degrees. Range capped at 180 because an axis-symmetric ellipse
+// rotated by 180+x looks identical to one rotated by x.
+function galaxyTiltDeg(breakthroughId: string): number {
+  let h = 2166136261 >>> 0;
+  for (let i = 0; i < breakthroughId.length; i++) {
+    h ^= breakthroughId.charCodeAt(i);
+    h = Math.imul(h, 16777619) >>> 0;
+  }
+  return h % 180;
+}
+
+// Faint elliptical galactic disc behind each formed galaxy. Aspect
+// ratio ~2.6:1 (close to a typical spiral galaxy seen at ~30-40°),
+// rotated at a hash-stable angle so neighboring galaxies look
+// distinct. Layered radial gradients give a warm yellow bulge at
+// the core fading into a cool teal disc, then transparent at the
+// rim — same color logic as a real long-exposure photo of a spiral
+// galaxy. Renders behind everything; sun + member dots sit on top.
 function GalaxyGlow({ galaxy }: { galaxy: GalaxyMeta }) {
-  const haloPct = galaxy.radius * 100 * 1.6;
+  const widthPct = galaxy.radius * 100 * 2.8;
+  const heightPct = galaxy.radius * 100 * 1.1;
+  const tilt = galaxyTiltDeg(galaxy.breakthroughId);
   return (
     <span
-      className="pointer-events-none absolute -translate-x-1/2 -translate-y-1/2 rounded-full"
+      className="pointer-events-none absolute"
       style={{
         left: `${galaxy.centerX * 100}%`,
         top: `${galaxy.centerY * 100}%`,
-        width: `${haloPct}%`,
-        height: `${haloPct}%`,
-        background:
-          "radial-gradient(circle, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.025) 35%, transparent 75%)",
+        width: `${widthPct}%`,
+        height: `${heightPct}%`,
+        transform: `translate(-50%, -50%) rotate(${tilt}deg)`,
+        backgroundImage: [
+          // Warm yellow bulge — concentrated near the core where the
+          // sun lives. Mirrors the breakthrough color (#DCA114).
+          "radial-gradient(ellipse 35% 60% at center, rgba(220,161,20,0.20) 0%, rgba(220,161,20,0.08) 35%, transparent 70%)",
+          // Cool teal disc — wider, much fainter, fades to transparent
+          // at the rim so neighboring galaxies / the in-progress
+          // region don't bleed together. Uses the session-color blue
+          // so the disc reads as "this galaxy's stellar population."
+          "radial-gradient(ellipse 100% 100% at center, rgba(89,164,192,0.10) 0%, rgba(89,164,192,0.05) 40%, transparent 80%)",
+        ].join(", "),
       }}
       aria-hidden
     />
