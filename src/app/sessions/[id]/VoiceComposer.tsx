@@ -38,7 +38,14 @@ type Phase =
 type Props = {
   sessionId: string;
   disabled: boolean;
-  sendChat: (text: string) => Promise<string>;
+  // sendChat now takes an optional onSpeakable callback. Voice mode
+  // passes one to start TTS as soon as the chat response yields a
+  // sentence-bounded chunk, reducing the gap between "coach finished
+  // thinking" and "user hears coach voice."
+  sendChat: (
+    text: string,
+    onSpeakable?: (chunk: string) => void,
+  ) => Promise<string>;
 };
 
 // CDN paths for the VAD model + ONNX runtime WASM. Avoids needing to
@@ -69,8 +76,16 @@ export function VoiceComposer({ sessionId, disabled, sendChat }: Props) {
   const encodeWAVRef = useRef<((audio: Float32Array) => ArrayBuffer) | null>(
     null,
   );
-  const audioElRef = useRef<HTMLAudioElement | null>(null);
-  const audioUrlRef = useRef<string | null>(null);
+  // Streaming-TTS playback state. The chat response is chunked into
+  // sentence-bounded pieces, each of which gets its own TTS call.
+  // The resulting audio elements are queued up and played
+  // sequentially. `chatCompleteRef` flips true when the chat stream
+  // ends, so the last-chunk playback completion can transition us
+  // back to listening.
+  const audioQueueRef = useRef<HTMLAudioElement[]>([]);
+  const audioUrlsRef = useRef<string[]>([]);
+  const currentAudioRef = useRef<HTMLAudioElement | null>(null);
+  const chatCompleteRef = useRef(false);
   // Tracks the latest phase synchronously so VAD callbacks (which
   // close over an old setState reading) can dispatch on current
   // truth instead of stale state. React state alone is async-safe
@@ -150,18 +165,85 @@ export function VoiceComposer({ sessionId, disabled, sendChat }: Props) {
       cancelled = true;
       vadRef.current?.destroy();
       vadRef.current = null;
-      const audioEl = audioElRef.current;
-      if (audioEl) {
-        audioEl.pause();
-        audioEl.src = "";
-      }
-      if (audioUrlRef.current) {
-        URL.revokeObjectURL(audioUrlRef.current);
-        audioUrlRef.current = null;
-      }
+      stopAndClearPlayback();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Stop any currently-playing audio, clear the queue, and revoke
+  // every blob URL we created during the turn. Called on unmount and
+  // on error.
+  function stopAndClearPlayback(): void {
+    const current = currentAudioRef.current;
+    if (current) {
+      current.pause();
+      current.src = "";
+      currentAudioRef.current = null;
+    }
+    audioQueueRef.current = [];
+    for (const url of audioUrlsRef.current) {
+      URL.revokeObjectURL(url);
+    }
+    audioUrlsRef.current = [];
+  }
+
+  // Play the next audio in the queue. If the queue is empty, mark
+  // the speaking phase complete only when the chat stream is also
+  // done. Otherwise we just wait — the next enqueue will pick this
+  // back up.
+  function playNextInQueue(): void {
+    const next = audioQueueRef.current.shift();
+    if (!next) {
+      currentAudioRef.current = null;
+      if (chatCompleteRef.current) {
+        // All chunks done + chat finished — return to listening.
+        vadRef.current?.start();
+        setPhaseSafe("listening");
+      }
+      return;
+    }
+    currentAudioRef.current = next;
+    next.onended = playNextInQueue;
+    next.onerror = () => {
+      setErrorMsg("Audio playback failed");
+      setPhaseSafe("error");
+    };
+    void next.play();
+  }
+
+  // Synthesize a single chunk and enqueue the resulting audio. If
+  // nothing is currently playing, kick off playback. Errors are
+  // swallowed silently — a single chunk failure shouldn't kill the
+  // whole turn (the chat already happened).
+  async function synthesizeAndQueue(chunk: string): Promise<void> {
+    try {
+      const res = await fetch(`/api/sessions/${sessionId}/speak`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: chunk }),
+      });
+      if (!res.ok) return;
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      audioUrlsRef.current.push(url);
+      const audio = new Audio(url);
+      audioQueueRef.current.push(audio);
+      // Start playback if nothing is currently playing AND we're in
+      // the speaking phase (or we just transitioned into it).
+      if (!currentAudioRef.current) {
+        // Move to speaking phase as soon as audio is ready, even if
+        // chat stream isn't done. The earlier we start, the lower
+        // the user-perceived latency.
+        if (phaseRef.current !== "speaking") {
+          setPhaseSafe("speaking");
+        }
+        playNextInQueue();
+      }
+    } catch {
+      // Silent: dropping a single chunk is better than aborting the
+      // whole turn. Sentry-side capture happens in /speak.
+    }
+  }
 
   async function handleSpeechEnd(audio: Float32Array): Promise<void> {
     const encode = encodeWAVRef.current;
@@ -201,50 +283,45 @@ export function VoiceComposer({ sessionId, disabled, sendChat }: Props) {
       return;
     }
 
+    // Reset playback state for this turn — fresh queue + fresh
+    // chat-complete flag.
+    stopAndClearPlayback();
+    chatCompleteRef.current = false;
+
     setPhaseSafe("thinking");
     let responseText: string;
     try {
-      responseText = await sendChat(transcribed);
+      responseText = await sendChat(transcribed, (chunk) => {
+        // Each speakable chunk gets its own /speak call. The first
+        // one to enqueue triggers playback; subsequent chunks queue
+        // up and play sequentially. Streaming-TTS-of-sorts: while
+        // the chat is still streaming on top, audio is already
+        // playing on the bottom.
+        void synthesizeAndQueue(chunk);
+      });
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : "Coach response failed");
       setPhaseSafe("error");
       return;
     }
-    if (!responseText.trim()) {
+
+    // Chat stream is done. Mark the flag so the audio queue's
+    // last-item completion knows it's safe to transition back to
+    // listening. If no chunks ever queued (empty response, error
+    // partway through), transition immediately.
+    chatCompleteRef.current = true;
+    if (!currentAudioRef.current && audioQueueRef.current.length === 0) {
       vadRef.current?.start();
       setPhaseSafe("listening");
       return;
     }
 
-    setPhaseSafe("speaking");
-    try {
-      const res = await fetch(`/api/sessions/${sessionId}/speak`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: responseText }),
-      });
-      if (!res.ok) throw new Error(`Speech synthesis failed (${res.status})`);
-      const audioBlob = await res.blob();
-      const url = URL.createObjectURL(audioBlob);
-      if (audioUrlRef.current) URL.revokeObjectURL(audioUrlRef.current);
-      audioUrlRef.current = url;
-      const a = new Audio(url);
-      audioElRef.current = a;
-      a.onended = () => {
-        // Coach finished speaking — resume VAD for the next turn.
-        vadRef.current?.start();
-        setPhaseSafe("listening");
-      };
-      a.onerror = () => {
-        setErrorMsg("Audio playback failed");
-        setPhaseSafe("error");
-      };
-      await a.play();
-    } catch (err) {
-      setErrorMsg(
-        err instanceof Error ? err.message : "Couldn't play coach voice",
-      );
-      setPhaseSafe("error");
+    if (!responseText.trim()) {
+      // Defensive: chat returned empty. Already handled above by the
+      // queue check, but keep this for clarity.
+      stopAndClearPlayback();
+      vadRef.current?.start();
+      setPhaseSafe("listening");
     }
   }
 
