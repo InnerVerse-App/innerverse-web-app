@@ -544,7 +544,13 @@ export function computeLayout(input: {
             ),
           )
         : recencyOpacity(g.lastEngagedAt, nowMs, ageWindowDays);
-    const tailLength = 0.035 + op * 0.06;
+    // Tail length scales with engagement recency. Bumped vs the
+    // original (0.035 + op*0.06) after operator references showed
+    // real comets have substantially longer streaks. Range now
+    // 0.07 → 0.18 panel-fractions — the visible streak runs ~5-15%
+    // of the panel diagonal, comfortably inside the rim even after
+    // the relaxation pass nudges the head position.
+    const tailLength = 0.07 + op * 0.11;
     return {
       ...g,
       x: clampPanel(x),
