@@ -1402,14 +1402,24 @@ function BreakthroughSun({
 function GalaxyGlow({ galaxy }: { galaxy: GalaxyMeta }) {
   const widthPct = galaxy.radius * 100 * 3.2;
   const heightPct = galaxy.radius * 100 * 1.1;
-  // Soft feathered-ellipse mask. Replaces the previous border-radius
-  // clip (which was elliptical but had a hard line). White is fully
-  // visible; transparent is fully hidden. Opaque inner 30% → smooth
-  // alpha falloff → fully transparent at 100% — gives a fluffy disc
-  // with no edge to point at. Same string fed to both -webkit-mask-
-  // image and mask-image for cross-browser support.
+  // Soft feathered-ellipse mask. Two critical details:
+  //
+  // 1. `closest-side` — the mask ellipse's semi-axes equal the
+  //    distances from the box center to the closest sides (= half
+  //    width and half height). This makes the gradient ellipse
+  //    inscribed in the rectangle, so the rectangle's CORNERS are
+  //    at gradient position > 1.0 (past the 100% stop). At that
+  //    distance the alpha is the final stop value (0) → corners
+  //    fully invisible, no rectangle ever visible. The previous
+  //    pass used `95% 88%` which left corners at gradient position
+  //    ~0.78 with alpha ~0.36, so the rectangle showed through.
+  //
+  // 2. Gradual stop curve — alpha drops slowly from center, with
+  //    most of the falloff in the OUTER half of the disc. Inside
+  //    35% the disc is fully visible; the visible edge fades over
+  //    the outer 50% rather than near a hard rim.
   const softMask =
-    "radial-gradient(ellipse 95% 88% at 50% 50%, rgba(255,255,255,1) 0%, rgba(255,255,255,1) 30%, rgba(255,255,255,0.75) 55%, rgba(255,255,255,0.35) 78%, rgba(255,255,255,0) 100%)";
+    "radial-gradient(ellipse closest-side at 50% 50%, rgba(255,255,255,1) 0%, rgba(255,255,255,1) 35%, rgba(255,255,255,0.85) 55%, rgba(255,255,255,0.5) 75%, rgba(255,255,255,0.2) 90%, rgba(255,255,255,0) 100%)";
   return (
     <span
       className="pointer-events-none absolute"
