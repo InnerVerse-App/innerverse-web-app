@@ -15,18 +15,37 @@ import { supabaseForUser } from "@/lib/supabase";
 // Bubble app is discovered to use a different N.
 const RECENT_BREAKTHROUGHS_N = 5;
 
-// prompt-coaching-chat.md is bundled via next.config.ts
-// outputFileTracingIncludes. Read once at module load; the file
-// never changes at runtime.
-const COACHING_CHAT_PROMPT = readFileSync(
-  path.join(process.cwd(), "reference", "prompt-coaching-chat.md"),
+// Two-prompt session model:
+//   1. prompt-session-opener.md — rules for the FIRST message only.
+//      Carries the focus-aware opening logic ("acknowledge the goal
+//      or shift if one was passed; otherwise broad invitation").
+//   2. prompt-v11.3.md — the master coaching prompt. Governs every
+//      turn after the opener. Sent verbatim, never altered.
+// Both files are bundled via next.config.ts outputFileTracingIncludes
+// (the `prompt-*.md` glob already covers them). Read once at module
+// load; files never change at runtime.
+//
+// On session start we send both as developer messages, plus a third
+// developer message with the client profile. The opener rules
+// generate turn 1; from turn 2 onward `previous_response_id`
+// chaining keeps both prompts in the conversation thread on
+// OpenAI's side, so v11.3 governs ongoing coaching while still
+// having the opener exchange (the AI's intro + the user's reply)
+// in context.
+const SESSION_OPENER_PROMPT = readFileSync(
+  path.join(process.cwd(), "reference", "prompt-session-opener.md"),
+  "utf8",
+).trim();
+const COACHING_PROMPT = readFileSync(
+  path.join(process.cwd(), "reference", "prompt-v11.3.md"),
   "utf8",
 ).trim();
 
-// The two `developer`-role messages that /v1/responses expects on a
-// session-start call. Shape mirrors the Bubble API connector exactly
-// (reference/screenshots/api-connector/workflow-openai-session-start-*.png).
+// The three `developer`-role messages that /v1/responses expects on
+// a session-start call: opener rules, master coaching prompt,
+// then the per-session client profile.
 export type SessionStartInput = [
+  { role: "developer"; content: string },
   { role: "developer"; content: string },
   { role: "developer"; content: string },
 ];
@@ -161,7 +180,8 @@ export async function buildSessionStartInput(args: {
   });
 
   return [
-    { role: "developer", content: COACHING_CHAT_PROMPT },
+    { role: "developer", content: SESSION_OPENER_PROMPT },
+    { role: "developer", content: COACHING_PROMPT },
     { role: "developer", content: profile },
   ];
 }
