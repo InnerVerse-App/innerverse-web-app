@@ -2,66 +2,154 @@
 
 import { useEffect, useRef, useState } from "react";
 
-// Voice mode composer. Replaces the textarea + send button when voice
-// mode is on. Push-to-talk for now (PR 2 of 5); VAD lands in PR 3 to
-// remove the manual button-hold and make the conversation continuous.
+// Voice mode composer. PR 3 of 5: VAD (voice activity detection)
+// replaces the previous push-to-talk button. Continuous listening:
+// the user just speaks, and the system auto-detects start/end of
+// speech using Silero VAD (an ONNX model running in the browser via
+// @ricky0123/vad-web).
 //
 // State machine:
-//   idle        — ready for the next turn, button is the affordance
-//   recording   — mic open, capturing audio (button held down)
-//   transcribing — sending audio to /api/sessions/[id]/transcribe
-//   thinking    — chat call running, coach formulating response
-//   speaking    — audio playing back via HTMLAudioElement
-//   error       — something failed; user can dismiss and retry
+//   loading     — VAD library + ONNX model still downloading
+//   listening   — VAD is active, watching for speech
+//   recording   — VAD detected speech, capturing the utterance
+//   transcribing — sending captured audio to /transcribe
+//   thinking    — chat call running
+//   speaking    — coach audio playing back
+//   paused      — user manually stopped listening
+//   error       — something failed
 //
-// Owns its own phase. Parent ChatView passes:
-//   sessionId — to scope the transcribe + speak endpoints
-//   sendChat(text) — runs the chat exchange and returns the final
-//     AI response text, which we then forward to /speak.
+// VAD is paused during transcribing/thinking/speaking so we don't
+// pick up our own audio (PR 5 will add interruption — for now,
+// silent passthrough during the coach's turn).
+//
+// The VAD library + WASM are dynamic-imported so users who never
+// engage voice mode don't pay the bundle cost.
 
 type Phase =
-  | "idle"
+  | "loading"
+  | "listening"
   | "recording"
   | "transcribing"
   | "thinking"
   | "speaking"
+  | "paused"
   | "error";
 
 type Props = {
   sessionId: string;
   disabled: boolean;
-  // Sends a text message through the existing chat pipeline. Resolves
-  // with the final assistant response text once streaming completes.
-  // Throws on error; VoiceComposer handles the failure UI.
   sendChat: (text: string) => Promise<string>;
 };
 
+// CDN paths for the VAD model + ONNX runtime WASM. Avoids needing to
+// copy these into public/ at build time.
+const VAD_ASSET_BASE =
+  "https://cdn.jsdelivr.net/npm/@ricky0123/vad-web@0.0.30/dist/";
+const ORT_WASM_BASE =
+  "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.25.1/dist/";
+
+// Minimal subset of MicVAD's API that we actually call. Lets us type
+// the dynamic-import return without pulling the full library types
+// into the client bundle eagerly. start/pause/destroy are async in
+// the underlying library but we don't await them — fire and forget
+// is fine for these lifecycle calls.
+type MicVADInstance = {
+  start: () => Promise<void>;
+  pause: () => Promise<void>;
+  destroy: () => Promise<void>;
+};
+
 export function VoiceComposer({ sessionId, disabled, sendChat }: Props) {
-  const [phase, setPhase] = useState<Phase>("idle");
+  const [phase, setPhase] = useState<Phase>("loading");
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const audioChunksRef = useRef<Blob[]>([]);
-  const streamRef = useRef<MediaStream | null>(null);
+  const vadRef = useRef<MicVADInstance | null>(null);
+  // encodeWAV is captured during dynamic-import so we can reuse it
+  // for each utterance without re-importing.
+  const encodeWAVRef = useRef<((audio: Float32Array) => ArrayBuffer) | null>(
+    null,
+  );
   const audioElRef = useRef<HTMLAudioElement | null>(null);
-  // Tracks the most recent audio blob URL so we can revoke it on
-  // cleanup. createObjectURL leaks otherwise.
   const audioUrlRef = useRef<string | null>(null);
+  // Tracks the latest phase synchronously so VAD callbacks (which
+  // close over an old setState reading) can dispatch on current
+  // truth instead of stale state. React state alone is async-safe
+  // but this is a callback fired by the worklet thread.
+  const phaseRef = useRef<Phase>("loading");
+  function setPhaseSafe(next: Phase): void {
+    phaseRef.current = next;
+    setPhase(next);
+  }
 
-  // Cleanup on unmount: stop any active recording, release the mic,
-  // pause + revoke any in-flight audio playback.
+  // Dynamic import + VAD bootstrap. Runs once on mount; teardown
+  // destroys the VAD instance and releases the mic stream.
   useEffect(() => {
-    return () => {
-      const recorder = mediaRecorderRef.current;
-      if (recorder && recorder.state !== "inactive") {
-        try {
-          recorder.stop();
-        } catch {
-          // ignore — we're tearing down anyway
+    let cancelled = false;
+    (async () => {
+      try {
+        const vadModule = await import("@ricky0123/vad-web");
+        encodeWAVRef.current = vadModule.utils.encodeWAV;
+        if (cancelled) return;
+        const vad = await vadModule.MicVAD.new({
+          baseAssetPath: VAD_ASSET_BASE,
+          onnxWASMBasePath: ORT_WASM_BASE,
+          // Default thresholds nudged slightly: coaching pauses are
+          // longer than typical conversation pauses, so we extend
+          // the redemption window so a thoughtful "...uhm..." doesn't
+          // accidentally end the utterance early.
+          positiveSpeechThreshold: 0.55,
+          negativeSpeechThreshold: 0.4,
+          // Minimum utterance length — shorter than this counts as a
+          // misfire and is dropped (typical accidental cough).
+          minSpeechMs: 250,
+          // Pad before the detected speech to capture leading breaths.
+          preSpeechPadMs: 250,
+          // Wait this long after speech-end probability drops before
+          // firing onSpeechEnd. Coaching needs longer pauses than
+          // chat — set generously.
+          redemptionMs: 800,
+          onSpeechStart: () => {
+            if (phaseRef.current === "listening") {
+              setPhaseSafe("recording");
+            }
+          },
+          onSpeechEnd: (audio) => {
+            // We only act on speech that ended while we were actively
+            // recording. If a turn is in flight (transcribing,
+            // thinking, speaking) we ignore stray callbacks.
+            if (phaseRef.current === "recording") {
+              void handleSpeechEnd(audio);
+            }
+          },
+          onVADMisfire: () => {
+            if (phaseRef.current === "recording") {
+              setPhaseSafe("listening");
+            }
+          },
+        });
+        if (cancelled) {
+          vad.destroy();
+          return;
         }
+        vadRef.current = vad;
+        vad.start();
+        setPhaseSafe("listening");
+      } catch (err) {
+        if (cancelled) return;
+        const message =
+          err instanceof Error
+            ? err.name === "NotAllowedError"
+              ? "Microphone permission denied. Allow it in your browser settings to use voice mode."
+              : err.message
+            : "Couldn't start voice mode.";
+        setErrorMsg(message);
+        setPhaseSafe("error");
       }
-      streamRef.current?.getTracks().forEach((t) => t.stop());
-      streamRef.current = null;
+    })();
+    return () => {
+      cancelled = true;
+      vadRef.current?.destroy();
+      vadRef.current = null;
       const audioEl = audioElRef.current;
       if (audioEl) {
         audioEl.pause();
@@ -72,81 +160,27 @@ export function VoiceComposer({ sessionId, disabled, sendChat }: Props) {
         audioUrlRef.current = null;
       }
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  async function startRecording(): Promise<void> {
-    if (phase !== "idle" || disabled) return;
-    setErrorMsg(null);
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
-        },
-      });
-      streamRef.current = stream;
-      // webm/opus is the most reliable cross-browser MediaRecorder
-      // mimeType. Whisper accepts it directly.
-      const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
-        ? "audio/webm;codecs=opus"
-        : MediaRecorder.isTypeSupported("audio/webm")
-          ? "audio/webm"
-          : "";
-      const recorder = mimeType
-        ? new MediaRecorder(stream, { mimeType })
-        : new MediaRecorder(stream);
-      mediaRecorderRef.current = recorder;
-      audioChunksRef.current = [];
-      recorder.ondataavailable = (e: BlobEvent) => {
-        if (e.data.size > 0) audioChunksRef.current.push(e.data);
-      };
-      recorder.start();
-      setPhase("recording");
-    } catch (err) {
-      const message =
-        err instanceof Error
-          ? err.name === "NotAllowedError"
-            ? "Microphone permission denied. Allow it in your browser settings to use voice mode."
-            : err.message
-          : "Couldn't start recording.";
-      setErrorMsg(message);
-      setPhase("error");
-    }
-  }
-
-  async function stopRecordingAndProcess(): Promise<void> {
-    const recorder = mediaRecorderRef.current;
-    if (!recorder || recorder.state === "inactive") return;
-
-    // MediaRecorder.stop() fires `dataavailable` then `stop` events
-    // asynchronously. Wait for stop before continuing so we have all
-    // the audio chunks.
-    await new Promise<void>((resolve) => {
-      recorder.onstop = () => resolve();
-      recorder.stop();
-    });
-    streamRef.current?.getTracks().forEach((t) => t.stop());
-    streamRef.current = null;
-    mediaRecorderRef.current = null;
-
-    const recorderMime = recorder.mimeType || "audio/webm";
-    const blob = new Blob(audioChunksRef.current, { type: recorderMime });
-    audioChunksRef.current = [];
-
-    // Reject too-short utterances (likely accidental tap). Whisper
-    // would charge us $0.0001 to transcribe silence anyway.
-    if (blob.size < 1000) {
-      setPhase("idle");
+  async function handleSpeechEnd(audio: Float32Array): Promise<void> {
+    const encode = encodeWAVRef.current;
+    if (!encode) {
+      setErrorMsg("Voice mode not ready");
+      setPhaseSafe("error");
       return;
     }
+    // Pause VAD while we run the turn. Avoids picking up our own
+    // playback as input. Resumed once the coach's audio finishes.
+    vadRef.current?.pause();
 
-    setPhase("transcribing");
+    setPhaseSafe("transcribing");
     let transcribed: string;
     try {
+      const wav = encode(audio);
+      const blob = new Blob([wav], { type: "audio/wav" });
       const fd = new FormData();
-      const ext = recorderMime.includes("webm") ? "webm" : "mp4";
-      fd.append("file", blob, `audio.${ext}`);
+      fd.append("file", blob, "audio.wav");
       const res = await fetch(`/api/sessions/${sessionId}/transcribe`, {
         method: "POST",
         body: fd,
@@ -156,33 +190,33 @@ export function VoiceComposer({ sessionId, disabled, sendChat }: Props) {
       transcribed = (data.text ?? "").trim();
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : "Transcription failed");
-      setPhase("error");
+      setPhaseSafe("error");
       return;
     }
     if (!transcribed) {
-      setPhase("idle");
+      // No speech detected by Whisper — silent passthrough, resume
+      // listening for the next utterance.
+      vadRef.current?.start();
+      setPhaseSafe("listening");
       return;
     }
 
-    setPhase("thinking");
+    setPhaseSafe("thinking");
     let responseText: string;
     try {
       responseText = await sendChat(transcribed);
     } catch (err) {
-      setErrorMsg(
-        err instanceof Error ? err.message : "Coach response failed",
-      );
-      setPhase("error");
+      setErrorMsg(err instanceof Error ? err.message : "Coach response failed");
+      setPhaseSafe("error");
       return;
     }
-
     if (!responseText.trim()) {
-      // No text to speak; treat as a silent turn and reset.
-      setPhase("idle");
+      vadRef.current?.start();
+      setPhaseSafe("listening");
       return;
     }
 
-    setPhase("speaking");
+    setPhaseSafe("speaking");
     try {
       const res = await fetch(`/api/sessions/${sessionId}/speak`, {
         method: "POST",
@@ -190,85 +224,125 @@ export function VoiceComposer({ sessionId, disabled, sendChat }: Props) {
         body: JSON.stringify({ text: responseText }),
       });
       if (!res.ok) throw new Error(`Speech synthesis failed (${res.status})`);
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      // Revoke any previous URL before assigning the new one.
+      const audioBlob = await res.blob();
+      const url = URL.createObjectURL(audioBlob);
       if (audioUrlRef.current) URL.revokeObjectURL(audioUrlRef.current);
       audioUrlRef.current = url;
-      const audio = new Audio(url);
-      audioElRef.current = audio;
-      audio.onended = () => setPhase("idle");
-      audio.onerror = () => {
-        setErrorMsg("Audio playback failed");
-        setPhase("error");
+      const a = new Audio(url);
+      audioElRef.current = a;
+      a.onended = () => {
+        // Coach finished speaking — resume VAD for the next turn.
+        vadRef.current?.start();
+        setPhaseSafe("listening");
       };
-      await audio.play();
+      a.onerror = () => {
+        setErrorMsg("Audio playback failed");
+        setPhaseSafe("error");
+      };
+      await a.play();
     } catch (err) {
       setErrorMsg(
         err instanceof Error ? err.message : "Couldn't play coach voice",
       );
-      setPhase("error");
+      setPhaseSafe("error");
     }
+  }
+
+  function pauseListening(): void {
+    if (phase !== "listening") return;
+    vadRef.current?.pause();
+    setPhaseSafe("paused");
+  }
+
+  function resumeListening(): void {
+    if (phase !== "paused") return;
+    vadRef.current?.start();
+    setPhaseSafe("listening");
   }
 
   function dismissError(): void {
     setErrorMsg(null);
-    setPhase("idle");
+    if (vadRef.current) {
+      vadRef.current.start();
+      setPhaseSafe("listening");
+    } else {
+      setPhaseSafe("loading");
+    }
   }
-
-  const buttonDisabled =
-    disabled ||
-    phase === "transcribing" ||
-    phase === "thinking" ||
-    phase === "speaking" ||
-    phase === "error";
 
   const statusText = (() => {
     switch (phase) {
-      case "idle":
-        return "Hold to talk";
+      case "loading":
+        return "Starting voice mode…";
+      case "listening":
+        return "Listening — speak whenever you're ready";
       case "recording":
-        return "Listening…";
+        return "Hearing you…";
       case "transcribing":
         return "Transcribing…";
       case "thinking":
         return "Coach is thinking…";
       case "speaking":
         return "Coach is speaking…";
+      case "paused":
+        return "Paused — tap to resume listening";
       case "error":
         return errorMsg ?? "Something went wrong";
     }
   })();
 
+  // The big visual element: a circle that pulses according to the
+  // current phase. No push-to-talk button anymore — the user just
+  // speaks. The circle is purely decorative + status; tapping it
+  // toggles between listening and paused.
+  const ringClass = (() => {
+    switch (phase) {
+      case "listening":
+        return "border-brand-primary/60 bg-brand-primary/10 animate-pulse";
+      case "recording":
+        return "border-red-400 bg-red-500/25 animate-pulse";
+      case "transcribing":
+      case "thinking":
+        return "border-brand-primary/40 bg-brand-primary/5";
+      case "speaking":
+        return "border-brand-primary bg-brand-primary/30 animate-pulse";
+      case "paused":
+        return "border-neutral-500/60 bg-neutral-500/10";
+      case "error":
+        return "border-red-400/60 bg-red-500/10";
+      case "loading":
+      default:
+        return "border-neutral-500/40 bg-neutral-500/5";
+    }
+  })();
+
+  function onCircleTap(): void {
+    if (phase === "listening") {
+      pauseListening();
+    } else if (phase === "paused") {
+      resumeListening();
+    }
+  }
+
+  const circleDisabled =
+    disabled ||
+    phase === "loading" ||
+    phase === "recording" ||
+    phase === "transcribing" ||
+    phase === "thinking" ||
+    phase === "speaking" ||
+    phase === "error";
+
   return (
     <div className="mx-auto flex w-full max-w-2xl flex-col items-center gap-3">
       <button
         type="button"
-        disabled={buttonDisabled}
-        onPointerDown={(e) => {
-          e.preventDefault();
-          void startRecording();
-        }}
-        onPointerUp={(e) => {
-          e.preventDefault();
-          if (phase === "recording") void stopRecordingAndProcess();
-        }}
-        onPointerLeave={() => {
-          // If the user drags off the button while recording, treat
-          // as a release. Without this, the recording would continue
-          // until the next pointerup anywhere on the document.
-          if (phase === "recording") void stopRecordingAndProcess();
-        }}
+        onClick={onCircleTap}
+        disabled={circleDisabled}
         aria-label={statusText}
         className={
-          "h-20 w-20 rounded-full border-2 transition active:scale-95 disabled:cursor-progress " +
-          (phase === "recording"
-            ? "border-red-400 bg-red-500/20 animate-pulse"
-            : phase === "speaking"
-              ? "border-brand-primary bg-brand-primary/20"
-              : phase === "error"
-                ? "border-red-400/60 bg-red-500/10"
-                : "border-brand-primary/60 bg-brand-primary/10 hover:bg-brand-primary/20")
+          "h-20 w-20 rounded-full border-2 transition active:scale-95 disabled:cursor-default " +
+          ringClass
         }
       >
         <MicIcon className="mx-auto h-8 w-8 text-white" />
