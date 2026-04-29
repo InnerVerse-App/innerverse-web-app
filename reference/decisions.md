@@ -61,7 +61,7 @@ The order can shift based on tester feedback. The principle: each version adds w
 
 ## Architecture
 
-v1 uses `reference/prompt-coaching-chat.md` as the session-start system prompt, matching the live Bubble app's API Connector behaviour (literal `Value` field starts with "You are a skilled human c..."). `reference/prompt-v11.3.md` was stored in the Bubble app config (see `app-data-export.json` → `system prompt`) but is **not wired to any live OpenAI call** — it is kept in `reference/` for future prompt iteration work and should not be used in v1. Session-end analysis uses `reference/prompt-session-end-v3.md`.
+Coaching uses a two-prompt model. `reference/prompt-session-opener.md` governs the coach's first message only — focus-aware opening logic ("acknowledge the goal/shift if one was passed, otherwise broad invitation"). `reference/prompt-v11.3.md` is the master coaching prompt the operator authored; it governs every turn after the opener and is sent verbatim, never altered. Both are sent as developer messages at session start; from turn 2 onward `previous_response_id` chaining keeps both in the conversation thread on OpenAI's side. Session-end analysis uses `reference/prompt-session-end-v7.md`. Post-session reflection parsing uses `reference/prompt-session-response-v2.md`. Cumulative growth narrative uses `reference/prompt-growth-narrative-v1.md`. Superseded versions live in `reference/archive/` for diff/reference.
 
 **No staged pipeline (router + specialists + critic) yet** — that's a deliberate future architecture change after v1 ships and validates with cold users.
 
