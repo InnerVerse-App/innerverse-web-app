@@ -30,6 +30,18 @@ const MAX_OUTPUT_TOKENS = 1500;
 // any session anyway.
 const MAX_TRANSCRIPT_MESSAGES = 150;
 
+// Maximum drift per update. Calibration is meant to be a slow rolling
+// adjustment — the prompt instructs the LLM to honor this, but a
+// misbehaving model could still emit a big jump and we'd write it
+// directly without this clamp.
+const MAX_DRIFT_PER_UPDATE = 0.3;
+
+function clampDrift(current: number, proposed: number): number {
+  const lower = Math.max(-1, current - MAX_DRIFT_PER_UPDATE);
+  const upper = Math.min(1, current + MAX_DRIFT_PER_UPDATE);
+  return Math.max(lower, Math.min(upper, proposed));
+}
+
 const SCHEMA = {
   type: "object",
   additionalProperties: false,
@@ -200,15 +212,21 @@ export async function runStyleCalibrationUpdate(
       .select("display_name")
       .eq("id", userId)
       .maybeSingle(),
+    // Explicit user_id filters here are belt-and-suspenders — RLS
+    // already restricts both tables to the caller's rows, but a
+    // crafted ctx.userId mismatch (or future RLS regression) would
+    // be silently ignored without the explicit eq.
     ctx.client
       .from("coaching_state")
       .select("directness, warmth, challenge, recent_style_feedback")
+      .eq("user_id", userId)
       .maybeSingle(),
     ctx.client
       .from("sessions")
       .select(
         "id, ended_at, aligned_rating, helpful_rating, tone_rating, user_response_text",
       )
+      .eq("user_id", userId)
       .not("ended_at", "is", null)
       .order("ended_at", { ascending: false })
       .limit(RECENT_SESSIONS_N),
@@ -314,6 +332,16 @@ export async function runStyleCalibrationUpdate(
     throw err;
   }
 
+  // Code-level drift clamp. The prompt instructs the LLM to move
+  // each float by no more than ~0.3 from its current value, but the
+  // schema validator only enforces the absolute -1..+1 range. A
+  // misbehaving model could still emit a +0.8 jump from a 0.1 base
+  // and we'd write it directly. Clamping here keeps calibration a
+  // slow drift no matter what the model returns.
+  const directness = clampDrift(state.directness, parsed.directness);
+  const warmth = clampDrift(state.warmth, parsed.warmth);
+  const challenge = clampDrift(state.challenge, parsed.challenge);
+
   const recentStyleFeedback = renderStyleFeedback(parsed);
 
   const { error } = await ctx.client
@@ -321,9 +349,9 @@ export async function runStyleCalibrationUpdate(
     .upsert(
       {
         user_id: userId,
-        directness: parsed.directness,
-        warmth: parsed.warmth,
-        challenge: parsed.challenge,
+        directness,
+        warmth,
+        challenge,
         recent_style_feedback: recentStyleFeedback,
       },
       { onConflict: "user_id" },
