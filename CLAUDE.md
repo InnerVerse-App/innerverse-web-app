@@ -18,11 +18,13 @@ wrong — update `decisions.md` first, then adjust.
 
 Other reference material under `reference/`:
 
-- `prompt-session-opener.md` — focus-aware opening rules; governs the coach's first message only
-- `prompt-v11.3.md` — master coaching prompt (operator-authored); governs every turn after the opener, sent verbatim
-- `prompt-session-end-v7.md` — session-end analysis prompt (returns structured JSON)
-- `prompt-session-response-v2.md` — post-session reflection parser
-- `prompt-growth-narrative-v1.md` — cumulative "Message from your Coach" letter
+- Live prompts embed their pinned model in the filename (e.g., `prompt-X-gpt-5.2.md`). When you change the model in `src/lib/openai.ts`, rename the file to match.
+  - `prompt-session-opener-gpt-5-mini.md` — focus-aware opening rules; governs the coach's first message only
+  - `prompt-v11.3-gpt-5.2.md` — master coaching prompt (operator-authored); governs every turn after the opener, sent verbatim
+  - `prompt-session-end-v7-gpt-5.2.md` — session-end analysis prompt (returns structured JSON)
+  - `prompt-session-response-v2-gpt-5-mini.md` — post-session reflection parser
+  - `prompt-growth-narrative-v1-gpt-5.md` — cumulative "Message from your Coach" letter
+  - `prompt-style-calibration-v1-gpt-5-mini.md` — feedback-driven style calibration aggregator
 - `archive/` — superseded prompts (prompt-coaching-chat.md, session-end v5/v6, session-response v1) kept for diff/reference, not loaded by any live code
 - `app-data-export.json` — privacy policy, terms, legacy Bubble config
 - `screenshots/` — UI, data-type, backend-workflow, API-connector, Figma

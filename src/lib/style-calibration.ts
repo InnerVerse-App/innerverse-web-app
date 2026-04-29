@@ -10,8 +10,15 @@ import {
 } from "@/lib/openai";
 import type { UserSupabase } from "@/lib/supabase";
 
+// Filename suffix `-gpt-5-mini` names the model this prompt is pinned
+// to. If you change MODEL_STYLE_CALIBRATION in src/lib/openai.ts,
+// rename the file to match and update this path.
 const CALIBRATION_PROMPT = readFileSync(
-  path.join(process.cwd(), "reference", "prompt-style-calibration-v1.md"),
+  path.join(
+    process.cwd(),
+    "reference",
+    "prompt-style-calibration-v1-gpt-5-mini.md",
+  ),
   "utf8",
 ).trim();
 
@@ -98,7 +105,7 @@ type MessageRow = {
 
 // Builds the structured developer message the aggregator prompt
 // expects. Mirrors the four sections described under "What you
-// receive" in prompt-style-calibration-v1.md.
+// receive" in prompt-style-calibration-v1-gpt-5-mini.md.
 function buildContext(args: {
   firstName: string;
   state: CoachingStateRow;
