@@ -38,6 +38,26 @@ html {
   opacity: clamp(0.75, calc(0.75 + (var(--zoom-scale, 1) - 1) * 0.2), 1);
 }
 
+/* Far-star twinkle. Slow, asymmetric opacity oscillation so the
+   background field reads as alive rather than frozen. Each star
+   is given an inline animation-delay (and animation-duration,
+   randomized in the renderer) so they don't pulse in lockstep.
+   GPU-cheap (opacity only) and respects reduced-motion. */
+@keyframes star-twinkle {
+  0%, 100% { opacity: var(--twinkle-min, 0.25); }
+  50% { opacity: var(--twinkle-max, 0.85); }
+}
+.star-twinkle {
+  animation: star-twinkle var(--twinkle-duration, 4s) ease-in-out infinite;
+  animation-delay: var(--twinkle-delay, 0s);
+}
+@media (prefers-reduced-motion: reduce) {
+  .star-twinkle {
+    animation: none;
+    opacity: var(--twinkle-min, 0.25);
+  }
+}
+
 /* Feedback survey slider — yellow thumb on a teal track. Default
    accent-color can only color the thumb+filled-track together; we
    need them to differ to match the canonical session-complete UI

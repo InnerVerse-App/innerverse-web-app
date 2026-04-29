@@ -85,21 +85,60 @@ const BREAKTHROUGH_COLOR = "#DCA114";
 const MINDSET_COLOR = "#A78BFA";
 const GOAL_COLOR = "#4ADE80";
 
-// Decorative far-background "stars" — fixed positions, no data
-// meaning, just adds depth to the dark sky behind the data points.
-const FAR_STARS: Array<{ x: number; y: number; size: number }> = [
-  { x: 12, y: 15, size: 1 },
-  { x: 35, y: 22, size: 1.5 },
-  { x: 58, y: 8, size: 1 },
-  { x: 78, y: 30, size: 1 },
-  { x: 92, y: 45, size: 1 },
-  { x: 8, y: 60, size: 1 },
-  { x: 28, y: 75, size: 1.5 },
-  { x: 50, y: 82, size: 1 },
-  { x: 70, y: 90, size: 1 },
-  { x: 22, y: 38, size: 1 },
-  { x: 65, y: 55, size: 1 },
-  { x: 88, y: 18, size: 1 },
+// Decorative far-background "stars" — fixed positions, no data meaning,
+// just give the dark sky depth and a sense of life behind the data
+// points. Each star carries its own twinkle parameters so the field
+// pulses asymmetrically (no lockstep) and reads as alive. Size, base
+// brightness, twinkle duration and delay are all hash-stable per star
+// — same render across reloads. Density tuned: enough to feel like
+// space, sparse enough not to compete with the data dots. The
+// fixed-list layout keeps positioning deterministic without a PRNG.
+const FAR_STARS: Array<{
+  x: number;
+  y: number;
+  size: number;
+  baseOpacity: number;
+  twinkleMin: number;
+  twinkleMax: number;
+  duration: number;
+  delay: number;
+}> = [
+  { x: 6, y: 8, size: 1, baseOpacity: 0.5, twinkleMin: 0.2, twinkleMax: 0.7, duration: 4.2, delay: 0 },
+  { x: 14, y: 21, size: 1.5, baseOpacity: 0.6, twinkleMin: 0.3, twinkleMax: 0.85, duration: 5.5, delay: 1.3 },
+  { x: 22, y: 5, size: 1, baseOpacity: 0.4, twinkleMin: 0.15, twinkleMax: 0.6, duration: 3.8, delay: 0.7 },
+  { x: 31, y: 14, size: 2, baseOpacity: 0.7, twinkleMin: 0.4, twinkleMax: 0.95, duration: 6, delay: 2.1 },
+  { x: 38, y: 28, size: 1, baseOpacity: 0.45, twinkleMin: 0.2, twinkleMax: 0.65, duration: 4.5, delay: 1.7 },
+  { x: 45, y: 6, size: 1.2, baseOpacity: 0.55, twinkleMin: 0.25, twinkleMax: 0.75, duration: 5.1, delay: 0.4 },
+  { x: 52, y: 18, size: 1, baseOpacity: 0.4, twinkleMin: 0.2, twinkleMax: 0.6, duration: 4.8, delay: 2.5 },
+  { x: 60, y: 9, size: 1.5, baseOpacity: 0.6, twinkleMin: 0.3, twinkleMax: 0.85, duration: 5.6, delay: 1.1 },
+  { x: 68, y: 24, size: 1, baseOpacity: 0.5, twinkleMin: 0.2, twinkleMax: 0.7, duration: 4.3, delay: 0.9 },
+  { x: 76, y: 12, size: 2.5, baseOpacity: 0.75, twinkleMin: 0.45, twinkleMax: 1, duration: 6.5, delay: 0.2 },
+  { x: 84, y: 33, size: 1, baseOpacity: 0.45, twinkleMin: 0.2, twinkleMax: 0.65, duration: 4.6, delay: 2.8 },
+  { x: 90, y: 8, size: 1.5, baseOpacity: 0.6, twinkleMin: 0.3, twinkleMax: 0.8, duration: 5.2, delay: 1.5 },
+  { x: 95, y: 22, size: 1, baseOpacity: 0.5, twinkleMin: 0.2, twinkleMax: 0.7, duration: 4.7, delay: 0.6 },
+  { x: 4, y: 35, size: 1.5, baseOpacity: 0.55, twinkleMin: 0.25, twinkleMax: 0.75, duration: 5.3, delay: 1.9 },
+  { x: 11, y: 48, size: 1, baseOpacity: 0.4, twinkleMin: 0.18, twinkleMax: 0.6, duration: 4.4, delay: 0.3 },
+  { x: 18, y: 62, size: 2, baseOpacity: 0.65, twinkleMin: 0.35, twinkleMax: 0.9, duration: 6.1, delay: 2.3 },
+  { x: 26, y: 88, size: 1, baseOpacity: 0.45, twinkleMin: 0.2, twinkleMax: 0.65, duration: 4.6, delay: 1.4 },
+  { x: 34, y: 73, size: 1.2, baseOpacity: 0.5, twinkleMin: 0.22, twinkleMax: 0.7, duration: 5, delay: 0.8 },
+  { x: 42, y: 92, size: 1, baseOpacity: 0.4, twinkleMin: 0.18, twinkleMax: 0.6, duration: 4.3, delay: 2.6 },
+  { x: 49, y: 65, size: 1.5, baseOpacity: 0.55, twinkleMin: 0.25, twinkleMax: 0.75, duration: 5.4, delay: 1.6 },
+  { x: 56, y: 84, size: 1, baseOpacity: 0.45, twinkleMin: 0.2, twinkleMax: 0.65, duration: 4.7, delay: 0.5 },
+  { x: 63, y: 71, size: 1, baseOpacity: 0.4, twinkleMin: 0.18, twinkleMax: 0.6, duration: 4.5, delay: 2.2 },
+  { x: 71, y: 95, size: 1.5, baseOpacity: 0.6, twinkleMin: 0.3, twinkleMax: 0.85, duration: 5.7, delay: 0.9 },
+  { x: 79, y: 78, size: 1, baseOpacity: 0.5, twinkleMin: 0.2, twinkleMax: 0.7, duration: 4.8, delay: 1.8 },
+  { x: 86, y: 92, size: 2, baseOpacity: 0.7, twinkleMin: 0.4, twinkleMax: 0.95, duration: 6.2, delay: 0.1 },
+  { x: 93, y: 68, size: 1, baseOpacity: 0.45, twinkleMin: 0.2, twinkleMax: 0.65, duration: 4.4, delay: 2.7 },
+  { x: 8, y: 78, size: 1, baseOpacity: 0.4, twinkleMin: 0.18, twinkleMax: 0.6, duration: 4.6, delay: 1.2 },
+  { x: 15, y: 95, size: 1.2, baseOpacity: 0.5, twinkleMin: 0.22, twinkleMax: 0.7, duration: 5.1, delay: 0.4 },
+  { x: 17, y: 30, size: 1, baseOpacity: 0.45, twinkleMin: 0.2, twinkleMax: 0.65, duration: 4.5, delay: 2.4 },
+  { x: 39, y: 55, size: 1, baseOpacity: 0.4, twinkleMin: 0.18, twinkleMax: 0.6, duration: 4.7, delay: 1.0 },
+  { x: 67, y: 42, size: 1.5, baseOpacity: 0.6, twinkleMin: 0.3, twinkleMax: 0.8, duration: 5.5, delay: 2.0 },
+  { x: 81, y: 56, size: 1, baseOpacity: 0.4, twinkleMin: 0.18, twinkleMax: 0.6, duration: 4.4, delay: 0.6 },
+  { x: 24, y: 50, size: 1, baseOpacity: 0.45, twinkleMin: 0.2, twinkleMax: 0.65, duration: 4.9, delay: 1.7 },
+  { x: 73, y: 63, size: 1, baseOpacity: 0.45, twinkleMin: 0.2, twinkleMax: 0.65, duration: 4.6, delay: 2.5 },
+  { x: 47, y: 38, size: 1, baseOpacity: 0.4, twinkleMin: 0.18, twinkleMax: 0.6, duration: 4.5, delay: 0.3 },
+  { x: 56, y: 48, size: 1, baseOpacity: 0.4, twinkleMin: 0.18, twinkleMax: 0.6, duration: 4.7, delay: 1.4 },
 ];
 
 // 8-pointed compass-rose star polygon (viewBox 0..24, outer r=10,
@@ -703,12 +742,17 @@ export function Constellation({
                         <stop
                           offset="0%"
                           stopColor={BREAKTHROUGH_COLOR}
-                          stopOpacity={0.7}
+                          stopOpacity={0.85}
                         />
                         <stop
-                          offset="55%"
+                          offset="35%"
                           stopColor={BREAKTHROUGH_COLOR}
-                          stopOpacity={0.25}
+                          stopOpacity={0.45}
+                        />
+                        <stop
+                          offset="70%"
+                          stopColor={BREAKTHROUGH_COLOR}
+                          stopOpacity={0.15}
                         />
                         <stop
                           offset="100%"
@@ -716,6 +760,58 @@ export function Constellation({
                           stopOpacity={0}
                         />
                       </radialGradient>
+                      {/* Diffraction-spike gradients — fade from
+                          transparent at the tips through bright at
+                          the center, simulating the cross-flare real
+                          bright stars exhibit in long-exposure
+                          astrophotography. Used only on the
+                          breakthrough sun (rare, special). */}
+                      <linearGradient
+                        id="spike-h"
+                        x1="0%"
+                        y1="50%"
+                        x2="100%"
+                        y2="50%"
+                      >
+                        <stop
+                          offset="0%"
+                          stopColor={BREAKTHROUGH_COLOR}
+                          stopOpacity={0}
+                        />
+                        <stop
+                          offset="50%"
+                          stopColor={BREAKTHROUGH_COLOR}
+                          stopOpacity={0.55}
+                        />
+                        <stop
+                          offset="100%"
+                          stopColor={BREAKTHROUGH_COLOR}
+                          stopOpacity={0}
+                        />
+                      </linearGradient>
+                      <linearGradient
+                        id="spike-v"
+                        x1="50%"
+                        y1="0%"
+                        x2="50%"
+                        y2="100%"
+                      >
+                        <stop
+                          offset="0%"
+                          stopColor={BREAKTHROUGH_COLOR}
+                          stopOpacity={0}
+                        />
+                        <stop
+                          offset="50%"
+                          stopColor={BREAKTHROUGH_COLOR}
+                          stopOpacity={0.55}
+                        />
+                        <stop
+                          offset="100%"
+                          stopColor={BREAKTHROUGH_COLOR}
+                          stopOpacity={0}
+                        />
+                      </linearGradient>
                       <radialGradient id="halo-goal">
                         <stop
                           offset="0%"
@@ -738,13 +834,24 @@ export function Constellation({
                   {FAR_STARS.map((s, i) => (
                     <span
                       key={`bg-${i}`}
-                      className="absolute rounded-full bg-white/30"
-                      style={{
-                        left: `${s.x}%`,
-                        top: `${s.y}%`,
-                        width: `${s.size}px`,
-                        height: `${s.size}px`,
-                      }}
+                      className="star-twinkle absolute rounded-full bg-white"
+                      style={
+                        {
+                          left: `${s.x}%`,
+                          top: `${s.y}%`,
+                          width: `${s.size}px`,
+                          height: `${s.size}px`,
+                          "--twinkle-min": s.twinkleMin,
+                          "--twinkle-max": s.twinkleMax,
+                          "--twinkle-duration": `${s.duration}s`,
+                          "--twinkle-delay": `${s.delay}s`,
+                          // baseOpacity caps how bright the star can
+                          // ever get — multiplied with twinkleMax via
+                          // CSS color-mix would be cleaner but the
+                          // older browser support story is iffy, so we
+                          // pre-bake it into the per-star min/max.
+                        } as React.CSSProperties
+                      }
                       aria-hidden
                     />
                   ))}
@@ -1085,6 +1192,26 @@ function BreakthroughSun({
           className="block h-7 w-7"
           style={{ overflow: "visible" }}
         >
+          {/* Diffraction-spike cross-flare. Renders BEHIND the halo
+              and disc so the bright core stays crisp. Lines extend
+              well beyond the viewBox via overflow:visible. Only on
+              the breakthrough sun — keeps it iconic and rare. */}
+          <line
+            x1={-32}
+            y1={0}
+            x2={32}
+            y2={0}
+            stroke="url(#spike-h)"
+            strokeWidth={0.7}
+          />
+          <line
+            x1={0}
+            y1={-32}
+            x2={0}
+            y2={32}
+            stroke="url(#spike-v)"
+            strokeWidth={0.7}
+          />
           <circle r={11} fill="url(#halo-sun)" />
         </svg>
       </span>
