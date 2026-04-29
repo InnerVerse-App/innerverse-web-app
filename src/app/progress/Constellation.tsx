@@ -85,6 +85,37 @@ const BREAKTHROUGH_COLOR = "#DCA114";
 const MINDSET_COLOR = "#A78BFA";
 const GOAL_COLOR = "#4ADE80";
 
+// Per-dot tint variation. Real stars in the same color band don't all
+// share an identical shade; this function deterministically shifts a
+// base HSL color slightly per dot id, so the cluster reads as
+// "many stars" instead of "many copies of the same sticker." FNV-1a-
+// ish 32-bit hash → ±10° hue shift, ±8% saturation, ±5% lightness.
+function tintFor(
+  id: string,
+  baseHue: number,
+  baseSat: number,
+  baseLight: number,
+): string {
+  let h = 2166136261 >>> 0;
+  for (let i = 0; i < id.length; i++) {
+    h ^= id.charCodeAt(i);
+    h = Math.imul(h, 16777619) >>> 0;
+  }
+  const hueShift = (((h & 0xff) / 255) - 0.5) * 20;
+  const satShift = ((((h >>> 8) & 0xff) / 255) - 0.5) * 16;
+  const lightShift = ((((h >>> 16) & 0xff) / 255) - 0.5) * 10;
+  const hue = (baseHue + hueShift + 360) % 360;
+  const sat = Math.max(0, Math.min(100, baseSat + satShift));
+  const light = Math.max(0, Math.min(100, baseLight + lightShift));
+  return `hsl(${hue.toFixed(1)}, ${sat.toFixed(1)}%, ${light.toFixed(1)}%)`;
+}
+
+// Base HSL values matching the SESSION_COLOR / MINDSET_COLOR hex.
+// Picked once here so per-dot tint variations stay anchored to the
+// brand colors instead of drifting arbitrarily.
+const SESSION_HSL = { h: 195, s: 45, l: 55 };
+const MINDSET_HSL = { h: 252, s: 92, l: 76 };
+
 // Decorative far-background "stars" — fixed positions, no data meaning,
 // just give the dark sky depth and a sense of life behind the data
 // points. Each star carries its own twinkle parameters so the field
@@ -1273,7 +1304,14 @@ function SessionStar({
         aria-hidden
       >
         <circle r={7} fill="url(#halo-session)" />
-        <circle r={2.4} fill={SESSION_COLOR} />
+        <circle
+          r={2.4}
+          fill={tintFor(dot.id, SESSION_HSL.h, SESSION_HSL.s, SESSION_HSL.l)}
+        />
+        {/* White-hot core. Same trick the breakthrough sun and goal
+            comets use, scaled down — sells the dot as a luminous
+            point rather than a flat sticker. */}
+        <circle r={0.7} fill="#ffffff" fillOpacity={0.85} />
       </svg>
     </Link>
   );
@@ -1534,7 +1572,12 @@ function MindsetShiftStar({
         aria-hidden
       >
         <circle r={7.5} fill="url(#halo-shift)" />
-        <circle r={2.8} fill={MINDSET_COLOR} />
+        <circle
+          r={2.8}
+          fill={tintFor(dot.id, MINDSET_HSL.h, MINDSET_HSL.s, MINDSET_HSL.l)}
+        />
+        {/* White-hot core matching SessionStar. */}
+        <circle r={0.8} fill="#ffffff" fillOpacity={0.9} />
       </svg>
     </Link>
   );
