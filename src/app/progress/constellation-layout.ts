@@ -95,6 +95,11 @@ export type GalaxyMeta = {
   // galaxy with many contributors gets a wider nebula.
   radius: number;
   memberCount: number;
+  // Tilt of the galactic disc in degrees, hash-stable per
+  // breakthrough id. Member dots are scattered using the same tilt
+  // (in radians) so the renderer's GalaxyGlow ellipse aligns with
+  // where the actual dots sit.
+  tiltDeg: number;
 };
 
 export type ConstellationLayout = {
@@ -629,12 +634,16 @@ export function computeLayout(input: {
       return { ...m, x: clampPanel(slot.x), y: clampPanel(slot.y), opacity };
     });
 
+  // tiltDeg uses the same hash seed (53) that buildMemberPositions
+  // uses for the rotation of the member-scatter ellipse. Same value
+  // → renderer's disc oval aligns with where the dots actually are.
   const galaxies: GalaxyMeta[] = galaxyCenters.map((g) => ({
     breakthroughId: g.breakthroughId,
     centerX: g.cx,
     centerY: g.cy,
     radius: g.radius,
     memberCount: g.memberIds.length,
+    tiltDeg: hashFloat(g.breakthroughId, 53) * 180,
   }));
 
   return {

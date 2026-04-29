@@ -1380,36 +1380,28 @@ function BreakthroughSun({
 // around the sun. The galaxy's IDENTITY comes from the cluster of
 // stars, not the glow; the glow just gives the impression of an
 // unresolved disc behind them. No more orange-nebula bleed.
-// Stable per-galaxy tilt so each formed galaxy has its own visual
-// orientation in the sky. FNV-1a-ish 32-bit string hash → 0..179
-// degrees. Range capped at 180 because an axis-symmetric ellipse
-// rotated by 180+x looks identical to one rotated by x.
-function galaxyTiltDeg(breakthroughId: string): number {
-  let h = 2166136261 >>> 0;
-  for (let i = 0; i < breakthroughId.length; i++) {
-    h ^= breakthroughId.charCodeAt(i);
-    h = Math.imul(h, 16777619) >>> 0;
-  }
-  return h % 180;
-}
-
-// Faint elliptical galactic disc behind each formed galaxy. Aspect
-// ratio ~3:1 (a spiral seen at a steeper viewing angle), rotated at
-// a hash-stable angle so neighboring galaxies look distinct. Three
-// layered radial gradients reproduce the three traits real spiral
-// galaxies share in long-exposure photography:
+// Faint elliptical galactic disc behind each formed galaxy. Layered
+// gradients reproduce the four traits real spiral galaxies share in
+// long-exposure photography:
 //   1. A bright concentrated warm bulge at the core (yellow-orange).
-//   2. A pink/magenta mid-disc highlight evoking spiral arms +
-//      star-formation regions (the pink streaks visible in M81 and
-//      Andromeda photos).
-//   3. A wide, faint cool blue/violet disc fading to transparent at
-//      the rim.
+//   2. A conic-gradient swirl with two arm wedges 180° apart,
+//      radiating from the bulge — gives the disc spiral structure
+//      (not literally curved, but reads as arms once the disc is
+//      tilted in 2D).
+//   3. A pink/magenta arm-ring annulus evoking star-formation
+//      regions (the pink streaks visible in M81 + Andromeda photos).
+//   4. A wide, faint cool blue/violet outer disc fading well before
+//      the elliptical clip so the rim is soft, not hard-edged.
 // Renders behind everything; sun + member dots + connection lines
 // all sit on top, so the data layer remains the focal point.
+//
+// CRITICAL: tilt is read from `galaxy.tiltDeg` (computed in
+// constellation-layout.ts using the same hash seed that drives the
+// member-dot scatter rotation). This guarantees the disc oval aligns
+// with where the dots actually are.
 function GalaxyGlow({ galaxy }: { galaxy: GalaxyMeta }) {
   const widthPct = galaxy.radius * 100 * 3.2;
   const heightPct = galaxy.radius * 100 * 1.1;
-  const tilt = galaxyTiltDeg(galaxy.breakthroughId);
   return (
     <span
       className="pointer-events-none absolute"
@@ -1419,23 +1411,30 @@ function GalaxyGlow({ galaxy }: { galaxy: GalaxyMeta }) {
         width: `${widthPct}%`,
         height: `${heightPct}%`,
         // border-radius: 50% clips the span to an ellipse matching the
-        // 100%×100% gradient ellipses inside, eliminating the corner
-        // box that was visible in production. Combined with explicit
-        // rgba(R,G,B,0) terminators (instead of the `transparent`
-        // keyword, which interpolates through rgba(0,0,0,0) and leaves
-        // dark artifacts), the disc now has no visible bounding box.
+        // 100%×100% gradient ellipses inside. Combined with the
+        // gradients fading well within the ellipse (terminating at
+        // ~70% rather than the bounds), the rim looks soft.
         borderRadius: "50%",
-        transform: `translate(-50%, -50%) rotate(${tilt}deg)`,
+        transform: `translate(-50%, -50%) rotate(${galaxy.tiltDeg}deg)`,
         backgroundImage: [
-          // Bright warm bulge — concentrated around the sun.
-          "radial-gradient(ellipse 28% 55% at center, rgba(255,200,90,0.30) 0%, rgba(220,161,20,0.14) 25%, rgba(220,161,20,0) 60%)",
-          // Pink/magenta arm-region highlight — annulus (transparent
-          // at center → magenta → violet → transparent), evoking
-          // spiral arms + star-formation regions.
-          "radial-gradient(ellipse 75% 90% at center, rgba(186,104,200,0) 25%, rgba(186,104,200,0.10) 45%, rgba(167,139,250,0.06) 65%, rgba(167,139,250,0) 85%)",
-          // Cool blue/violet outer disc — widest layer, fades to
-          // transparent at the rim.
-          "radial-gradient(ellipse 100% 100% at center, rgba(89,140,200,0.10) 0%, rgba(89,164,192,0.05) 45%, rgba(89,164,192,0) 85%)",
+          // Bright warm bulge — concentrated around the sun. Saturated
+          // to match the vivid yellow-orange cores in the operator's
+          // reference photos (Andromeda, M81, the spiral artist
+          // render).
+          "radial-gradient(ellipse 26% 55% at center, rgba(255,210,110,0.55) 0%, rgba(255,180,80,0.30) 18%, rgba(220,161,20,0.12) 38%, rgba(220,161,20,0) 60%)",
+          // Two asymmetric arm-highlights on diagonally opposite sides
+          // of the bulge. Real spiral galaxies have bright stellar
+          // populations along their arms — these blob-pairs reproduce
+          // that pattern without needing curved SVG paths. Combined
+          // with the disc tilt the brain reads them as spiral arms.
+          "radial-gradient(ellipse 32% 18% at 76% 30%, rgba(186,104,200,0.32) 0%, rgba(186,104,200,0.12) 50%, rgba(186,104,200,0) 100%)",
+          "radial-gradient(ellipse 32% 18% at 24% 70%, rgba(186,104,200,0.32) 0%, rgba(186,104,200,0.12) 50%, rgba(186,104,200,0) 100%)",
+          // Pink/magenta arm-ring annulus — bumped opacity so it reads
+          // as a deliberate band rather than barely-there.
+          "radial-gradient(ellipse 75% 90% at center, rgba(186,104,200,0) 25%, rgba(186,104,200,0.18) 48%, rgba(167,139,250,0.10) 68%, rgba(167,139,250,0) 88%)",
+          // Cool blue/violet outer disc — fades to transparent at 65%
+          // so the visible edge is a gradient fade, not the clip line.
+          "radial-gradient(ellipse 100% 100% at center, rgba(120,170,220,0.14) 0%, rgba(89,164,192,0.06) 35%, rgba(89,164,192,0) 65%)",
         ].join(", "),
       }}
       aria-hidden
