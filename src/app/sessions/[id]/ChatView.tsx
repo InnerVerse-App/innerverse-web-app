@@ -326,6 +326,11 @@ export function ChatView({
               sessionId={sessionId}
               disabled={ended}
               sendChat={sendChat}
+              // Lets the voice composer abort an in-flight chat
+              // stream when the user interrupts the coach. Hooks
+              // straight into the existing streamAbortRef → cancels
+              // the upstream OpenAI call too.
+              abortChat={() => streamAbortRef.current?.abort()}
             />
           ) : (
             <form onSubmit={send}>
