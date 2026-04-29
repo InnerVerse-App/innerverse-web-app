@@ -1372,26 +1372,37 @@ function GoalComet({
   const headY = dot.y * 100;
   const tailEndX = (dot.x + Math.cos(dot.tailAngle) * dot.tailLength) * 100;
   const tailEndY = (dot.y + Math.sin(dot.tailAngle) * dot.tailLength) * 100;
-  const tailGradId = `comet-tail-${dot.id}`;
-  // Tail tapers from the head circle's width (≈ head r in tail-SVG
-  // viewBox units, which is panel-fraction-percent) to a single
-  // point at the tail-end. Computed as a triangle polygon: two
-  // perpendicular-offset vertices at the head, one vertex at the
-  // tail-end.
-  const headHalfWidthPct = 0.42; // tuned to match the head circle's visible radius
-  const perpX = -Math.sin(dot.tailAngle) * headHalfWidthPct;
-  const perpY = Math.cos(dot.tailAngle) * headHalfWidthPct;
-  const tailPolyPoints = [
-    `${headX + perpX},${headY + perpY}`,
-    `${headX - perpX},${headY - perpY}`,
+  const innerTailGradId = `comet-tail-inner-${dot.id}`;
+  const outerTailGradId = `comet-tail-outer-${dot.id}`;
+  // Two-layer tail: a wider, dimmer outer "coma + dust spread" sits
+  // behind a narrower, brighter inner stream. Together they give the
+  // tail a bright concentrated core that fades into a softer halo —
+  // visually closer to real comet astrophotography than a single
+  // flat triangle.
+  const innerHalfWidthPct = 0.42;
+  const outerHalfWidthPct = 0.95;
+  const innerPerpX = -Math.sin(dot.tailAngle) * innerHalfWidthPct;
+  const innerPerpY = Math.cos(dot.tailAngle) * innerHalfWidthPct;
+  const outerPerpX = -Math.sin(dot.tailAngle) * outerHalfWidthPct;
+  const outerPerpY = Math.cos(dot.tailAngle) * outerHalfWidthPct;
+  const innerTailPoints = [
+    `${headX + innerPerpX},${headY + innerPerpY}`,
+    `${headX - innerPerpX},${headY - innerPerpY}`,
+    `${tailEndX},${tailEndY}`,
+  ].join(" ");
+  const outerTailPoints = [
+    `${headX + outerPerpX},${headY + outerPerpY}`,
+    `${headX - outerPerpX},${headY - outerPerpY}`,
     `${tailEndX},${tailEndY}`,
   ].join(" ");
 
   return (
     <>
-      {/* Tail: triangular polygon tapering from the head's circle
-          width down to a single point at the tail-end, filled with
-          a gradient that fades from head color to transparent. */}
+      {/* Two-layer tail: wider diffuse outer (the comet's coma + dust
+          spread) sits behind the brighter inner stream. Both fade
+          from head→tip but with different curves so the result reads
+          as "bright concentrated core within a softer halo," matching
+          how real comet tails appear in long-exposure photography. */}
       <svg
         className="pointer-events-none absolute inset-0 h-full w-full"
         viewBox="0 0 100 100"
@@ -1401,26 +1412,39 @@ function GoalComet({
       >
         <defs>
           <linearGradient
-            id={tailGradId}
+            id={outerTailGradId}
             gradientUnits="userSpaceOnUse"
             x1={headX}
             y1={headY}
             x2={tailEndX}
             y2={tailEndY}
           >
-            <stop offset="0%" stopColor={GOAL_COLOR} stopOpacity={0.8} />
+            <stop offset="0%" stopColor={GOAL_COLOR} stopOpacity={0.35} />
+            <stop offset="40%" stopColor={GOAL_COLOR} stopOpacity={0.12} />
+            <stop offset="100%" stopColor={GOAL_COLOR} stopOpacity={0} />
+          </linearGradient>
+          <linearGradient
+            id={innerTailGradId}
+            gradientUnits="userSpaceOnUse"
+            x1={headX}
+            y1={headY}
+            x2={tailEndX}
+            y2={tailEndY}
+          >
+            <stop offset="0%" stopColor={GOAL_COLOR} stopOpacity={0.95} />
+            <stop offset="25%" stopColor={GOAL_COLOR} stopOpacity={0.55} />
+            <stop offset="70%" stopColor={GOAL_COLOR} stopOpacity={0.18} />
             <stop offset="100%" stopColor={GOAL_COLOR} stopOpacity={0} />
           </linearGradient>
         </defs>
-        <polygon
-          points={tailPolyPoints}
-          fill={`url(#${tailGradId})`}
-        />
+        <polygon points={outerTailPoints} fill={`url(#${outerTailGradId})`} />
+        <polygon points={innerTailPoints} fill={`url(#${innerTailGradId})`} />
       </svg>
-      {/* Head: same shape language as session/shift — halo + solid
-          colored disc — just green. Double-click jumps to the Goals
-          tab with this goal highlighted, matching the SessionStar
-          pattern. */}
+      {/* Head: layered halo + green disc + bright white-hot core.
+          The inner core sells the comet as a *burning* nucleus rather
+          than a flat sticker — same trick as the diffraction spike on
+          the breakthrough sun, scaled down. Double-click jumps to the
+          Goals tab with this goal highlighted. */}
       <Link
         href={href}
         aria-label={`Goal: ${dot.title} (double-click to view in Goals tab)`}
@@ -1445,6 +1469,7 @@ function GoalComet({
         >
           <circle r={7} fill="url(#halo-goal)" />
           <circle r={2.4} fill={GOAL_COLOR} />
+          <circle r={0.9} fill="#ffffff" fillOpacity={0.95} />
         </svg>
       </Link>
     </>
