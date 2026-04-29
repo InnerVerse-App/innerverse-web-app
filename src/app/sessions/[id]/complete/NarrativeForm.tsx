@@ -1,10 +1,17 @@
 "use client";
 
 import Link from "next/link";
+import { useState } from "react";
 import { useFormStatus } from "react-dom";
 
 import { submitSessionResponse } from "../../actions";
-import { POST_SESSION_RESPONSE_FIELD } from "./fields";
+import {
+  ALIGNED_RATING_FIELD,
+  HELPFUL_RATING_FIELD,
+  POST_SESSION_RESPONSE_FIELD,
+  SESSION_REFLECTION_FIELD,
+  TONE_RATING_FIELD,
+} from "./fields";
 
 // Default invitation shown under the narrative when the session-end
 // prompt didn't emit a tailored `narrative_reflection_prompt`. The
@@ -63,6 +70,55 @@ export function NarrativeForm({
             />
           </section>
 
+          <section className="rounded-xl border border-white/10 bg-white/[0.02] p-5">
+            <h2 className="text-base font-semibold text-white">
+              Quick feedback
+            </h2>
+            <p className="mt-1 text-xs text-neutral-400">
+              Helps your coach calibrate. Your last few sessions shape
+              the tone and style of the next one.
+            </p>
+            <div className="mt-4 flex flex-col gap-5">
+              <RatingSlider
+                name={ALIGNED_RATING_FIELD}
+                question="Did this session feel aligned with what you needed today?"
+                lowLabel="Not aligned"
+                highLabel="Very aligned"
+              />
+              <RatingSlider
+                name={HELPFUL_RATING_FIELD}
+                question="How helpful were the questions and reflections?"
+                lowLabel="Not helpful"
+                highLabel="Very helpful"
+              />
+              <RatingSlider
+                name={TONE_RATING_FIELD}
+                question="How would you rate your coach's tone?"
+                lowLabel="Too direct"
+                highLabel="Too warm"
+              />
+            </div>
+          </section>
+
+          <section className="flex flex-col gap-3">
+            <label
+              htmlFor={SESSION_REFLECTION_FIELD}
+              className="text-sm font-medium text-white"
+            >
+              Session note{" "}
+              <span className="text-xs font-normal text-neutral-500">
+                (just for you)
+              </span>
+            </label>
+            <textarea
+              id={SESSION_REFLECTION_FIELD}
+              name={SESSION_REFLECTION_FIELD}
+              rows={3}
+              placeholder="Any insights or realizations you want to capture for yourself…"
+              className="w-full resize-none rounded-lg border border-white/10 bg-white/5 px-3 py-2.5 text-sm text-white placeholder:text-neutral-500 focus:outline-none focus:ring-2 focus:ring-brand-primary"
+            />
+          </section>
+
           <div className="flex flex-col gap-2 pt-2">
             <SubmitButton />
             <Link
@@ -74,6 +130,59 @@ export function NarrativeForm({
           </div>
         </div>
       </form>
+    </div>
+  );
+}
+
+// Tracks whether the user actually moved the slider. An untouched
+// slider submits no value (the hidden input stays unrendered), which
+// the action layer reads as NULL — telling the aggregator "no signal
+// from this question this session" rather than a misleading neutral 3.
+function RatingSlider({
+  name,
+  question,
+  lowLabel,
+  highLabel,
+}: {
+  name: string;
+  question: string;
+  lowLabel: string;
+  highLabel: string;
+}) {
+  const [value, setValue] = useState(3);
+  const [touched, setTouched] = useState(false);
+  const fillPct = ((value - 1) / 4) * 100;
+  return (
+    <div>
+      <div className="flex items-start justify-between gap-3">
+        <p className="text-sm text-neutral-200">{question}</p>
+        <span className="text-sm font-semibold text-brand-alert">
+          {touched ? value : "—"}
+        </span>
+      </div>
+      <input
+        type="range"
+        // No `name` until touched: an unrendered name means the
+        // FormData entry is absent and we persist NULL. Browsers
+        // submit a default value for any named range input, so
+        // the only reliable way to capture "no answer" is to keep
+        // the input unnamed until interaction.
+        name={touched ? name : undefined}
+        min={1}
+        max={5}
+        step={1}
+        value={value}
+        onChange={(e) => {
+          setValue(Number.parseInt(e.target.value, 10));
+          setTouched(true);
+        }}
+        style={{ "--fill-pct": `${fillPct}%` } as React.CSSProperties}
+        className="feedback-slider mt-3 w-full"
+      />
+      <div className="mt-1 flex justify-between text-[11px] text-neutral-500">
+        <span>1 — {lowLabel}</span>
+        <span>5 — {highLabel}</span>
+      </div>
     </div>
   );
 }
