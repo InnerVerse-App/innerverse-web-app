@@ -46,6 +46,10 @@ type Props = {
     text: string,
     onSpeakable?: (chunk: string) => void,
   ) => Promise<string>;
+  // Aborts the in-flight chat stream — used during interruption when
+  // the user starts speaking over the coach. Cancels the upstream
+  // OpenAI call too.
+  abortChat: () => void;
 };
 
 // CDN paths for the VAD model + ONNX runtime WASM. Avoids needing to
@@ -66,7 +70,12 @@ type MicVADInstance = {
   destroy: () => Promise<void>;
 };
 
-export function VoiceComposer({ sessionId, disabled, sendChat }: Props) {
+export function VoiceComposer({
+  sessionId,
+  disabled,
+  sendChat,
+  abortChat,
+}: Props) {
   const [phase, setPhase] = useState<Phase>("loading");
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
@@ -124,14 +133,27 @@ export function VoiceComposer({ sessionId, disabled, sendChat }: Props) {
           // chat — set generously.
           redemptionMs: 800,
           onSpeechStart: () => {
-            if (phaseRef.current === "listening") {
+            const prev = phaseRef.current;
+            if (prev === "listening") {
+              setPhaseSafe("recording");
+            } else if (prev === "speaking" || prev === "thinking") {
+              // INTERRUPTION: user spoke over the coach. Abort any
+              // in-flight chat stream, dump the audio queue, and
+              // start capturing the new turn. Browser echo
+              // cancellation (configured via getUserMedia in the
+              // VAD library) handles the loopback case where the
+              // coach's playback would otherwise self-trigger VAD.
+              interruptCoach();
               setPhaseSafe("recording");
             }
+            // transcribing / paused / loading / error / recording:
+            // ignore stray events.
           },
           onSpeechEnd: (audio) => {
-            // We only act on speech that ended while we were actively
-            // recording. If a turn is in flight (transcribing,
-            // thinking, speaking) we ignore stray callbacks.
+            // Only process speech that ended while we were
+            // recording. Late callbacks during transcribing /
+            // thinking / speaking are ignored — they'd be the tail
+            // of a previously-handled utterance.
             if (phaseRef.current === "recording") {
               void handleSpeechEnd(audio);
             }
@@ -170,9 +192,21 @@ export function VoiceComposer({ sessionId, disabled, sendChat }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Interrupt: user started speaking during the coach's response.
+  // Abort the chat stream (if still in flight), drop the audio queue,
+  // and let the regular onSpeechEnd path pick up the user's new turn.
+  // Marking chatCompleteRef true ensures the audio-queue completion
+  // logic doesn't trigger a stale "back to listening" transition
+  // after we've already moved on.
+  function interruptCoach(): void {
+    abortChat();
+    stopAndClearPlayback();
+    chatCompleteRef.current = true;
+  }
+
   // Stop any currently-playing audio, clear the queue, and revoke
-  // every blob URL we created during the turn. Called on unmount and
-  // on error.
+  // every blob URL we created during the turn. Called on unmount,
+  // on error, and during interruption.
   function stopAndClearPlayback(): void {
     const current = currentAudioRef.current;
     if (current) {
@@ -252,9 +286,11 @@ export function VoiceComposer({ sessionId, disabled, sendChat }: Props) {
       setPhaseSafe("error");
       return;
     }
-    // Pause VAD while we run the turn. Avoids picking up our own
-    // playback as input. Resumed once the coach's audio finishes.
-    vadRef.current?.pause();
+    // VAD stays running through transcribe/think/speak so the user
+    // can interrupt at any point. Browser echo cancellation handles
+    // the playback-loopback case. The phase guards in onSpeechStart
+    // / onSpeechEnd prevent stale callbacks from firing wrong
+    // transitions.
 
     setPhaseSafe("transcribing");
     let transcribed: string;
