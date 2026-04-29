@@ -16,20 +16,20 @@ import type { UserSupabase } from "@/lib/supabase";
 
 // Bundled at build time via next.config.ts outputFileTracingIncludes
 // (the existing prompt-*.md glob covers this filename). Filename
-// suffix `-gpt-5-mini` names the model this prompt is pinned to.
+// suffix `-gpt-5.4` names the model this prompt is pinned to.
 // If you change MODEL_SESSION_RESPONSE in src/lib/openai.ts, rename
 // the file to match and update this path.
 const RESPONSE_PROMPT = readFileSync(
   path.join(
     process.cwd(),
     "reference",
-    "prompt-session-response-v2-gpt-5-mini.md",
+    "prompt-session-response-v2-gpt-5.4.md",
   ),
   "utf8",
 ).trim();
 
 // Strict-mode JSON schema for Call 2's output. Mirrors the structure
-// in prompt-session-response-v2-gpt-5-mini.md's "Output" section. All three
+// in prompt-session-response-v2-gpt-5.4.md's "Output" section. All three
 // arrays are required (strict mode); empty arrays are valid and
 // represent "no disagreements detected" — the common case.
 const DISAGREEMENT_ITEM = {

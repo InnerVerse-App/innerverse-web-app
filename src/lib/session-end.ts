@@ -16,11 +16,11 @@ import { buildSessionEndContext } from "@/lib/session-end-context";
 import type { UserSupabase } from "@/lib/supabase";
 
 // Bundled at build time via next.config.ts outputFileTracingIncludes.
-// Filename suffix `-gpt-5.2` names the model this prompt is pinned
+// Filename suffix `-gpt-5.4` names the model this prompt is pinned
 // to. If you change MODEL_SESSION_END in src/lib/openai.ts, rename
 // the file to match and update this path.
 const SESSION_END_PROMPT = readFileSync(
-  path.join(process.cwd(), "reference", "prompt-session-end-v7-gpt-5.2.md"),
+  path.join(process.cwd(), "reference", "prompt-session-end-v7-gpt-5.4.md"),
   "utf8",
 ).trim();
 

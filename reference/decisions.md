@@ -61,7 +61,7 @@ The order can shift based on tester feedback. The principle: each version adds w
 
 ## Architecture
 
-Coaching uses a two-prompt model. `reference/prompt-session-opener-gpt-5-mini.md` governs the coach's first message only — focus-aware opening logic ("acknowledge the goal/shift if one was passed, otherwise broad invitation"). `reference/prompt-v11.4-gpt-5.4.md` is the master coaching prompt the operator authored; it governs every turn after the opener and is sent verbatim, never altered. Both are sent as developer messages at session start; from turn 2 onward `previous_response_id` chaining keeps both in the conversation thread on OpenAI's side. Session-end analysis uses `reference/prompt-session-end-v7-gpt-5.2.md`. Post-session reflection parsing uses `reference/prompt-session-response-v2-gpt-5-mini.md`. Cumulative growth narrative uses `reference/prompt-growth-narrative-v1-gpt-5.md`. Style calibration aggregator uses `reference/prompt-style-calibration-v1-gpt-5-mini.md`. Each live prompt's filename embeds the OpenAI model it is currently pinned to — when you change the model in `src/lib/openai.ts`, the file MUST be renamed to match. Superseded versions live in `reference/archive/` for diff/reference.
+Coaching uses a two-prompt model. `reference/prompt-session-opener-gpt-5.4-mini.md` governs the coach's first message only — focus-aware opening logic ("acknowledge the goal/shift if one was passed, otherwise broad invitation"). `reference/prompt-v11.4-gpt-5.4.md` is the master coaching prompt the operator authored; it governs every turn after the opener and is sent verbatim, never altered. Both are sent as developer messages at session start; from turn 2 onward `previous_response_id` chaining keeps both in the conversation thread on OpenAI's side. Session-end analysis uses `reference/prompt-session-end-v7-gpt-5.4.md`. Post-session reflection parsing uses `reference/prompt-session-response-v2-gpt-5.4.md`. Cumulative growth narrative uses `reference/prompt-growth-narrative-v1-gpt-5.4.md`. Style calibration aggregator uses `reference/prompt-style-calibration-v1-gpt-5.4-mini.md`. Each live prompt's filename embeds the OpenAI model it is currently pinned to — when you change the model in `src/lib/openai.ts`, the file MUST be renamed to match. Superseded versions live in `reference/archive/` for diff/reference.
 
 **No staged pipeline (router + specialists + critic) yet** — that's a deliberate future architecture change after v1 ships and validates with cold users.
 
@@ -87,13 +87,18 @@ Known Free-tier gap until the Pro upgrade: no automatic backups. Mitigated by (a
 - **Auth:** Clerk (magic-link sign-in)
 -**AI Model:** OpenAI via `/v1/responses` endpoint
 
-Model usage:
-- Session start prompt: gpt-5
-- Coaching chat (per-message): gpt-5.2
-- Session end analysis: gpt-5
+Model usage (consolidated 2026-04-29 after gpt-5 retirement and gpt-5.2 sunset):
+- Live coaching chat: gpt-5.4
+- Session-end analyzer: gpt-5.4
+- Session-response parser: gpt-5.4 (data-integrity stakes — wrong disagreement classification silently deletes user progress)
+- Growth narrative: gpt-5.4 (user-facing prose on the home screen)
+- Session opener: gpt-5.4-mini (mechanical greeting + acknowledge focus)
+- Style calibration: gpt-5.4-mini (internal synthesis, never user-facing)
 
-These are deliberate choices in the current Bubble app and must be preserved
-for coaching parity. Do not substitute or upgrade without explicit decision.
+These are deliberate choices and must be preserved for coaching parity. Do not
+substitute or upgrade without explicit decision. The single source of truth for
+the model pin of each call is `src/lib/openai.ts`; live prompt filenames embed
+the same pin and must be renamed in lockstep when a model changes.
 - **Error tracking:** Sentry
 - **Email:** Handled by Clerk for auth emails. No separate transactional email service needed for v1.
 

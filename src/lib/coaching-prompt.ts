@@ -16,7 +16,7 @@ import { supabaseForUser } from "@/lib/supabase";
 const RECENT_BREAKTHROUGHS_N = 5;
 
 // Two-prompt session model:
-//   1. prompt-session-opener-gpt-5-mini.md — rules for the FIRST
+//   1. prompt-session-opener-gpt-5.4-mini.md — rules for the FIRST
 //      message only. Carries the focus-aware opening logic
 //      ("acknowledge the goal or shift if one was passed; otherwise
 //      broad invitation").
@@ -42,7 +42,7 @@ const SESSION_OPENER_PROMPT = readFileSync(
   path.join(
     process.cwd(),
     "reference",
-    "prompt-session-opener-gpt-5-mini.md",
+    "prompt-session-opener-gpt-5.4-mini.md",
   ),
   "utf8",
 ).trim();
