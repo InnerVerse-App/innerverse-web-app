@@ -1267,14 +1267,20 @@ function galaxyTiltDeg(breakthroughId: string): number {
 }
 
 // Faint elliptical galactic disc behind each formed galaxy. Aspect
-// ratio ~2.6:1 (close to a typical spiral galaxy seen at ~30-40°),
-// rotated at a hash-stable angle so neighboring galaxies look
-// distinct. Layered radial gradients give a warm yellow bulge at
-// the core fading into a cool teal disc, then transparent at the
-// rim — same color logic as a real long-exposure photo of a spiral
-// galaxy. Renders behind everything; sun + member dots sit on top.
+// ratio ~3:1 (a spiral seen at a steeper viewing angle), rotated at
+// a hash-stable angle so neighboring galaxies look distinct. Three
+// layered radial gradients reproduce the three traits real spiral
+// galaxies share in long-exposure photography:
+//   1. A bright concentrated warm bulge at the core (yellow-orange).
+//   2. A pink/magenta mid-disc highlight evoking spiral arms +
+//      star-formation regions (the pink streaks visible in M81 and
+//      Andromeda photos).
+//   3. A wide, faint cool blue/violet disc fading to transparent at
+//      the rim.
+// Renders behind everything; sun + member dots + connection lines
+// all sit on top, so the data layer remains the focal point.
 function GalaxyGlow({ galaxy }: { galaxy: GalaxyMeta }) {
-  const widthPct = galaxy.radius * 100 * 2.8;
+  const widthPct = galaxy.radius * 100 * 3.2;
   const heightPct = galaxy.radius * 100 * 1.1;
   const tilt = galaxyTiltDeg(galaxy.breakthroughId);
   return (
@@ -1287,14 +1293,19 @@ function GalaxyGlow({ galaxy }: { galaxy: GalaxyMeta }) {
         height: `${heightPct}%`,
         transform: `translate(-50%, -50%) rotate(${tilt}deg)`,
         backgroundImage: [
-          // Warm yellow bulge — concentrated near the core where the
-          // sun lives. Mirrors the breakthrough color (#DCA114).
-          "radial-gradient(ellipse 35% 60% at center, rgba(220,161,20,0.20) 0%, rgba(220,161,20,0.08) 35%, transparent 70%)",
-          // Cool teal disc — wider, much fainter, fades to transparent
-          // at the rim so neighboring galaxies / the in-progress
-          // region don't bleed together. Uses the session-color blue
-          // so the disc reads as "this galaxy's stellar population."
-          "radial-gradient(ellipse 100% 100% at center, rgba(89,164,192,0.10) 0%, rgba(89,164,192,0.05) 40%, transparent 80%)",
+          // Bright warm bulge — bumped up vs PR #157 so it concentrates
+          // around the sun like a real galactic core. Tighter falloff
+          // (50% by 25%) keeps it crisp against the surrounding disc.
+          "radial-gradient(ellipse 28% 55% at center, rgba(255,200,90,0.30) 0%, rgba(220,161,20,0.14) 25%, transparent 60%)",
+          // Pink/magenta arm-region highlight — mid-disc, ring-shaped
+          // (note the inner stop at 30% is transparent so it forms an
+          // annulus around the bulge, evoking spiral arms + star-
+          // formation regions instead of bleeding into the bulge).
+          "radial-gradient(ellipse 75% 90% at center, transparent 25%, rgba(186,104,200,0.10) 45%, rgba(167,139,250,0.06) 65%, transparent 85%)",
+          // Cool blue/violet outer disc — widest layer, fades to
+          // transparent at the rim so neighboring galaxies / the
+          // in-progress region don't bleed together.
+          "radial-gradient(ellipse 100% 100% at center, rgba(89,140,200,0.10) 0%, rgba(89,164,192,0.05) 45%, transparent 85%)",
         ].join(", "),
       }}
       aria-hidden
