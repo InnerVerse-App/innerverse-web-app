@@ -21,7 +21,13 @@ import { runSessionEndAnalysis } from "@/lib/session-end";
 import { runSessionResponseAnalysis } from "@/lib/session-response";
 import { supabaseForUser, type UserSupabase } from "@/lib/supabase";
 
-import { POST_SESSION_RESPONSE_FIELD } from "./[id]/complete/fields";
+import {
+  ALIGNED_RATING_FIELD,
+  HELPFUL_RATING_FIELD,
+  POST_SESSION_RESPONSE_FIELD,
+  SESSION_REFLECTION_FIELD,
+  TONE_RATING_FIELD,
+} from "./[id]/complete/fields";
 
 // Soft cap on the reflection length to bound bad-actor / paste-job
 // inputs before they reach the DB. The schema column is unbounded
@@ -29,6 +35,21 @@ import { POST_SESSION_RESPONSE_FIELD } from "./[id]/complete/fields";
 // a UX limit (the textarea has no maxLength). Anything above gets
 // truncated server-side.
 const MAX_RESPONSE_LENGTH = 5000;
+// Same guardrail for the private session reflection. Smaller cap —
+// the field is a short personal note, not an essay.
+const MAX_SESSION_REFLECTION_LENGTH = 2000;
+
+// Parses a slider FormData entry into a 1-5 int or null. Untouched
+// sliders submit no entry at all (the form omits the name until
+// interaction), which we persist as NULL so the aggregator reads it
+// as "no signal" rather than a misleading neutral 3.
+function parseRating(formData: FormData, field: string): number | null {
+  const raw = formData.get(field);
+  if (typeof raw !== "string") return null;
+  const n = Number.parseInt(raw, 10);
+  if (!Number.isInteger(n) || n < 1 || n > 5) return null;
+  return n;
+}
 
 // Fire-and-forget POST to the growth-narrative endpoint. Decouples
 // the narrative call from the analyzer's after() budget so each
@@ -198,14 +219,17 @@ export async function endSession(sessionId: string): Promise<void> {
   redirect("/home");
 }
 
-// Writes the post-session reflection (free-text response to the
-// coach narrative). Empty submits skip the write and just bounce
-// home — same UX as the Skip link.
+// Writes the post-session wrap-up form: free-text narrative response
+// (feeds Call 2's disagreement parser), 3-slider feedback (aligned/
+// helpful/tone — feeds the calibration aggregator), and a private
+// session-reflection note (just for the user's own record).
+// Totally-empty submits skip the write and bounce home — same UX as
+// the Skip link.
 //
-// On a non-empty write we set both `user_response_text` and
-// `user_responded_at`, which: (1) flips the page render branch so
-// follow-up visits redirect home; (2) primes the row for Call 2
-// (response-parser) to pick up later.
+// `user_responded_at` is set whenever at least one field carried
+// signal. That flips the page render branch so follow-up visits
+// redirect home, and (when the narrative response was non-empty)
+// primes the row for Call 2 to pick up.
 export async function submitSessionResponse(
   sessionId: string,
   formData: FormData,
@@ -216,17 +240,41 @@ export async function submitSessionResponse(
   const ctx = await supabaseForUser();
   if (!ctx) redirect("/sign-in");
 
-  const raw = formData.get(POST_SESSION_RESPONSE_FIELD);
-  const text =
-    typeof raw === "string"
-      ? raw.trim().slice(0, MAX_RESPONSE_LENGTH)
+  const rawResponse = formData.get(POST_SESSION_RESPONSE_FIELD);
+  const responseText =
+    typeof rawResponse === "string"
+      ? rawResponse.trim().slice(0, MAX_RESPONSE_LENGTH)
       : "";
-  if (text.length === 0) redirect("/home");
+
+  const rawReflection = formData.get(SESSION_REFLECTION_FIELD);
+  const reflectionText =
+    typeof rawReflection === "string"
+      ? rawReflection.trim().slice(0, MAX_SESSION_REFLECTION_LENGTH)
+      : "";
+
+  const aligned = parseRating(formData, ALIGNED_RATING_FIELD);
+  const helpful = parseRating(formData, HELPFUL_RATING_FIELD);
+  const tone = parseRating(formData, TONE_RATING_FIELD);
+
+  // Skip the entire write if the user submitted a totally empty
+  // form (didn't type a response, didn't write a reflection, didn't
+  // touch any slider). Same UX as the "That's enough for today" link.
+  const anySignal =
+    responseText.length > 0 ||
+    reflectionText.length > 0 ||
+    aligned !== null ||
+    helpful !== null ||
+    tone !== null;
+  if (!anySignal) redirect("/home");
 
   const { error } = await ctx.client
     .from("sessions")
     .update({
-      user_response_text: text,
+      user_response_text: responseText.length > 0 ? responseText : null,
+      session_reflection: reflectionText.length > 0 ? reflectionText : null,
+      aligned_rating: aligned,
+      helpful_rating: helpful,
+      tone_rating: tone,
       user_responded_at: new Date().toISOString(),
     })
     .eq("id", sessionId)
@@ -236,19 +284,20 @@ export async function submitSessionResponse(
     throw error;
   }
 
-  // Fire Call 2 (response-parser) in the background — same pattern
-  // as runSessionEndAnalysis from endSession. The user is redirected
-  // to /home immediately; the parse happens after the response has
-  // been sent. Errors are captured to Sentry inside the function;
-  // swallow here so background failures don't crash the serverless
-  // invocation.
-  after(async () => {
-    try {
-      await runSessionResponseAnalysis(ctx, sessionId);
-    } catch {
-      // already logged + captured
-    }
-  });
+  // Fire Call 2 (response-parser) in the background only when the
+  // user actually wrote a narrative response — that's the only field
+  // the parser acts on. Slider values + private reflection are
+  // captured for the calibration aggregator (separate pipeline) and
+  // for the user's own record; they don't drive the parser.
+  if (responseText.length > 0) {
+    after(async () => {
+      try {
+        await runSessionResponseAnalysis(ctx, sessionId);
+      } catch {
+        // already logged + captured
+      }
+    });
+  }
 
   redirect("/home");
 }
