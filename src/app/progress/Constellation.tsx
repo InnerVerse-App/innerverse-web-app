@@ -1418,21 +1418,24 @@ function GalaxyGlow({ galaxy }: { galaxy: GalaxyMeta }) {
         top: `${galaxy.centerY * 100}%`,
         width: `${widthPct}%`,
         height: `${heightPct}%`,
+        // border-radius: 50% clips the span to an ellipse matching the
+        // 100%×100% gradient ellipses inside, eliminating the corner
+        // box that was visible in production. Combined with explicit
+        // rgba(R,G,B,0) terminators (instead of the `transparent`
+        // keyword, which interpolates through rgba(0,0,0,0) and leaves
+        // dark artifacts), the disc now has no visible bounding box.
+        borderRadius: "50%",
         transform: `translate(-50%, -50%) rotate(${tilt}deg)`,
         backgroundImage: [
-          // Bright warm bulge — bumped up vs PR #157 so it concentrates
-          // around the sun like a real galactic core. Tighter falloff
-          // (50% by 25%) keeps it crisp against the surrounding disc.
-          "radial-gradient(ellipse 28% 55% at center, rgba(255,200,90,0.30) 0%, rgba(220,161,20,0.14) 25%, transparent 60%)",
-          // Pink/magenta arm-region highlight — mid-disc, ring-shaped
-          // (note the inner stop at 30% is transparent so it forms an
-          // annulus around the bulge, evoking spiral arms + star-
-          // formation regions instead of bleeding into the bulge).
-          "radial-gradient(ellipse 75% 90% at center, transparent 25%, rgba(186,104,200,0.10) 45%, rgba(167,139,250,0.06) 65%, transparent 85%)",
+          // Bright warm bulge — concentrated around the sun.
+          "radial-gradient(ellipse 28% 55% at center, rgba(255,200,90,0.30) 0%, rgba(220,161,20,0.14) 25%, rgba(220,161,20,0) 60%)",
+          // Pink/magenta arm-region highlight — annulus (transparent
+          // at center → magenta → violet → transparent), evoking
+          // spiral arms + star-formation regions.
+          "radial-gradient(ellipse 75% 90% at center, rgba(186,104,200,0) 25%, rgba(186,104,200,0.10) 45%, rgba(167,139,250,0.06) 65%, rgba(167,139,250,0) 85%)",
           // Cool blue/violet outer disc — widest layer, fades to
-          // transparent at the rim so neighboring galaxies / the
-          // in-progress region don't bleed together.
-          "radial-gradient(ellipse 100% 100% at center, rgba(89,140,200,0.10) 0%, rgba(89,164,192,0.05) 45%, transparent 85%)",
+          // transparent at the rim.
+          "radial-gradient(ellipse 100% 100% at center, rgba(89,140,200,0.10) 0%, rgba(89,164,192,0.05) 45%, rgba(89,164,192,0) 85%)",
         ].join(", "),
       }}
       aria-hidden
@@ -1541,20 +1544,24 @@ function GoalComet({
   const headY = dot.y * 100;
   const tailEndX = (dot.x + Math.cos(dot.tailAngle) * dot.tailLength) * 100;
   const tailEndY = (dot.y + Math.sin(dot.tailAngle) * dot.tailLength) * 100;
+  // Outer "coma" wisp ends at 40% of the tail length — the head gets
+  // a short fluffy halo, the inner stream extends past it as a long
+  // thin streak. This is the actual structure real comet photos show
+  // and what was missing in the previous build (where the outer ran
+  // the full length and read as a paper trumpet).
+  const outerEndX =
+    (dot.x + Math.cos(dot.tailAngle) * dot.tailLength * 0.4) * 100;
+  const outerEndY =
+    (dot.y + Math.sin(dot.tailAngle) * dot.tailLength * 0.4) * 100;
   const innerTailGradId = `comet-tail-inner-${dot.id}`;
   const outerTailGradId = `comet-tail-outer-${dot.id}`;
-  // Two-layer tail: a wider, dimmer outer "coma + dust spread" sits
-  // behind a narrower, brighter inner stream. Together they give the
-  // tail a bright concentrated core that fades into a softer halo —
-  // visually closer to real comet astrophotography than a single
-  // flat triangle.
-  // Tail half-widths bumped vs the previous comet pass after the
-  // operator's reference photos (vivid green comets) showed how much
-  // the tail should fan out near the head before tapering. Outer
-  // doubled (0.95 → 1.8) for a fluffy diffuse spread; inner widened
-  // ~30% so the bright stream stays substantial.
-  const innerHalfWidthPct = 0.55;
-  const outerHalfWidthPct = 1.8;
+  // Tail widths sized to match (not exceed) the head halo. Inner is
+  // a thin bright streak; outer is a barely-wider wisp giving the
+  // streak a soft near-head halo. Far smaller than the previous
+  // build's 1.8 / 0.55 (which read as an open paper cone, not a
+  // comet streak).
+  const innerHalfWidthPct = 0.22;
+  const outerHalfWidthPct = 0.6;
   const innerPerpX = -Math.sin(dot.tailAngle) * innerHalfWidthPct;
   const innerPerpY = Math.cos(dot.tailAngle) * innerHalfWidthPct;
   const outerPerpX = -Math.sin(dot.tailAngle) * outerHalfWidthPct;
@@ -1564,10 +1571,13 @@ function GoalComet({
     `${headX - innerPerpX},${headY - innerPerpY}`,
     `${tailEndX},${tailEndY}`,
   ].join(" ");
+  // Outer polygon ends at outerEndX/Y (40% of tail length) so the
+  // fluffy coma stays near the head instead of running the whole
+  // length.
   const outerTailPoints = [
     `${headX + outerPerpX},${headY + outerPerpY}`,
     `${headX - outerPerpX},${headY - outerPerpY}`,
-    `${tailEndX},${tailEndY}`,
+    `${outerEndX},${outerEndY}`,
   ].join(" ");
 
   return (
@@ -1590,14 +1600,15 @@ function GoalComet({
             gradientUnits="userSpaceOnUse"
             x1={headX}
             y1={headY}
-            x2={tailEndX}
-            y2={tailEndY}
+            x2={outerEndX}
+            y2={outerEndY}
           >
-            {/* Outer dust spread — opacities tuned up so the diffuse
-                halo around the bright stream actually reads, instead
-                of disappearing as it did in the previous pass. */}
-            <stop offset="0%" stopColor={GOAL_COLOR} stopOpacity={0.5} />
-            <stop offset="35%" stopColor={GOAL_COLOR} stopOpacity={0.2} />
+            {/* Outer coma wisp — short, fades within ~40% of tail
+                length. Forms the soft halo around the bright streak
+                near the head, then disappears so the long thin inner
+                stream can carry the rest. */}
+            <stop offset="0%" stopColor={GOAL_COLOR} stopOpacity={0.45} />
+            <stop offset="60%" stopColor={GOAL_COLOR} stopOpacity={0.12} />
             <stop offset="100%" stopColor={GOAL_COLOR} stopOpacity={0} />
           </linearGradient>
           <linearGradient
