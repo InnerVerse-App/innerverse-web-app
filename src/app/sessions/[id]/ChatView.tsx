@@ -123,10 +123,21 @@ export function ChatView({
   // failure so callers (form submit + voice composer) can surface the
   // appropriate UI.
   //
-  // Both the form `onSubmit` handler and the VoiceComposer's
-  // sendChat callback funnel through here, so there's exactly one
-  // implementation of "exchange a turn with the coach."
-  async function sendChat(content: string): Promise<string> {
+  // The optional `onSpeakable` callback fires for each "speakable
+  // chunk" of the streaming response — used by the voice composer's
+  // streaming-TTS pipeline to start synthesizing/playing audio as
+  // the response arrives, instead of waiting for full completion.
+  // Triggered on sentence boundaries (.!?) once the buffer is at
+  // least 30 chars, OR when buffer reaches ~150 chars without a
+  // boundary (forces a chunk so latency stays bounded), OR when
+  // the stream completes (flushes any remaining text).
+  //
+  // Text mode passes no callback — the chat streams in the bubble
+  // and that's all.
+  async function sendChat(
+    content: string,
+    onSpeakable?: (chunk: string) => void,
+  ): Promise<string> {
     const trimmed = content.trim();
     if (!trimmed) throw new Error("empty message");
     if (streaming) throw new Error("already streaming");
@@ -154,6 +165,22 @@ export function ChatView({
     streamAbortRef.current = controller;
 
     let accumulated = "";
+    // Speakable-chunk tracking. `speakableBuffer` holds text that has
+    // been streamed into the AI bubble but not yet flushed to TTS.
+    // We flush on a sentence boundary (once min length is met) or on
+    // a hard cap to keep latency bounded.
+    let speakableBuffer = "";
+    const SPEAKABLE_MIN_CHARS = 30;
+    const SPEAKABLE_MAX_CHARS = 150;
+    const flushSpeakable = (final: boolean): void => {
+      if (!onSpeakable) return;
+      if (speakableBuffer.length === 0) return;
+      if (!final && speakableBuffer.length < SPEAKABLE_MIN_CHARS) return;
+      const out = speakableBuffer.trim();
+      speakableBuffer = "";
+      if (out.length > 0) onSpeakable(out);
+    };
+
     try {
       const res = await fetch(`/api/sessions/${sessionId}/messages`, {
         method: "POST",
@@ -176,7 +203,23 @@ export function ChatView({
             m.id === aiMsgId ? { ...m, content: m.content + chunk } : m,
           ),
         );
+        if (onSpeakable) {
+          speakableBuffer += chunk;
+          // Sentence boundary at end of buffer + min length → flush.
+          if (
+            speakableBuffer.length >= SPEAKABLE_MIN_CHARS &&
+            /[.!?][\s\n]*$/.test(speakableBuffer)
+          ) {
+            flushSpeakable(false);
+          } else if (speakableBuffer.length >= SPEAKABLE_MAX_CHARS) {
+            // Hard cap: force a chunk so audio doesn't stall waiting
+            // for a sentence boundary on a long run-on response.
+            flushSpeakable(true);
+          }
+        }
       }
+      // End of stream — flush any remaining buffered text.
+      flushSpeakable(true);
       return accumulated;
     } catch (err) {
       // Abort on unmount is the intended cancel path. Surface as an
