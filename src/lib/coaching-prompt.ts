@@ -20,7 +20,7 @@ const RECENT_BREAKTHROUGHS_N = 5;
 //      message only. Carries the focus-aware opening logic
 //      ("acknowledge the goal or shift if one was passed; otherwise
 //      broad invitation").
-//   2. prompt-v11.3-gpt-5.2.md — the master coaching prompt. Governs
+//   2. prompt-v11.4-gpt-5.4.md — the master coaching prompt. Governs
 //      every turn after the opener. Sent verbatim, never altered.
 // Both files are bundled via next.config.ts outputFileTracingIncludes
 // (the `prompt-*.md` glob already covers them). Read once at module
@@ -47,7 +47,7 @@ const SESSION_OPENER_PROMPT = readFileSync(
   "utf8",
 ).trim();
 const COACHING_PROMPT = readFileSync(
-  path.join(process.cwd(), "reference", "prompt-v11.3-gpt-5.2.md"),
+  path.join(process.cwd(), "reference", "prompt-v11.4-gpt-5.4.md"),
   "utf8",
 ).trim();
 

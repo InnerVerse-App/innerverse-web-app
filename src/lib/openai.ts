@@ -32,7 +32,7 @@ import OpenAI from "openai";
 // gpt-5 for in production. If any specific call regresses on its
 // new pin, swap that one (not the others).
 export const MODEL_SESSION_START = "gpt-5-mini";
-export const MODEL_SESSION_CHAT = "gpt-5.2";
+export const MODEL_SESSION_CHAT = "gpt-5.4";
 export const MODEL_SESSION_END = "gpt-5.2";
 export const MODEL_SESSION_RESPONSE = "gpt-5-mini";
 export const MODEL_GROWTH_NARRATIVE = "gpt-5";
