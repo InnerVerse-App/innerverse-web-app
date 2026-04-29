@@ -455,11 +455,26 @@ export function computeLayout(input: {
   goals: GoalDot[];
   nowMs?: number;
   ageWindowDays?: number;
+  // LAYOUT membership — which sessions/shifts cluster around which
+  // breakthrough's sun. Time-windowed: every session/shift whose
+  // timestamp falls between the previous breakthrough and this one
+  // is a member of this galaxy for placement purposes. Independent
+  // of the LLM's contributing_session_ids — the analyzer's tagging
+  // remains the source of truth for "what fed this breakthrough"
+  // (used for connection-line drawing in Constellation.tsx) but not
+  // for visual placement.
+  galaxyMembership?: Map<string, ConstellationContributorIds>;
+  // Legacy/demo fallback: when callers don't supply galaxyMembership,
+  // we fall back to constellationLinks (which is what the demo data
+  // and pre-time-window real callers passed). The shape is identical.
   constellationLinks?: Map<string, ConstellationContributorIds>;
 }): ConstellationLayout {
   const nowMs = input.nowMs ?? Date.now();
   const ageWindowDays = input.ageWindowDays ?? DEFAULT_AGE_WINDOW_DAYS;
-  const links = input.constellationLinks ?? new Map();
+  const links =
+    input.galaxyMembership ??
+    input.constellationLinks ??
+    new Map<string, ConstellationContributorIds>();
 
   const galaxyCenters = buildGalaxyCenters(input.breakthroughs, links, nowMs);
   const galaxyById = new Map(galaxyCenters.map((g) => [g.breakthroughId, g]));

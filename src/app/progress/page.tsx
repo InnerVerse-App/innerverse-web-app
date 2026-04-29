@@ -279,6 +279,19 @@ async function loadConstellation(
     });
   }
 
+  // Time-windowed galaxy membership for layout. Independent of the
+  // LLM's contributing_session_ids — every session/shift whose timestamp
+  // falls before this breakthrough but after the previous one belongs
+  // to this galaxy visually. Sessions/shifts after the most recent
+  // breakthrough (or before the very first) stay in the in-progress
+  // region at universe center. The LLM-tagged `constellationLinks`
+  // remains the source of truth for connection-line drawing.
+  const galaxyMembership = buildTimeWindowedMembership(
+    breakthroughRows,
+    sessionRows,
+    insightRows,
+  );
+
   const layout = computeLayout({
     ageWindowDays,
     sessions: sessionRows.map((s) => ({
@@ -306,6 +319,7 @@ async function loadConstellation(
       progressPercent: g.progress_percent,
       completionType: g.completion_type,
     })),
+    galaxyMembership,
     constellationLinks,
   });
 
@@ -322,6 +336,48 @@ async function loadConstellation(
     mindsetShiftLinks,
     goalLinks,
   };
+}
+
+// Time-windowed galaxy membership for layout. Each session/shift gets
+// assigned to the FIRST breakthrough whose created_at >= its timestamp
+// — i.e., the next breakthrough that happened after it. Sessions/shifts
+// after the latest breakthrough get no galaxy assignment (they end up
+// in the in-progress region at universe center). Sessions/shifts before
+// the first breakthrough are assigned to that first breakthrough — they
+// are the build-up that led to it.
+//
+// This is intentionally distinct from the LLM's contributing_session_ids
+// (which says "these sessions were tagged as feeding the breakthrough").
+// Layout uses time; line-drawing still uses the analyzer's tagging.
+function buildTimeWindowedMembership(
+  breakthroughs: BreakthroughRow[],
+  sessions: SessionRow[],
+  insights: InsightRow[],
+): Map<string, { sessionIds: string[]; shiftIds: string[] }> {
+  const result = new Map<string, { sessionIds: string[]; shiftIds: string[] }>();
+  if (breakthroughs.length === 0) return result;
+
+  // Sort breakthroughs oldest → newest so .find() returns the earliest
+  // breakthrough whose timestamp is >= the dot's timestamp.
+  const sortedBts = [...breakthroughs].sort(
+    (a, b) => Date.parse(a.created_at) - Date.parse(b.created_at),
+  );
+  for (const b of sortedBts) {
+    result.set(b.id, { sessionIds: [], shiftIds: [] });
+  }
+
+  for (const s of sessions) {
+    if (!s.ended_at) continue;
+    const t = Date.parse(s.ended_at);
+    const owner = sortedBts.find((b) => Date.parse(b.created_at) >= t);
+    if (owner) result.get(owner.id)!.sessionIds.push(s.id);
+  }
+  for (const m of insights) {
+    const t = Date.parse(m.created_at);
+    const owner = sortedBts.find((b) => Date.parse(b.created_at) >= t);
+    if (owner) result.get(owner.id)!.shiftIds.push(m.id);
+  }
+  return result;
 }
 
 // Stripped-down galaxy name when the model didn't emit one. First
