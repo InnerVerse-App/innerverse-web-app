@@ -895,16 +895,29 @@ export function Constellation({
                           stopOpacity={0}
                         />
                       </linearGradient>
+                      {/* Comet head halo. Three-stop gradient runs
+                          from a hot white-green core out through
+                          vivid green to transparent — mimics the
+                          bright incandescent coma in real comet
+                          photography (e.g. C/2022 E3 ZTF). Stronger
+                          inner opacity than session/shift halos
+                          because comets *should* feel like burning
+                          objects, not data points. */}
                       <radialGradient id="halo-goal">
                         <stop
                           offset="0%"
-                          stopColor={GOAL_COLOR}
+                          stopColor="#ffffff"
                           stopOpacity={0.55}
+                        />
+                        <stop
+                          offset="22%"
+                          stopColor={GOAL_COLOR}
+                          stopOpacity={0.85}
                         />
                         <stop
                           offset="55%"
                           stopColor={GOAL_COLOR}
-                          stopOpacity={0.18}
+                          stopOpacity={0.32}
                         />
                         <stop
                           offset="100%"
@@ -1535,8 +1548,13 @@ function GoalComet({
   // tail a bright concentrated core that fades into a softer halo —
   // visually closer to real comet astrophotography than a single
   // flat triangle.
-  const innerHalfWidthPct = 0.42;
-  const outerHalfWidthPct = 0.95;
+  // Tail half-widths bumped vs the previous comet pass after the
+  // operator's reference photos (vivid green comets) showed how much
+  // the tail should fan out near the head before tapering. Outer
+  // doubled (0.95 → 1.8) for a fluffy diffuse spread; inner widened
+  // ~30% so the bright stream stays substantial.
+  const innerHalfWidthPct = 0.55;
+  const outerHalfWidthPct = 1.8;
   const innerPerpX = -Math.sin(dot.tailAngle) * innerHalfWidthPct;
   const innerPerpY = Math.cos(dot.tailAngle) * innerHalfWidthPct;
   const outerPerpX = -Math.sin(dot.tailAngle) * outerHalfWidthPct;
@@ -1575,8 +1593,11 @@ function GoalComet({
             x2={tailEndX}
             y2={tailEndY}
           >
-            <stop offset="0%" stopColor={GOAL_COLOR} stopOpacity={0.35} />
-            <stop offset="40%" stopColor={GOAL_COLOR} stopOpacity={0.12} />
+            {/* Outer dust spread — opacities tuned up so the diffuse
+                halo around the bright stream actually reads, instead
+                of disappearing as it did in the previous pass. */}
+            <stop offset="0%" stopColor={GOAL_COLOR} stopOpacity={0.5} />
+            <stop offset="35%" stopColor={GOAL_COLOR} stopOpacity={0.2} />
             <stop offset="100%" stopColor={GOAL_COLOR} stopOpacity={0} />
           </linearGradient>
           <linearGradient
@@ -1587,9 +1608,13 @@ function GoalComet({
             x2={tailEndX}
             y2={tailEndY}
           >
-            <stop offset="0%" stopColor={GOAL_COLOR} stopOpacity={0.95} />
-            <stop offset="25%" stopColor={GOAL_COLOR} stopOpacity={0.55} />
-            <stop offset="70%" stopColor={GOAL_COLOR} stopOpacity={0.18} />
+            {/* Inner bright stream — head end is essentially saturated
+                green-white to match the burning coma. Stays bright
+                deep into the trail before fading. */}
+            <stop offset="0%" stopColor="#e7ffea" stopOpacity={1} />
+            <stop offset="8%" stopColor={GOAL_COLOR} stopOpacity={0.95} />
+            <stop offset="35%" stopColor={GOAL_COLOR} stopOpacity={0.6} />
+            <stop offset="75%" stopColor={GOAL_COLOR} stopOpacity={0.22} />
             <stop offset="100%" stopColor={GOAL_COLOR} stopOpacity={0} />
           </linearGradient>
         </defs>
