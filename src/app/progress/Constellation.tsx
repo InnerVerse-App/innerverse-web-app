@@ -141,6 +141,58 @@ const FAR_STARS: Array<{
   { x: 56, y: 48, size: 1, baseOpacity: 0.4, twinkleMin: 0.18, twinkleMax: 0.6, duration: 4.7, delay: 1.4 },
 ];
 
+// Dense cluster of tiny stars concentrated within the upper Milky-Way
+// band (y: 5-22%). Real Milky Way photographs show dramatically higher
+// star density inside the dust band than in the surrounding sky — this
+// list reproduces that. Most carry a faint cyan tint (`tint: "cyan"`)
+// matching the cyan-blue star color that dominates real Milky Way and
+// Andromeda images; a few stay neutral white for contrast.
+const BAND_STARS: Array<{
+  x: number;
+  y: number;
+  size: number;
+  baseOpacity: number;
+  tint: "cyan" | "warm" | "white";
+  duration: number;
+  delay: number;
+}> = [
+  { x: 8, y: 11, size: 0.7, baseOpacity: 0.55, tint: "cyan", duration: 3.6, delay: 0.4 },
+  { x: 12, y: 7, size: 0.6, baseOpacity: 0.45, tint: "white", duration: 4.1, delay: 1.2 },
+  { x: 15, y: 17, size: 0.8, baseOpacity: 0.6, tint: "cyan", duration: 3.4, delay: 0.6 },
+  { x: 19, y: 14, size: 0.6, baseOpacity: 0.45, tint: "cyan", duration: 4.3, delay: 1.9 },
+  { x: 22, y: 9, size: 1, baseOpacity: 0.7, tint: "cyan", duration: 3.8, delay: 0.2 },
+  { x: 25, y: 18, size: 0.6, baseOpacity: 0.45, tint: "white", duration: 4.0, delay: 1.5 },
+  { x: 28, y: 7, size: 0.7, baseOpacity: 0.55, tint: "cyan", duration: 3.7, delay: 2.1 },
+  { x: 31, y: 13, size: 1.2, baseOpacity: 0.75, tint: "cyan", duration: 4.5, delay: 0.7 },
+  { x: 34, y: 19, size: 0.6, baseOpacity: 0.45, tint: "cyan", duration: 3.9, delay: 1.3 },
+  { x: 37, y: 9, size: 0.7, baseOpacity: 0.55, tint: "white", duration: 4.2, delay: 0.5 },
+  { x: 40, y: 16, size: 0.6, baseOpacity: 0.45, tint: "cyan", duration: 3.5, delay: 2.3 },
+  { x: 43, y: 11, size: 0.8, baseOpacity: 0.6, tint: "cyan", duration: 3.8, delay: 1.0 },
+  { x: 46, y: 17, size: 0.7, baseOpacity: 0.5, tint: "cyan", duration: 4.0, delay: 0.3 },
+  { x: 49, y: 8, size: 1.3, baseOpacity: 0.8, tint: "cyan", duration: 4.7, delay: 1.7 },
+  { x: 52, y: 14, size: 0.6, baseOpacity: 0.45, tint: "warm", duration: 3.6, delay: 0.9 },
+  { x: 55, y: 19, size: 0.6, baseOpacity: 0.45, tint: "cyan", duration: 4.1, delay: 2.0 },
+  { x: 58, y: 10, size: 0.7, baseOpacity: 0.55, tint: "white", duration: 3.7, delay: 0.4 },
+  { x: 61, y: 16, size: 0.8, baseOpacity: 0.6, tint: "cyan", duration: 4.3, delay: 1.6 },
+  { x: 64, y: 7, size: 0.6, baseOpacity: 0.45, tint: "cyan", duration: 3.9, delay: 0.8 },
+  { x: 67, y: 13, size: 1, baseOpacity: 0.7, tint: "cyan", duration: 4.4, delay: 2.2 },
+  { x: 70, y: 18, size: 0.6, baseOpacity: 0.45, tint: "cyan", duration: 3.5, delay: 0.6 },
+  { x: 73, y: 9, size: 0.7, baseOpacity: 0.55, tint: "white", duration: 4.0, delay: 1.4 },
+  { x: 76, y: 15, size: 0.6, baseOpacity: 0.45, tint: "cyan", duration: 3.8, delay: 0.5 },
+  { x: 79, y: 19, size: 0.8, baseOpacity: 0.6, tint: "cyan", duration: 4.2, delay: 1.8 },
+  { x: 82, y: 11, size: 0.6, baseOpacity: 0.45, tint: "cyan", duration: 3.6, delay: 0.2 },
+  { x: 85, y: 17, size: 0.7, baseOpacity: 0.55, tint: "cyan", duration: 4.1, delay: 2.4 },
+  { x: 88, y: 8, size: 0.9, baseOpacity: 0.65, tint: "cyan", duration: 4.6, delay: 1.1 },
+  { x: 91, y: 14, size: 0.6, baseOpacity: 0.45, tint: "white", duration: 3.7, delay: 0.7 },
+  { x: 94, y: 19, size: 0.6, baseOpacity: 0.45, tint: "cyan", duration: 4.0, delay: 1.5 },
+];
+
+const STAR_TINTS = {
+  cyan: "rgb(170, 215, 255)",
+  warm: "rgb(255, 230, 200)",
+  white: "rgb(255, 255, 255)",
+} as const;
+
 // 8-pointed compass-rose star polygon (viewBox 0..24, outer r=10,
 // inner r=4). Distinct shape from circles so breakthroughs read as
 // the rare, hard-won, "shining" moments.
@@ -661,15 +713,17 @@ export function Constellation({
           //   5. Base dark teal gradient.
           background: [
             // Milky-Way upper band (three overlapping ellipses give it
-            // an organic, non-rectangular silhouette).
-            "radial-gradient(ellipse 28% 8% at 28% 12%, rgba(186,104,200,0.22) 0%, transparent 75%)",
-            "radial-gradient(ellipse 32% 9% at 56% 10%, rgba(167,139,250,0.24) 0%, transparent 75%)",
-            "radial-gradient(ellipse 26% 7% at 82% 14%, rgba(120,160,220,0.18) 0%, transparent 75%)",
+            // an organic, non-rectangular silhouette). Opacities tuned
+            // up vs the first cosmic-atmosphere pass to match the
+            // pink/violet richness of the operator's reference photos.
+            "radial-gradient(ellipse 28% 9% at 28% 12%, rgba(186,104,200,0.30) 0%, transparent 75%)",
+            "radial-gradient(ellipse 32% 10% at 56% 10%, rgba(167,139,250,0.34) 0%, transparent 75%)",
+            "radial-gradient(ellipse 26% 8% at 82% 14%, rgba(120,160,220,0.26) 0%, transparent 75%)",
             // Lower-edge dust hint.
-            "radial-gradient(ellipse 50% 10% at 50% 92%, rgba(167,139,250,0.10) 0%, transparent 80%)",
+            "radial-gradient(ellipse 50% 12% at 50% 92%, rgba(167,139,250,0.16) 0%, transparent 80%)",
             // Side wisps.
-            "radial-gradient(ellipse 18% 32% at 6% 55%, rgba(186,104,200,0.10) 0%, transparent 70%)",
-            "radial-gradient(ellipse 18% 32% at 96% 70%, rgba(89,140,200,0.12) 0%, transparent 70%)",
+            "radial-gradient(ellipse 18% 32% at 6% 55%, rgba(186,104,200,0.14) 0%, transparent 70%)",
+            "radial-gradient(ellipse 18% 32% at 96% 70%, rgba(89,140,200,0.16) 0%, transparent 70%)",
             // Existing center + corner blue glows (slightly amped).
             "radial-gradient(circle at center, rgba(89,164,192,0.14) 0%, transparent 38%)",
             "radial-gradient(ellipse at 75% 25%, rgba(89,164,192,0.07) 0%, transparent 50%)",
@@ -860,25 +914,56 @@ export function Constellation({
                       </radialGradient>
                     </defs>
                   </svg>
-                  {FAR_STARS.map((s, i) => (
+                  {FAR_STARS.map((s, i) => {
+                    // Brightest stars (size >= 2) get a subtle box-shadow
+                    // halo so they read as "named bright stars" against
+                    // the field — small but visible scale of the same
+                    // luminous-point treatment the data dots have.
+                    const isHighlight = s.size >= 2;
+                    return (
+                      <span
+                        key={`bg-${i}`}
+                        className="star-twinkle absolute rounded-full bg-white"
+                        style={
+                          {
+                            left: `${s.x}%`,
+                            top: `${s.y}%`,
+                            width: `${s.size}px`,
+                            height: `${s.size}px`,
+                            "--twinkle-min": s.twinkleMin,
+                            "--twinkle-max": s.twinkleMax,
+                            "--twinkle-duration": `${s.duration}s`,
+                            "--twinkle-delay": `${s.delay}s`,
+                            boxShadow: isHighlight
+                              ? "0 0 3px rgba(255,255,255,0.8), 0 0 8px rgba(170,215,255,0.5)"
+                              : undefined,
+                          } as React.CSSProperties
+                        }
+                        aria-hidden
+                      />
+                    );
+                  })}
+                  {/* Dense band-region stars. These cluster within the
+                      upper Milky-Way band overlay, reproducing the
+                      higher star density real Milky Way photographs
+                      show *inside* the dust band vs the surrounding
+                      sky. Cyan-tinted majority + warmer/white minority
+                      for color variety. */}
+                  {BAND_STARS.map((s, i) => (
                     <span
-                      key={`bg-${i}`}
-                      className="star-twinkle absolute rounded-full bg-white"
+                      key={`band-${i}`}
+                      className="star-twinkle absolute rounded-full"
                       style={
                         {
                           left: `${s.x}%`,
                           top: `${s.y}%`,
                           width: `${s.size}px`,
                           height: `${s.size}px`,
-                          "--twinkle-min": s.twinkleMin,
-                          "--twinkle-max": s.twinkleMax,
+                          backgroundColor: STAR_TINTS[s.tint],
+                          "--twinkle-min": s.baseOpacity * 0.4,
+                          "--twinkle-max": s.baseOpacity,
                           "--twinkle-duration": `${s.duration}s`,
                           "--twinkle-delay": `${s.delay}s`,
-                          // baseOpacity caps how bright the star can
-                          // ever get — multiplied with twinkleMax via
-                          // CSS color-mix would be cleaner but the
-                          // older browser support story is iffy, so we
-                          // pre-bake it into the per-star min/max.
                         } as React.CSSProperties
                       }
                       aria-hidden
