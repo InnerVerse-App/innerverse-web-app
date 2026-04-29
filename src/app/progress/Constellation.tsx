@@ -712,13 +712,14 @@ export function Constellation({
           //   4. Existing center + corner blue glows (amped slightly).
           //   5. Base dark teal gradient.
           background: [
-            // Milky-Way upper band (three overlapping ellipses give it
-            // an organic, non-rectangular silhouette). Opacities tuned
-            // up vs the first cosmic-atmosphere pass to match the
-            // pink/violet richness of the operator's reference photos.
-            "radial-gradient(ellipse 28% 9% at 28% 12%, rgba(186,104,200,0.30) 0%, transparent 75%)",
-            "radial-gradient(ellipse 32% 10% at 56% 10%, rgba(167,139,250,0.34) 0%, transparent 75%)",
-            "radial-gradient(ellipse 26% 8% at 82% 14%, rgba(120,160,220,0.26) 0%, transparent 75%)",
+            // Milky-Way upper band (three overlapping ellipses for an
+            // organic non-rectangular silhouette). Larger ellipses +
+            // intermediate stops + lower peak opacity give a gentler
+            // fade than the previous pass, so the band feathers into
+            // the panel instead of reading as discrete blobs.
+            "radial-gradient(ellipse 36% 14% at 28% 12%, rgba(186,104,200,0.20) 0%, rgba(186,104,200,0.10) 50%, rgba(186,104,200,0) 100%)",
+            "radial-gradient(ellipse 40% 15% at 56% 10%, rgba(167,139,250,0.22) 0%, rgba(167,139,250,0.10) 50%, rgba(167,139,250,0) 100%)",
+            "radial-gradient(ellipse 34% 13% at 82% 14%, rgba(120,160,220,0.18) 0%, rgba(120,160,220,0.08) 50%, rgba(120,160,220,0) 100%)",
             // Lower-edge dust hint.
             "radial-gradient(ellipse 50% 12% at 50% 92%, rgba(167,139,250,0.16) 0%, transparent 80%)",
             // Side wisps.
@@ -1419,7 +1420,7 @@ function GalaxyGlow({ galaxy }: { galaxy: GalaxyMeta }) {
   //    35% the disc is fully visible; the visible edge fades over
   //    the outer 50% rather than near a hard rim.
   const softMask =
-    "radial-gradient(ellipse closest-side at 50% 50%, rgba(255,255,255,1) 0%, rgba(255,255,255,1) 35%, rgba(255,255,255,0.85) 55%, rgba(255,255,255,0.5) 75%, rgba(255,255,255,0.2) 90%, rgba(255,255,255,0) 100%)";
+    "radial-gradient(ellipse closest-side at 50% 50%, rgba(255,255,255,1) 0%, rgba(255,255,255,0.92) 22%, rgba(255,255,255,0.72) 45%, rgba(255,255,255,0.42) 65%, rgba(255,255,255,0.18) 85%, rgba(255,255,255,0) 100%)";
   return (
     <span
       className="pointer-events-none absolute"
