@@ -246,9 +246,18 @@ export function VoiceComposer({
   }
 
   // Synthesize a single chunk and enqueue the resulting audio. If
-  // nothing is currently playing, kick off playback. Errors are
-  // swallowed silently — a single chunk failure shouldn't kill the
-  // whole turn (the chat already happened).
+  // nothing is currently playing, kick off playback.
+  //
+  // Race-safe against interruption: when the user interrupts mid-
+  // response, stopAndClearPlayback() empties the queue and the
+  // phase moves to recording. But /speak calls for chunks that were
+  // already in-flight will still resolve afterward. The phase guard
+  // BEFORE pushing to the queue drops those late chunks silently
+  // instead of starting stale playback during the user's new turn.
+  //
+  // Single-chunk errors are swallowed — dropping one chunk is better
+  // than aborting the whole turn. Sentry-side capture lives in the
+  // /speak route.
   async function synthesizeAndQueue(chunk: string): Promise<void> {
     try {
       const res = await fetch(`/api/sessions/${sessionId}/speak`, {
@@ -258,24 +267,24 @@ export function VoiceComposer({
       });
       if (!res.ok) return;
       const blob = await res.blob();
+      // Late-arrival guard. If phase has moved past thinking/speaking
+      // (interruption, error, unmount), drop this chunk silently.
+      const phase = phaseRef.current;
+      if (phase !== "thinking" && phase !== "speaking") {
+        return;
+      }
       const url = URL.createObjectURL(blob);
       audioUrlsRef.current.push(url);
       const audio = new Audio(url);
       audioQueueRef.current.push(audio);
-      // Start playback if nothing is currently playing AND we're in
-      // the speaking phase (or we just transitioned into it).
       if (!currentAudioRef.current) {
-        // Move to speaking phase as soon as audio is ready, even if
-        // chat stream isn't done. The earlier we start, the lower
-        // the user-perceived latency.
         if (phaseRef.current !== "speaking") {
           setPhaseSafe("speaking");
         }
         playNextInQueue();
       }
     } catch {
-      // Silent: dropping a single chunk is better than aborting the
-      // whole turn. Sentry-side capture happens in /speak.
+      // see comment above — silent intentional
     }
   }
 
