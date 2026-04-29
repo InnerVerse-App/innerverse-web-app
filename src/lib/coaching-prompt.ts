@@ -16,11 +16,12 @@ import { supabaseForUser } from "@/lib/supabase";
 const RECENT_BREAKTHROUGHS_N = 5;
 
 // Two-prompt session model:
-//   1. prompt-session-opener.md — rules for the FIRST message only.
-//      Carries the focus-aware opening logic ("acknowledge the goal
-//      or shift if one was passed; otherwise broad invitation").
-//   2. prompt-v11.3.md — the master coaching prompt. Governs every
-//      turn after the opener. Sent verbatim, never altered.
+//   1. prompt-session-opener-gpt-5-mini.md — rules for the FIRST
+//      message only. Carries the focus-aware opening logic
+//      ("acknowledge the goal or shift if one was passed; otherwise
+//      broad invitation").
+//   2. prompt-v11.3-gpt-5.2.md — the master coaching prompt. Governs
+//      every turn after the opener. Sent verbatim, never altered.
 // Both files are bundled via next.config.ts outputFileTracingIncludes
 // (the `prompt-*.md` glob already covers them). Read once at module
 // load; files never change at runtime.
@@ -32,12 +33,21 @@ const RECENT_BREAKTHROUGHS_N = 5;
 // OpenAI's side, so v11.3 governs ongoing coaching while still
 // having the opener exchange (the AI's intro + the user's reply)
 // in context.
+// The `-gpt-X` suffix in each filename names the model the prompt is
+// currently running on. When you change the model in src/lib/openai.ts
+// you MUST rename the file to match (and update the path here). The
+// filename is the at-a-glance source of truth for which prompt is
+// running on which model.
 const SESSION_OPENER_PROMPT = readFileSync(
-  path.join(process.cwd(), "reference", "prompt-session-opener.md"),
+  path.join(
+    process.cwd(),
+    "reference",
+    "prompt-session-opener-gpt-5-mini.md",
+  ),
   "utf8",
 ).trim();
 const COACHING_PROMPT = readFileSync(
-  path.join(process.cwd(), "reference", "prompt-v11.3.md"),
+  path.join(process.cwd(), "reference", "prompt-v11.3-gpt-5.2.md"),
   "utf8",
 ).trim();
 

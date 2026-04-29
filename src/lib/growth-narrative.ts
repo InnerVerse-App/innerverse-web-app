@@ -12,8 +12,11 @@ import {
 import type { UserSupabase } from "@/lib/supabase";
 
 // Bundled at build time via next.config.ts outputFileTracingIncludes.
+// Filename suffix `-gpt-5` names the model this prompt is pinned to.
+// If you change MODEL_GROWTH_NARRATIVE in src/lib/openai.ts, rename
+// the file to match and update this path.
 const NARRATIVE_PROMPT = readFileSync(
-  path.join(process.cwd(), "reference", "prompt-growth-narrative-v1.md"),
+  path.join(process.cwd(), "reference", "prompt-growth-narrative-v1-gpt-5.md"),
   "utf8",
 ).trim();
 
