@@ -41,14 +41,20 @@ const COACHING_PROMPT = readFileSync(
   "utf8",
 ).trim();
 
-// The three `developer`-role messages that /v1/responses expects on
-// a session-start call: opener rules, master coaching prompt,
-// then the per-session client profile.
-export type SessionStartInput = [
-  { role: "developer"; content: string },
-  { role: "developer"; content: string },
-  { role: "developer"; content: string },
-];
+// The `developer`-role messages /v1/responses expects on a
+// session-start call. Always present:
+//   1. Opener rules (turn 1 only)
+//   2. Master coaching prompt (v11.3, ongoing)
+//   3. Client profile (name, focus, last session, goals, etc.)
+// Optional:
+//   4. Style calibration (only when coaching_state.recent_style_
+//      feedback is populated — i.e., the aggregator has run at
+//      least once for this user). Skipped on early sessions so
+//      the coach doesn't see an empty "Style calibration:" block.
+export type SessionStartInput = Array<{
+  role: "developer";
+  content: string;
+}>;
 
 export type CoachingState = {
   directness: number;
@@ -179,9 +185,24 @@ export async function buildSessionStartInput(args: {
     focus: args.focus ?? null,
   });
 
-  return [
+  const messages: SessionStartInput = [
     { role: "developer", content: SESSION_OPENER_PROMPT },
     { role: "developer", content: COACHING_PROMPT },
     { role: "developer", content: profile },
   ];
+
+  // Append the style-calibration block as a 4th developer message
+  // when it exists. The aggregator (lib/style-calibration.ts) writes
+  // recent_style_feedback after each session whose form had any
+  // feedback signal; on early sessions before it's run, we omit
+  // this entirely so the coach doesn't see an empty header.
+  const styleSummary = state.recent_style_feedback?.trim();
+  if (styleSummary) {
+    messages.push({
+      role: "developer",
+      content: `Style calibration for this session:\n${styleSummary}`,
+    });
+  }
+
+  return messages;
 }

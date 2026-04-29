@@ -24,6 +24,7 @@ export const MODEL_SESSION_CHAT = "gpt-5.4-mini";
 export const MODEL_SESSION_END = "gpt-5.4-mini";
 export const MODEL_SESSION_RESPONSE = "gpt-5.4-mini";
 export const MODEL_GROWTH_NARRATIVE = "gpt-5.4-mini";
+export const MODEL_STYLE_CALIBRATION = "gpt-5.4-mini";
 
 // Bumped from 2000 (v5) to 4000 (v6) to 6000 (v7) as the prompts
 // have grown. v7 adds per-theme rationales + per-sub-score

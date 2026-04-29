@@ -1346,3 +1346,19 @@ Blast radius: Zero functional impact — the code shipped, the migration is on d
 Suggested fix: Already mitigated. Closing comments on #96 and #97 explain the supersedence; this entry adds an operator-level audit trail. Going forward: when stacking PRs, either (a) merge the bottom of the stack first, or (b) rebase upper branches onto main before squash-merging so the squash only contains its own changes.
 Status: FIXED (2026-04-27) — process learning, no code action needed.
 
+
+## 2026-04-29 — Style calibration aggregator: needs real-user testing
+
+Severity: MED
+Lens: product
+Location: `src/lib/style-calibration.ts`, `reference/prompt-style-calibration-v1.md`, `coaching_state.recent_style_feedback`
+Root cause: This is a brand-new feedback loop with several knobs picked on intuition, not data: the 10-session window (vs 5 / 20 / exponential decay), the float drift cap (~0.3 per update), the choice to feed the LLM the most recent transcript at all, and the dedicated 4th-developer-message strategy vs burying calibration in the profile. Two open questions are also testing-only:
+  1. Does the LLM *actually* shift style based on the natural-language summary, or just nod at it? Only production dialogue tells you.
+  2. Will users engage with the sliders enough to produce useful data, or will most submits be empty/Skip and the loop will starve?
+Blast radius: At pre-launch / <10 testers: low — the worst case is calibration drifts in odd directions and we adjust the prompt or the aggregator math. At public-beta scale: a misaligned aggregator could push the coach toward unhelpful tones at scale.
+Suggested fix: Bake real-user signal into the next round before locking the design:
+  - Log per-session whether the calibration message was emitted vs skipped, and the pre/post float values.
+  - At the >10-tester gate (or before public beta), spot-check a sample of pre/post calibration deltas against the qualitative session feedback to see if the aggregator's reading matches the operator's.
+  - Be willing to: change the window size, drop the transcript input if it adds noise, or move the calibration back into the profile if the dedicated-message approach doesn't change outcomes.
+Status: OPEN (revisit at >10-tester gate).
+
