@@ -5,6 +5,10 @@ import { revalidatePath } from "next/cache";
 import { auth } from "@clerk/nextjs/server";
 
 import {
+  getDisclaimerAcknowledgedAt,
+  isDisclaimerAcknowledged,
+} from "@/lib/disclaimer";
+import {
   getOnboardingState,
   isOnboardingComplete,
 } from "@/lib/onboarding";
@@ -16,6 +20,9 @@ export async function archiveGoal(formData: FormData): Promise<void> {
 
   const onboarding = await getOnboardingState();
   if (!isOnboardingComplete(onboarding)) redirect("/onboarding");
+
+  const ack = await getDisclaimerAcknowledgedAt();
+  if (!isDisclaimerAcknowledged(ack)) redirect("/disclaimer");
 
   const ctx = await supabaseForUser();
   if (!ctx) redirect("/sign-in");

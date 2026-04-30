@@ -2,6 +2,10 @@ import { redirect } from "next/navigation";
 import { auth } from "@clerk/nextjs/server";
 
 import { PageShell } from "@/app/_components/PageShell";
+import {
+  getDisclaimerAcknowledgedAt,
+  isDisclaimerAcknowledged,
+} from "@/lib/disclaimer";
 import { type ActiveGoal, loadActiveGoalsWithLazySeed } from "@/lib/goals";
 import {
   getOnboardingState,
@@ -312,6 +316,10 @@ export default async function HomePage({
     const state = await getOnboardingState();
     if (!isOnboardingComplete(state)) {
       redirect("/onboarding");
+    }
+    const ack = await getDisclaimerAcknowledgedAt();
+    if (!isDisclaimerAcknowledged(ack)) {
+      redirect("/disclaimer");
     }
 
     coach = coachLabel(state?.coach_name);

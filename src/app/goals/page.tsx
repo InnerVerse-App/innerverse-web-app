@@ -11,6 +11,10 @@ import { PageShell } from "@/app/_components/PageShell";
 import { CircularProgressRing } from "@/app/_components/CircularProgressRing";
 import { ProgressBar } from "@/app/_components/ProgressBar";
 import { RecencyBar } from "@/app/_components/RecencyBar";
+import {
+  getDisclaimerAcknowledgedAt,
+  isDisclaimerAcknowledged,
+} from "@/lib/disclaimer";
 import { formatDateCompact } from "@/lib/format";
 import {
   type ActiveGoal,
@@ -301,6 +305,9 @@ export default async function GoalsPage({
 
   const onboarding = await getOnboardingState();
   if (!isOnboardingComplete(onboarding)) redirect("/onboarding");
+
+  const ack = await getDisclaimerAcknowledgedAt();
+  if (!isDisclaimerAcknowledged(ack)) redirect("/disclaimer");
 
   const ctx = await supabaseForUser();
   if (!ctx) redirect("/sign-in");

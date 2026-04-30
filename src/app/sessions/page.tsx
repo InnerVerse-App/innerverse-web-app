@@ -10,6 +10,10 @@ import {
   type StartSessionGoal,
   type StartSessionShift,
 } from "@/app/home/StartSessionMenu";
+import {
+  getDisclaimerAcknowledgedAt,
+  isDisclaimerAcknowledged,
+} from "@/lib/disclaimer";
 import { loadActiveGoalsWithLazySeed } from "@/lib/goals";
 import { formatDateShort } from "@/lib/format";
 import { progressForSession, progressToOpacity } from "@/lib/progress";
@@ -182,6 +186,9 @@ export default async function SessionsListPage({
 
     const onboarding = await getOnboardingState();
     if (!isOnboardingComplete(onboarding)) redirect("/onboarding");
+
+    const ack = await getDisclaimerAcknowledgedAt();
+    if (!isDisclaimerAcknowledged(ack)) redirect("/disclaimer");
   }
 
   // Real path: expandable cards (matching the demo branch's UX) so

@@ -3,6 +3,10 @@ import { auth } from "@clerk/nextjs/server";
 
 import { PageShell } from "@/app/_components/PageShell";
 import {
+  getDisclaimerAcknowledgedAt,
+  isDisclaimerAcknowledged,
+} from "@/lib/disclaimer";
+import {
   getOnboardingState,
   isOnboardingComplete,
 } from "@/lib/onboarding";
@@ -45,6 +49,9 @@ export default async function NextStepsPage() {
 
   const onboarding = await getOnboardingState();
   if (!isOnboardingComplete(onboarding)) redirect("/onboarding");
+
+  const ack = await getDisclaimerAcknowledgedAt();
+  if (!isDisclaimerAcknowledged(ack)) redirect("/disclaimer");
 
   const rows = await loadNextSteps();
   const pending = rows.filter((r) => r.status === "pending");

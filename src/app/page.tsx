@@ -4,6 +4,10 @@ import { auth } from "@clerk/nextjs/server";
 import { SignInButton, SignUpButton } from "@clerk/nextjs";
 import { ContinueButton } from "@/app/_components/ContinueButton";
 import {
+  getDisclaimerAcknowledgedAt,
+  isDisclaimerAcknowledged,
+} from "@/lib/disclaimer";
+import {
   getOnboardingState,
   isOnboardingComplete,
 } from "@/lib/onboarding";
@@ -18,6 +22,10 @@ export default async function Home() {
     const state = await getOnboardingState();
     if (!isOnboardingComplete(state)) {
       redirect("/onboarding");
+    }
+    const ack = await getDisclaimerAcknowledgedAt();
+    if (!isDisclaimerAcknowledged(ack)) {
+      redirect("/disclaimer");
     }
     showContinue = true;
   }

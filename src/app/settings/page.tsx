@@ -5,6 +5,10 @@ import { SignOutButton } from "@clerk/nextjs";
 
 import { PageShell } from "@/app/_components/PageShell";
 import {
+  getDisclaimerAcknowledgedAt,
+  isDisclaimerAcknowledged,
+} from "@/lib/disclaimer";
+import {
   getOnboardingState,
   isOnboardingComplete,
 } from "@/lib/onboarding";
@@ -46,6 +50,9 @@ export default async function SettingsPage() {
   const onboarding = await getOnboardingState();
   if (!isOnboardingComplete(onboarding)) redirect("/onboarding");
 
+  const ack = await getDisclaimerAcknowledgedAt();
+  if (!isDisclaimerAcknowledged(ack)) redirect("/disclaimer");
+
   const account = await loadAccount();
 
   return (
@@ -69,6 +76,62 @@ export default async function SettingsPage() {
             Sign out
           </button>
         </SignOutButton>
+      </section>
+
+      <section className="mt-6 rounded-xl border border-white/10 bg-white/[0.02] p-5">
+        <h2 className="text-base font-semibold text-white">About InnerVerse</h2>
+        <div className="mt-3 space-y-4 text-sm leading-relaxed text-neutral-300">
+          <p>
+            InnerVerse is an AI-powered self-reflection tool. It is not
+            therapy, mental health treatment, or medical care, and it is not
+            a substitute for any of those things. The coach is a language
+            model — it can be wrong, miss context, or give responses that
+            don&apos;t fit your situation. Use your own judgment about
+            anything it says.
+          </p>
+          <div>
+            <p className="font-semibold text-white">
+              Not for crisis situations.
+            </p>
+            <p className="mt-1">
+              If you&apos;re in crisis, having thoughts of suicide or
+              self-harm, or in immediate danger, please reach out to a real
+              human now:
+            </p>
+            <ul className="mt-2 space-y-1 text-neutral-300">
+              <li>
+                <span className="text-white">US:</span> Call or text{" "}
+                <span className="text-white">988</span> (Suicide &amp; Crisis
+                Lifeline)
+              </li>
+              <li>
+                <span className="text-white">UK:</span> Call{" "}
+                <span className="text-white">116 123</span> (Samaritans)
+              </li>
+              <li>
+                <span className="text-white">EU:</span> Call{" "}
+                <span className="text-white">112</span> for emergencies
+              </li>
+              <li>Or go to your nearest emergency room.</li>
+            </ul>
+          </div>
+          <div>
+            <p className="font-semibold text-white">Privacy.</p>
+            <p className="mt-1">
+              Your conversations are processed by OpenAI to generate coach
+              responses and stored in our database to power your progress
+              view. We don&apos;t sell your data. See our Privacy Policy
+              for full details.
+            </p>
+          </div>
+          <div>
+            <p className="font-semibold text-white">You&apos;re in charge.</p>
+            <p className="mt-1">
+              Decisions about your life, health, relationships, and goals
+              are yours. The coach is a thinking partner, not an authority.
+            </p>
+          </div>
+        </div>
       </section>
 
       <section className="mt-6 rounded-xl border border-white/10 bg-white/[0.02] p-5">

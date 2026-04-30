@@ -2,6 +2,10 @@ import { redirect } from "next/navigation";
 import { auth } from "@clerk/nextjs/server";
 
 import { PageShell } from "@/app/_components/PageShell";
+import {
+  getDisclaimerAcknowledgedAt,
+  isDisclaimerAcknowledged,
+} from "@/lib/disclaimer";
 import { loadGoalCatalogState } from "@/lib/goals";
 import {
   getOnboardingState,
@@ -21,6 +25,9 @@ export default async function NewGoalPage() {
 
   const onboarding = await getOnboardingState();
   if (!isOnboardingComplete(onboarding)) redirect("/onboarding");
+
+  const ack = await getDisclaimerAcknowledgedAt();
+  if (!isDisclaimerAcknowledged(ack)) redirect("/disclaimer");
 
   const ctx = await supabaseForUser();
   if (!ctx) redirect("/sign-in");

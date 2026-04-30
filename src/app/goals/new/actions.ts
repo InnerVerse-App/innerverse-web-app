@@ -4,6 +4,10 @@ import { redirect } from "next/navigation";
 import { auth } from "@clerk/nextjs/server";
 
 import {
+  getDisclaimerAcknowledgedAt,
+  isDisclaimerAcknowledged,
+} from "@/lib/disclaimer";
+import {
   CUSTOM_GOAL_GENERIC_STARTER,
   PG_UNIQUE_VIOLATION,
   starterActionForGoalTitle,
@@ -37,6 +41,9 @@ export async function createGoal(
   // so re-enforce the onboarding gate that page.tsx already runs.
   const onboarding = await getOnboardingState();
   if (!isOnboardingComplete(onboarding)) redirect("/onboarding");
+
+  const ack = await getDisclaimerAcknowledgedAt();
+  if (!isDisclaimerAcknowledged(ack)) redirect("/disclaimer");
 
   const ctx = await supabaseForUser();
   if (!ctx) redirect("/sign-in");
@@ -112,6 +119,9 @@ export async function addPredefinedGoal(formData: FormData): Promise<void> {
 
   const onboarding = await getOnboardingState();
   if (!isOnboardingComplete(onboarding)) redirect("/onboarding");
+
+  const ack = await getDisclaimerAcknowledgedAt();
+  if (!isDisclaimerAcknowledged(ack)) redirect("/disclaimer");
 
   const ctx = await supabaseForUser();
   if (!ctx) redirect("/sign-in");

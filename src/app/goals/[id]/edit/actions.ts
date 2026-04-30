@@ -8,6 +8,10 @@ import {
   DESCRIPTION_MAX,
   TITLE_MAX,
 } from "@/app/goals/new/limits";
+import {
+  getDisclaimerAcknowledgedAt,
+  isDisclaimerAcknowledged,
+} from "@/lib/disclaimer";
 import { PG_UNIQUE_VIOLATION } from "@/lib/goals";
 import {
   getOnboardingState,
@@ -28,6 +32,9 @@ export async function updateGoal(
 
   const onboarding = await getOnboardingState();
   if (!isOnboardingComplete(onboarding)) redirect("/onboarding");
+
+  const ack = await getDisclaimerAcknowledgedAt();
+  if (!isDisclaimerAcknowledged(ack)) redirect("/disclaimer");
 
   const ctx = await supabaseForUser();
   if (!ctx) redirect("/sign-in");

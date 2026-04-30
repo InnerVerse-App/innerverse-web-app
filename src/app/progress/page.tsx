@@ -9,6 +9,10 @@ import {
 } from "@/app/_components/ExpandedDetailBody";
 import { PageShell } from "@/app/_components/PageShell";
 import { ProgressBar } from "@/app/_components/ProgressBar";
+import {
+  getDisclaimerAcknowledgedAt,
+  isDisclaimerAcknowledged,
+} from "@/lib/disclaimer";
 import { loadActiveGoalsWithLazySeed } from "@/lib/goals";
 import { formatDateCompact } from "@/lib/format";
 import {
@@ -593,6 +597,9 @@ export default async function ProgressPage({
 
   const onboarding = await getOnboardingState();
   if (!isOnboardingComplete(onboarding)) redirect("/onboarding");
+
+  const ack = await getDisclaimerAcknowledgedAt();
+  if (!isDisclaimerAcknowledged(ack)) redirect("/disclaimer");
 
   const ctx = await supabaseForUser();
   if (!ctx) redirect("/sign-in");
