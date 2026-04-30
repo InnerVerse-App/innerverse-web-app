@@ -118,10 +118,10 @@ export default async function SettingsPage() {
           <div>
             <p className="font-semibold text-white">Privacy.</p>
             <p className="mt-1">
-              Your conversations are processed by OpenAI to generate coach
-              responses and stored in our database to power your progress
-              view. We don&apos;t sell your data. See our Privacy Policy
-              for full details.
+              Your conversations are private to you. They power your
+              coach&apos;s memory and your progress view — nothing else.
+              They are not sold or shared for advertising. See our
+              Privacy Policy for full details.
             </p>
           </div>
           <div>
