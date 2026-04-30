@@ -120,8 +120,9 @@ export default async function SettingsPage() {
             <p className="mt-1">
               Your conversations are private to you. They power your
               coach&apos;s memory and your progress view — nothing else.
-              They are not sold or shared for advertising. See our
-              Privacy Policy for full details.
+              They are not sold or shared for advertising or any other
+              purpose. All of your session conversations are
+              confidential. See our Privacy Policy for full details.
             </p>
           </div>
           <div>
