@@ -64,3 +64,12 @@ backups/
 # branch's mockups/ as a model if reusable.
 /mockups/
 .claude/scheduled_tasks.lock
+
+# Marketing site lives here for organizational convenience but is its own
+# Astro project / git repo / Vercel deploy. Don't track it from the PWA repo.
+/innerverse-website/
+
+# Reference walkthrough video lives here for editing convenience but the
+# canonical copy ships with the marketing site (innerverse-website/public/video/).
+# Too large (63MB) to keep in PWA repo history.
+/reference/video/
