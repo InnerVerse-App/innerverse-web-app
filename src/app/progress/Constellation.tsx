@@ -764,10 +764,13 @@ export function Constellation({
             "radial-gradient(ellipse at 25% 75%, rgba(89,164,192,0.06) 0%, transparent 50%)",
             // Dim overlay over the nebula image. Keeps the photograph
             // present but quiet enough that the rendered dots and
-            // galaxies still pop. Tune the alpha (currently 0.62) to
+            // galaxies still pop. Tune the alpha (currently 0.72) to
             // brighten or dim the photo: lower = more nebula visible,
-            // higher = nebula recedes more.
-            "linear-gradient(rgba(0,5,10,0.62), rgba(0,5,10,0.62))",
+            // higher = nebula recedes more. Bumped 0.62 → 0.72 after
+            // mobile review — phone screens render the photo brighter
+            // than desktop because the panel takes up more of the
+            // viewport, so a slightly heavier overlay restores balance.
+            "linear-gradient(rgba(0,5,10,0.72), rgba(0,5,10,0.72))",
             // Nebula photograph.
             "url(/star-map-nebula.png) center / cover no-repeat",
             // Solid fallback if the image fails to load.
