@@ -1362,3 +1362,122 @@ Suggested fix: Bake real-user signal into the next round before locking the desi
   - Be willing to: change the window size, drop the transcript input if it adds noise, or move the calibration back into the profile if the dedicated-message approach doesn't change outcomes.
 Status: OPEN (revisit at >10-tester gate).
 
+## 2026-04-30 — Audit (scope: 80191dd..9c33e4e, PRs #176 + #177 + #178; voice infra context PRs #169-174)
+
+### Summary
+
+10 findings total: 0 critical, 1 high, 4 med, 5 low.
+
+The three merged PRs are individually small (per-coach TTS voice mapping, Speed Insights wiring, disclaimer-column revert + crisis-resources page) and the disclaimer revert + migration are clean — the IF EXISTS clause makes the DROP a no-op on fresh DBs, no orphan refs to `disclaimer_acknowledged_at` remain anywhere in the source, and the dropped column had no FKs / triggers / policies attached, so cascade impact is nil. The one HIGH finding is on the new TTS pipeline: `getOnboardingState()` is now called unguarded on every `/speak` request, and it throws on transient Supabase errors — a per-request DB hiccup will now break voice-mode TTS even though the coach's text reply could otherwise stream fine. Findings on the broader voice infra (PRs #169-174) that the user flagged for in-scope review surface a recurring theme: `/speak` and `/transcribe` have no rate limiting and `/speak` doesn't check `ended_at`, so an authenticated user can amplify cost against an old session indefinitely. The crisis-resources section on `/support` is content-correct but ergonomically weak — phone numbers aren't tel-linked, and the page is buried 2-3 navigations deep from any in-app surface where a distressed user might be.
+
+### Findings
+
+FINDING 1
+Severity: HIGH
+Lens: correctness
+Location: src/app/api/sessions/[id]/speak/route.ts:65 (the new `getOnboardingState()` call added in PR #176)
+Root cause: PR #176 added `const onboarding = await getOnboardingState();` to the /speak route to look up the user's coach and pick a matching voice. `getOnboardingState()` re-throws on any Supabase read error (see src/lib/onboarding.ts:53 — `if (error) throw error;`), and the speak route does not wrap the call in try/catch. Any transient Supabase hiccup (network blip, RLS quirk, JWKS cold cache, brief connection pool exhaustion) on the onboarding read will now bubble out of the route as an unhandled exception → 500. The pre-#176 code took no DB read for voice config and ran TTS directly.
+Blast radius: Voice-mode users hit a hard 500 on /speak when the DB read for coach name fails, even though the chat stream itself (which already succeeded) gave them a coach reply. The user sees text but no audio, with no useful error message. The look-up is **purely cosmetic** — we only need it to pick which of 8 voices to use; the safe behavior is to fall back to the default voice, not to abort TTS entirely. At <10-tester scale this is rare; at any kind of scale it'll surface as "voice mode keeps cutting out for no reason."
+Suggested fix: Wrap the lookup in try/catch and treat any failure (including throw) as `coachName = null`, which already triggers the default-voice fallback inside `synthesizeSpeech` / `ttsVoiceForCoach`:
+```ts
+let coachName: string | null = null;
+try {
+  const onboarding = await getOnboardingState();
+  coachName = onboarding?.coach_name ?? null;
+} catch (err) {
+  // Cosmetic lookup; fall back to default voice on any DB hiccup.
+  console.error("speak: coach lookup failed, using default voice", err);
+}
+```
+Status: OPEN
+
+FINDING 2
+Severity: MED
+Lens: security
+Location: src/app/api/sessions/[id]/speak/route.ts (whole file — no `ended_at` guard) + src/app/api/sessions/[id]/transcribe/route.ts (has the guard) + src/app/api/sessions/[id]/messages/route.ts (has the guard)
+Root cause: `/transcribe` and `/messages` reject requests against an ended session (`if (sessionRow.ended_at) return 409`). `/speak` only checks ownership — an authenticated user can keep POSTing to /speak for a session they ended weeks ago and burn TTS quota indefinitely. Combined with no rate limiting on any of the voice routes (Finding 3), a malicious or buggy client (e.g. a runaway loop in a pinned tab) can cost-amplify against an old session without writing anything to the DB.
+Blast radius: Authenticated users only — RLS prevents cross-user access, so the worst case is a logged-in user attacking their own quota. At pre-launch scale, near-zero. At launch with self-signup open, this is the kind of cost-attack vector that picks one or two abusive accounts and burns the OpenAI bill. TTS at gpt-4o-mini-tts is cheap (~$0.015 per 500-char reply) but a tight loop hitting /speak with the 4000-char max could rack up real money fast.
+Suggested fix: Mirror the /transcribe guard — read `ended_at` along with `id` and 409 if set. Keep the field in the existing query (one column, free).
+Status: OPEN
+
+FINDING 3
+Severity: MED
+Lens: security
+Location: src/app/api/sessions/[id]/speak/route.ts, src/app/api/sessions/[id]/transcribe/route.ts, src/app/api/sessions/[id]/messages/route.ts
+Root cause: None of the three coaching-loop endpoints have rate limiting. /speak in particular is the cheapest to call (just text → audio, no other DB writes) and the most expensive externally (TTS-per-character). Pre-#176 there was already cost-amplification risk on /messages (OpenAI chat tokens) and /transcribe (Whisper minutes); /speak adds another dimension. Per-IP / per-user / per-session caps exist nowhere in the codebase (search for "rate.?limit" returns one stray comment in messages/route.ts).
+Blast radius: At <10-tester pre-launch scale: zero. At launch / public-beta: a single logged-in user can cost-amplify in any of three independent ways. There's no kill-switch short of revoking the OpenAI key.
+Suggested fix: At the >10-tester gate or before opening public beta, wire a simple per-Clerk-user rate limit (Vercel KV + token bucket, or Upstash Ratelimit) at the top of all three routes. The existing 2026-04-22 Audit FINDING 22 already calls out the same gap on /healthcheck — bundle this work together. A reasonable starter: 30 messages, 60 transcribes, 60 speaks per minute per user.
+Status: OPEN
+
+FINDING 4
+Severity: MED
+Lens: data-integrity
+Location: supabase/migrations/20260501120000_drop_disclaimer_acknowledged.sql + supabase migration repair history (described in the PR #178 commit message)
+Root cause: PR #175 (the disclaimer-gate experiment) was closed without merging, but its migration `20260430120000_disclaimer_acknowledged_at.sql` had been applied to both innerverse-dev and innerverse-prod out-of-band before the close. The recovery procedure described in the PR #178 commit message is `supabase migration repair --status reverted 20260430120000` followed by `db push` of the new DROP migration. This is correct in principle, BUT (a) we have no in-repo evidence that the repair was actually run against both projects, (b) the repair mutates `supabase_migrations.schema_migrations` in a way that's invisible from the source tree, and (c) any drift between dev and prod here would only surface at the next migration that reads the migration history (e.g. a dependency on the prior schema state). The verification trail is in the commit message only.
+Blast radius: If the repair was missed on one project, the migration history table still says `20260430120000` is "applied" there. A future tooling run (`supabase db diff`, `db pull`, generated types) could try to recreate the column or get confused about schema state. At pre-launch this is recoverable. After real users land, it's harder.
+Suggested fix: Operator action — verify in both Supabase dashboards (dev + prod) that `supabase_migrations.schema_migrations` no longer contains a row with version `20260430120000` (or has it as `reverted` if the repair tool keeps it for audit). Document the result in this finding before closing. Going forward: any out-of-band migration apply-then-revert should leave a brief in-repo note (e.g. comment in the new migration) recording which projects were touched and which `migration repair` commands were run, so the next operator can verify without paging the original author.
+Status: OPEN
+
+FINDING 5
+Severity: MED
+Lens: correctness
+Location: src/app/support/page.tsx:36-60 (crisis-resources section)
+Root cause: Phone numbers (988, 116 123, 112) are rendered as plain `<span>` text, not `<a href="tel:…">` links. On mobile — the most likely device for a user in crisis — the user has to read the number, switch apps, and dial manually. Friction at the worst possible moment. The "your local emergency services" line has no actionable target either (no link to a country-list or to `tel:911` etc.). The "in immediate danger" first sentence is correct but the action that follows is an unclickable wall of text on a mobile keyboard.
+Blast radius: Probability is low (suicidality + having InnerVerse open + actually navigating to /support is a narrow funnel) but the failure mode is severe. This is the one place in the app where ergonomics genuinely matter for safety, not just polish.
+Suggested fix: Wrap each phone number in `<a href="tel:988">988</a>` (and similar for 116 123 → `tel:+44116123` and 112 → `tel:112`). On Android/iOS this triggers the dialer directly. Bonus: link the underlying section heading too, so screen readers announce "in a crisis" before reading the numbers, and consider adding the numbers in international-callable form (`tel:+1988`) so the link works for users abroad on their home country's dialer.
+Status: OPEN
+
+FINDING 6
+Severity: MED
+Lens: architecture
+Location: src/app/support/page.tsx (the entire page) + the lack of any in-app deep link from sessions / home / progress to the crisis section
+Root cause: PR #178's commit message frames the crisis content on /support as the replacement for the closed PR #175's disclaimer gate, which surfaced crisis numbers at signup. But the only in-app link to /support is buried in /settings (Settings → Support → scroll past 4 other sections → find "In a crisis"). A user mid-session who needs the number has to: end session → home → settings tab → support → scroll. That is materially less reachable than the original gate, and less reachable than the equivalent surface in many other AI products (Replika, Character.AI, etc., all have crisis info one tap away from chat).
+Blast radius: Same low-probability/severe-failure-mode as Finding 5. The two compound — even if the user gets to /support, Finding 5 means the dial is still a manual step.
+Suggested fix: Two cheap moves before the >10-tester gate. (a) Add a small "In a crisis?" footer link inside `ChatView`'s header or footer area, deep-linked to `/support#crisis` (and add `id="crisis"` to the section). (b) Confirm with the operator whether the design intent is "/support is sufficient" or whether the disclaimer gate's signup-time surfacing should come back in some lighter form (e.g. a one-time post-onboarding note rather than a blocking gate). Either decision is fine; the current state is "the gate was removed and what replaced it is harder to reach than the gate was."
+Status: OPEN
+
+FINDING 7
+Severity: LOW
+Lens: security
+Location: src/lib/openai.ts:53-69 (COACH_VOICE_MAP / COACH_SPEED_MAP lookup using `Record<string, string>` and bracket access)
+Root cause: `ttsVoiceForCoach(coachName)` does `COACH_VOICE_MAP[coachName.toLowerCase()] ?? DEFAULT_TTS_VOICE`. The lookup goes through Object.prototype, so `coachName === "constructor"` returns the `Object` constructor function, `coachName === "__proto__"` returns Object.prototype, and similar for `toString`, `hasOwnProperty`, etc. The `?? DEFAULT_TTS_VOICE` fallback only kicks in for null/undefined, not for these inherited values, so the eventual `voice: <function>` would be passed to OpenAI. The OpenAI SDK would presumably reject it with a 4xx (since `voice` must be one of a known string set), which would propagate back as a 500 from /speak. Today coach_name is validated against `COACH_VALUES` in saveStep5 (src/app/onboarding/actions.ts), so this is theoretical — but defense-in-depth prefers a lookup that can't be tricked by prototype keys at all.
+Blast radius: Currently zero (input validation closes the path). If a future migration / data import / direct-DB-write ever sets coach_name to a prototype name, /speak fails for that user with a 500. Not a security boundary failure, just a fragility footgun.
+Suggested fix: Either (a) use a `Map<string, string>` instead of `Record<string, string>` — `Map.get()` doesn't traverse the prototype chain — or (b) explicit check: `Object.prototype.hasOwnProperty.call(COACH_VOICE_MAP, key) ? COACH_VOICE_MAP[key] : DEFAULT_TTS_VOICE`. Map is cleaner.
+Status: OPEN
+
+FINDING 8
+Severity: LOW
+Lens: architecture
+Location: src/app/api/sessions/[id]/speak/route.ts (one extra DB read per /speak call)
+Root cause: The new coach-name lookup is a separate Supabase round-trip per /speak call. /speak is called once per "speakable chunk" of a streaming chat response — VoiceComposer chunks responses on sentence boundaries with min 30 / max 150 chars (ChatView.tsx:173). A typical 500-char coach reply is 4-8 chunks, so a single coaching turn now does 4-8 onboarding-table SELECTs to look up a value that doesn't change within a session. The PR #176 commit acknowledges this ("One extra DB read per /speak call — acceptable since /speak is already authenticated + session-checked, and TTS itself dwarfs the cost") but doesn't note the per-chunk multiplier.
+Blast radius: Latency only, not correctness. At pre-launch scale it's invisible; at scale it's wasted Supabase round-trips. No data corruption / RLS bypass / cost amplification beyond the already-noted Findings 2-3.
+Suggested fix: Pass `coachName` from the page-level coach lookup down through ChatView → VoiceComposer → /speak call, so the client sends `{ text, coachName }` and the server trusts the (already-validated) coach name without re-reading. Or: cache the lookup at the action boundary using React's `cache()` once per request — would also help the standing 2026-04-26 redundant-auth() finding. Defer until rate-limiting work bundles all the per-request optimizations.
+Status: OPEN (defer; bundle with the rate-limit / auth-cache work)
+
+FINDING 9
+Severity: LOW
+Lens: security / privacy
+Location: src/app/layout.tsx:29 (`<SpeedInsights />` mounted root-wide)
+Root cause: Vercel Speed Insights is mounted at the root layout with no `beforeSend` hook and no sample-rate config. The library's `useRoute()` parameterizes dynamic segments correctly (so `/sessions/[id]` is recorded as `/sessions/[id]`, not `/sessions/abc123`) — verified by reading node_modules/@vercel/speed-insights/dist/next/index.mjs:39-66. **Path-level data is fine.** What it does still send: User-Agent (browser fingerprint), IP-derived geolocation, route, vitals (LCP, INP, CLS, FCP, TTFB) per page-load. Per Vercel's data-handling docs that's the standard set. No request bodies, no chat content, no Clerk session token. So nothing in the codebase leaks via Speed Insights, but the operator should be aware that signed-in user IPs + geo + browser are now in Vercel's telemetry warehouse alongside Vercel Analytics.
+Blast radius: Negligible. The same data is already implicit in any Vercel deployment's request logs. No additional GDPR exposure that wasn't there before. Worth flagging only as a checklist item for the privacy-policy update at the >10-tester gate (the privacy policy may want to mention Vercel as a sub-processor for Speed Insights specifically, in addition to the existing Vercel hosting mention).
+Suggested fix: At the >10-tester gate, (a) confirm with the operator whether to add `<SpeedInsights sampleRate={0.5} />` to halve telemetry volume (Vercel charges per event past free-tier; cheap insurance), (b) update the Privacy Policy text to mention Vercel Speed Insights as a sub-processor for performance telemetry, listing the data collected. No code change needed pre-launch.
+Status: OPEN (revisit at >10-tester gate)
+
+FINDING 10
+Severity: LOW
+Lens: operator
+Location: supabase/migrations/20260501120000_drop_disclaimer_acknowledged.sql (filename) vs the column it drops (`disclaimer_acknowledged_at`)
+Root cause: The DROP migration's filename is `drop_disclaimer_acknowledged.sql` but the column it drops is `disclaimer_acknowledged_at`. The original ADD migration's filename was `disclaimer_acknowledged_at.sql` (matching the column name exactly). The DROP migration's body is correct (`drop column if exists disclaimer_acknowledged_at`), so functionally this is fine — Supabase keys on the timestamp prefix, not the descriptive suffix — but the filename inconsistency makes a future grep for "disclaimer_acknowledged_at" miss the drop migration if anyone is searching for it by column name.
+Blast radius: None operationally. Cosmetic — affects the next operator's ability to find the migration via filename search.
+Suggested fix: None at this point — renaming a migration file after it's applied creates more confusion than it solves. Going forward, name DROP migrations to match the dropped column exactly: `20260501120000_drop_disclaimer_acknowledged_at.sql`. Convention only; no code change.
+Status: WON'T FIX (cosmetic; conventions noted for next time)
+
+### Per-lens silence check
+
+- **Security**: 4 findings (2-3 + 7 + 9). The audit-prompt-template's blind-spot checklist items 7 (trust-boundary input handling) and 12 (secrets in code/logs) ran clean — voice content gets passed verbatim to Whisper/TTS but never logged at info level, no API keys are exposed, the Clerk-Supabase JWT bridge is unchanged from prior audits.
+- **Data integrity**: 1 finding (4). Migration repair-trail verification gap. Items 5 (data-loss patterns) and 6 (silent failures) ran clean for this scope — no new multi-table writes, no new Promise.all paths.
+- **Correctness**: 2 findings (1 + 5). Finding 1 (the unguarded throw) is the highest-severity item and the one that most needs operator triage. Finding 5 is the crisis-resources ergonomics issue.
+- **Architecture**: 3 findings (6 + 8 + 9). All defer-able to milestone gates.
+- **Blind-spot checklist item 11 (cross-component / cross-runtime consistency)**: The COACH_VOICE_MAP map is enforced TypeScript-side via `Record<string, string>`. Direct Supabase admin writes could bypass the saveStep5 validation — Finding 7 covers the one runtime hazard from that path.
+- **Blind-spot checklist item 13 (failure-mode behavior)**: Finding 1 IS this — the failure path of the cosmetic onboarding lookup currently fails OPEN-but-broken (the route 500s rather than degrading to default voice). Should fail-graceful (default voice) since the lookup is non-essential.
+
