@@ -1034,25 +1034,6 @@ export function Constellation({
                     <GalaxyGlow key={`glow-${g.breakthroughId}`} galaxy={g} />
                   ))}
 
-                  {/* TEMPORARY VISUALIZATION — demo galaxy disc
-                      positioned over the brightest star in the
-                      nebula photo. Sized to a realistic ~10-member
-                      galaxy (radius 0.117 = the formula's value for
-                      memberCount=10), so the comparison with real
-                      galaxies elsewhere on the panel is fair.
-                      Remove this block before merging. */}
-                  <GalaxyGlow
-                    key="glow-demo-bright-star"
-                    galaxy={{
-                      breakthroughId: "demo-bright-star",
-                      centerX: 0.35,
-                      centerY: 0.27,
-                      radius: 0.117,
-                      memberCount: 10,
-                      tiltDeg: 25,
-                    }}
-                  />
-
                   {chainEdges.length > 0 ? (
                     <svg
                       className="pointer-events-none absolute inset-0 h-full w-full"
@@ -1185,111 +1166,6 @@ export function Constellation({
                       }
                     />
                   ))}
-
-                  {/* TEMPORARY VISUALIZATION — full demo galaxy at the
-                      brightest star in the nebula photo. Mirrors the
-                      visuals a real data-driven galaxy renders:
-                      breakthrough sun (with diffraction spikes) and
-                      member stars (sessions in cyan, mindset shifts
-                      in violet) scattered in an ellipse aligned with
-                      the disc's tilt. Uses the same SVG halo gradient
-                      defs as the real SessionStar / MindsetShiftStar
-                      so the soft-fade halo matches. Disc renders
-                      separately above with breakthroughId="demo-bright-star".
-                      Remove this block + the disc demo before merging. */}
-                  {(() => {
-                    const cx = 0.35;
-                    const cy = 0.27;
-                    const tiltDeg = 25;
-                    const tiltRad = (tiltDeg * Math.PI) / 180;
-                    const cosT = Math.cos(tiltRad);
-                    const sinT = Math.sin(tiltRad);
-                    // Tilt-local (along, perpendicular) offsets. 6
-                    // sessions + 2 shifts mirrors the typical data
-                    // distribution where mindset shifts are rarer.
-                    const memberOffsets: Array<
-                      [number, number, "session" | "shift"]
-                    > = [
-                      [0.05, 0.008, "session"],
-                      [-0.06, -0.008, "shift"],
-                      [0.078, -0.018, "session"],
-                      [-0.072, 0.016, "session"],
-                      [0.025, 0.022, "shift"],
-                      [-0.025, -0.022, "session"],
-                      [0.095, 0.005, "session"],
-                      [-0.095, -0.005, "session"],
-                    ];
-                    return (
-                      <>
-                        {memberOffsets.map(([dx, dy, kind], i) => {
-                          const x = cx + dx * cosT - dy * sinT;
-                          const y = cy + dx * sinT + dy * cosT;
-                          const haloId =
-                            kind === "session" ? "halo-session" : "halo-shift";
-                          const coreColor =
-                            kind === "session" ? SESSION_COLOR : MINDSET_COLOR;
-                          return (
-                            <span
-                              key={`demo-member-${i}`}
-                              className="pointer-events-none absolute -translate-x-1/2 -translate-y-1/2"
-                              style={{
-                                left: `${x * 100}%`,
-                                top: `${y * 100}%`,
-                              }}
-                              aria-hidden
-                            >
-                              <svg
-                                viewBox="-8 -8 16 16"
-                                className="block h-4 w-4"
-                                style={{ overflow: "visible" }}
-                              >
-                                <circle r={7} fill={`url(#${haloId})`} />
-                                <circle r={2.4} fill={coreColor} />
-                                <circle
-                                  r={0.7}
-                                  fill="#ffffff"
-                                  fillOpacity={0.85}
-                                />
-                              </svg>
-                            </span>
-                          );
-                        })}
-                        <span
-                          className="pointer-events-none absolute -translate-x-1/2 -translate-y-1/2"
-                          style={{
-                            left: `${cx * 100}%`,
-                            top: `${cy * 100}%`,
-                          }}
-                          aria-hidden
-                        >
-                          <svg
-                            viewBox="-12 -12 24 24"
-                            className="block h-7 w-7"
-                            style={{ overflow: "visible" }}
-                          >
-                            <line
-                              x1={-32}
-                              y1={0}
-                              x2={32}
-                              y2={0}
-                              stroke="url(#spike-h)"
-                              strokeWidth={0.7}
-                            />
-                            <line
-                              x1={0}
-                              y1={-32}
-                              x2={0}
-                              y2={32}
-                              stroke="url(#spike-v)"
-                              strokeWidth={0.7}
-                            />
-                            <circle r={11} fill="url(#halo-sun)" />
-                            <circle r={4.5} fill={BREAKTHROUGH_COLOR} />
-                          </svg>
-                        </span>
-                      </>
-                    );
-                  })()}
 
                   {isEmpty ? (
                     <div className="absolute inset-0 flex items-center justify-center px-8 text-center">
