@@ -1312,47 +1312,54 @@ function SessionStar({
   // with BreakthroughSun (scroll to detail card) and GoalComet
   // (jump to Goals tab) — every star's double-click takes you to
   // the item's "home" with it highlighted, never to its raw chat.
+  // The dot's recency-fade opacity goes on the Link only — the
+  // hover tooltip is a sibling of the Link inside the .group
+  // wrapper so its readability doesn't decay with the dot.
   return (
-    <Link
-      href={buildSessionHref(dot.id)}
-      aria-label={
-        dot.title
-          ? `${dot.title} — ${dateLabel} (double-click to view in Sessions tab)`
-          : `Session from ${dateLabel} (double-click to view in Sessions tab)`
-      }
-      className={`group absolute -translate-x-1/2 -translate-y-1/2 ${TAP_PADDING}`}
+    <span
+      className="group absolute -translate-x-1/2 -translate-y-1/2"
       style={{
         left: `${dot.x * 100}%`,
         top: `${dot.y * 100}%`,
-        opacity: dot.opacity,
-      }}
-      onDoubleClick={(e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        router.push(`/sessions?session=${dot.id}#s-${dot.id}`);
       }}
     >
-      <svg
-        viewBox="-8 -8 16 16"
-        className="block h-4 w-4 transition hover:scale-150"
-        style={{ overflow: "visible" }}
-        aria-hidden
+      <Link
+        href={buildSessionHref(dot.id)}
+        aria-label={
+          dot.title
+            ? `${dot.title} — ${dateLabel} (double-click to view in Sessions tab)`
+            : `Session from ${dateLabel} (double-click to view in Sessions tab)`
+        }
+        className={`block ${TAP_PADDING}`}
+        style={{ opacity: dot.opacity }}
+        onDoubleClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          router.push(`/sessions?session=${dot.id}#s-${dot.id}`);
+        }}
       >
-        <circle r={7} fill="url(#halo-session)" />
-        <circle
-          r={2.4}
-          fill={tintFor(dot.id, SESSION_HSL.h, SESSION_HSL.s, SESSION_HSL.l)}
-        />
-        {/* White-hot core. Same trick the breakthrough sun and goal
-            comets use, scaled down — sells the dot as a luminous
-            point rather than a flat sticker. */}
-        <circle r={0.7} fill="#ffffff" fillOpacity={0.85} />
-      </svg>
+        <svg
+          viewBox="-8 -8 16 16"
+          className="block h-4 w-4 transition hover:scale-150"
+          style={{ overflow: "visible" }}
+          aria-hidden
+        >
+          <circle r={7} fill="url(#halo-session)" />
+          <circle
+            r={2.4}
+            fill={tintFor(dot.id, SESSION_HSL.h, SESSION_HSL.s, SESSION_HSL.l)}
+          />
+          {/* White-hot core. Same trick the breakthrough sun and goal
+              comets use, scaled down — sells the dot as a luminous
+              point rather than a flat sticker. */}
+          <circle r={0.7} fill="#ffffff" fillOpacity={0.85} />
+        </svg>
+      </Link>
       <DotHoverLabel
         text={dot.title ? `${dot.title} — ${dateLabel}` : `Session — ${dateLabel}`}
         accent="session"
       />
-    </Link>
+    </span>
   );
 }
 
@@ -1380,16 +1387,22 @@ function BreakthroughSun({
   // Keeps the visible look identical (the disc SVG still has
   // overflow:visible so the disc renders at the right size) while
   // freeing up the surrounding pixels for clicks on neighbors.
-  const positionStyle = {
-    left: `${dot.x * 100}%`,
-    top: `${dot.y * 100}%`,
-    opacity: dot.opacity,
-  } as const;
+  // Wrapper holds halo, Link, and tooltip. Wrapper has NO opacity
+  // so the tooltip stays full-brightness regardless of how dimmed
+  // the dot itself becomes from recency fade. Halo span and Link
+  // each apply opacity individually to dim the visuals.
+  const dimOpacity = { opacity: dot.opacity };
   return (
-    <>
+    <span
+      className="group absolute block h-7 w-7 -translate-x-1/2 -translate-y-1/2"
+      style={{
+        left: `${dot.x * 100}%`,
+        top: `${dot.y * 100}%`,
+      }}
+    >
       <span
-        className="pointer-events-none absolute -translate-x-1/2 -translate-y-1/2"
-        style={positionStyle}
+        className="pointer-events-none absolute inset-0 flex items-center justify-center"
+        style={dimOpacity}
         aria-hidden
       >
         <svg
@@ -1430,8 +1443,16 @@ function BreakthroughSun({
         // re-applies the fragment scroll.
         scroll={false}
         aria-label={`Breakthrough: ${dot.galaxyName || dot.content}`}
-        className="group absolute -translate-x-1/2 -translate-y-1/2"
-        style={positionStyle}
+        // Tap target stays the original 20x20 size, centered in the
+        // 28x28 wrapper. The halo's outer ring is pointer-events-none
+        // so taps there don't snag the breakthrough — they pass
+        // through to nearby session/shift dots clustered around it.
+        className="absolute block h-5 w-5 -translate-x-1/2 -translate-y-1/2"
+        style={{
+          left: "50%",
+          top: "50%",
+          opacity: dot.opacity,
+        }}
         onDoubleClick={(e) => {
           e.preventDefault();
           e.stopPropagation();
@@ -1448,12 +1469,12 @@ function BreakthroughSun({
         >
           <circle r={4.5} fill={BREAKTHROUGH_COLOR} />
         </svg>
-        <DotHoverLabel
-          text={`Breakthrough — ${dot.galaxyName || dot.content}`}
-          accent="breakthrough"
-        />
       </Link>
-    </>
+      <DotHoverLabel
+        text={`Breakthrough — ${dot.galaxyName || dot.content}`}
+        accent="breakthrough"
+      />
+    </span>
   );
 }
 
@@ -1586,42 +1607,50 @@ function MindsetShiftStar({
   // scrolls to the matching card in the Mindset Shifts list below.
   // Mirrors BreakthroughSun. The list lives on /progress so no
   // navigation needed — just scroll.
+  //
+  // Tooltip is a sibling of the Link inside the .group wrapper so
+  // it stays full brightness even when the dot itself is dimmed
+  // by recency fade.
   return (
-    <Link
-      href={buildHref(dot.id)}
-      scroll={false}
-      aria-label={`Mindset shift: ${dot.content} (double-click to view in list)`}
-      className={`group absolute -translate-x-1/2 -translate-y-1/2 ${TAP_PADDING}`}
+    <span
+      className="group absolute -translate-x-1/2 -translate-y-1/2"
       style={{
         left: `${dot.x * 100}%`,
         top: `${dot.y * 100}%`,
-        opacity: dot.opacity,
-      }}
-      onDoubleClick={(e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        const target = document.getElementById(`ms-${dot.id}`);
-        if (target) {
-          target.scrollIntoView({ behavior: "smooth", block: "center" });
-        }
       }}
     >
-      <svg
-        viewBox="-8 -8 16 16"
-        className="block h-4 w-4 transition hover:scale-125"
-        style={{ overflow: "visible" }}
-        aria-hidden
+      <Link
+        href={buildHref(dot.id)}
+        scroll={false}
+        aria-label={`Mindset shift: ${dot.content} (double-click to view in list)`}
+        className={`block ${TAP_PADDING}`}
+        style={{ opacity: dot.opacity }}
+        onDoubleClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          const target = document.getElementById(`ms-${dot.id}`);
+          if (target) {
+            target.scrollIntoView({ behavior: "smooth", block: "center" });
+          }
+        }}
       >
-        <circle r={7.5} fill="url(#halo-shift)" />
-        <circle
-          r={2.8}
-          fill={tintFor(dot.id, MINDSET_HSL.h, MINDSET_HSL.s, MINDSET_HSL.l)}
-        />
-        {/* White-hot core matching SessionStar. */}
-        <circle r={0.8} fill="#ffffff" fillOpacity={0.9} />
-      </svg>
+        <svg
+          viewBox="-8 -8 16 16"
+          className="block h-4 w-4 transition hover:scale-125"
+          style={{ overflow: "visible" }}
+          aria-hidden
+        >
+          <circle r={7.5} fill="url(#halo-shift)" />
+          <circle
+            r={2.8}
+            fill={tintFor(dot.id, MINDSET_HSL.h, MINDSET_HSL.s, MINDSET_HSL.l)}
+          />
+          {/* White-hot core matching SessionStar. */}
+          <circle r={0.8} fill="#ffffff" fillOpacity={0.9} />
+        </svg>
+      </Link>
       <DotHoverLabel text={`Mindset shift — ${dot.content}`} accent="shift" />
-    </Link>
+    </span>
   );
 }
 
