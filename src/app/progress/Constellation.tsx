@@ -1294,9 +1294,14 @@ function DotHoverLabel({
   // visually preferred placement when there's room). When the dot
   // sits near the left/right/top edge of the panel, swap to an
   // anchor that keeps the tooltip on-screen.
-  const isLeftEdge = xPct < 0.2;
-  const isRightEdge = xPct > 0.8;
-  const isTopEdge = yPct < 0.15;
+  //
+  // Thresholds are tuned conservatively (0.3 / 0.7 / 0.2 — i.e.
+  // 30% from each edge) so a typical tooltip fits without spilling
+  // even with a longer label. Tooltip can be up to 60vw, so on a
+  // square panel the dot needs ~30% clearance on each side.
+  const isLeftEdge = xPct < 0.3;
+  const isRightEdge = xPct > 0.7;
+  const isTopEdge = yPct < 0.2;
   const translateX = isLeftEdge ? "0%" : isRightEdge ? "-100%" : "-50%";
   const originX = isLeftEdge ? "left" : isRightEdge ? "right" : "center";
   const originY = isTopEdge ? "top" : "bottom";
