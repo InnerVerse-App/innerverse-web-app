@@ -58,8 +58,7 @@ export function Step5Coach({ initialCoach }: { initialCoach: string | null }) {
         })}
         <TipCallout label="Remember">
           This is just a name and personality style. Your coach will always
-          adapt to your needs and preferences. You can change this anytime
-          in your settings.
+          adapt to your needs and preferences.
         </TipCallout>
       </div>
     </OnboardingShell>
