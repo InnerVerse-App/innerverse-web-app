@@ -33,6 +33,32 @@ export default function SupportPage() {
         not therapy, medical treatment, or legal advice.
       </Section>
 
+      <Section title="In a crisis">
+        <p>
+          If you are in crisis, having thoughts of suicide or self-harm, or
+          in immediate danger, please reach out to a real human now.
+        </p>
+        <ul className="ml-5 mt-2 list-disc space-y-1">
+          <li>
+            <span className="text-white">US:</span> Call or text{" "}
+            <span className="text-white">988</span> (Suicide &amp; Crisis
+            Lifeline)
+          </li>
+          <li>
+            <span className="text-white">UK:</span> Call{" "}
+            <span className="text-white">116 123</span> (Samaritans)
+          </li>
+          <li>
+            <span className="text-white">EU:</span> Call{" "}
+            <span className="text-white">112</span> for emergencies
+          </li>
+          <li>
+            Or contact your local emergency services or go to your nearest
+            emergency room.
+          </li>
+        </ul>
+      </Section>
+
       <Section title="Legal">
         <ul className="ml-5 list-disc space-y-1">
           <li>
