@@ -38,7 +38,7 @@ export async function POST(
 
   const { data: sessionRow, error: sessionErr } = await ctx.client
     .from("sessions")
-    .select("id")
+    .select("id, ended_at")
     .eq("id", sessionId)
     .maybeSingle();
   if (sessionErr) {
@@ -46,6 +46,11 @@ export async function POST(
   }
   if (!sessionRow) {
     return NextResponse.json({ error: "session_not_found" }, { status: 404 });
+  }
+  // Refuse to spend TTS budget on closed sessions. /messages and
+  // /transcribe both gate on this; /speak missed it (audit Finding #2).
+  if (sessionRow.ended_at) {
+    return NextResponse.json({ error: "session_ended" }, { status: 409 });
   }
 
   let body: PostBody;

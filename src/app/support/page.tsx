@@ -41,16 +41,33 @@ export default function SupportPage() {
         <ul className="ml-5 mt-2 list-disc space-y-1">
           <li>
             <span className="text-white">US:</span> Call or text{" "}
-            <span className="text-white">988</span> (Suicide &amp; Crisis
-            Lifeline)
+            <a
+              href="tel:988"
+              className="text-brand-primary underline"
+            >
+              988
+            </a>{" "}
+            (Suicide &amp; Crisis Lifeline)
           </li>
           <li>
             <span className="text-white">UK:</span> Call{" "}
-            <span className="text-white">116 123</span> (Samaritans)
+            <a
+              href="tel:116123"
+              className="text-brand-primary underline"
+            >
+              116 123
+            </a>{" "}
+            (Samaritans)
           </li>
           <li>
             <span className="text-white">EU:</span> Call{" "}
-            <span className="text-white">112</span> for emergencies
+            <a
+              href="tel:112"
+              className="text-brand-primary underline"
+            >
+              112
+            </a>{" "}
+            for emergencies
           </li>
           <li>
             Or contact your local emergency services or go to your nearest
