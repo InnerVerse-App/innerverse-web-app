@@ -3,6 +3,7 @@ import "server-only";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 
+import { getCoachWelcome } from "@/lib/coach-welcome";
 import {
   type ActiveGoal,
   formatGoalsForPrompt,
@@ -74,10 +75,14 @@ export type CoachingState = {
 };
 
 export type SessionFocus = {
-  // "goal" | "shift" — surfaces in the prompt as
-  // "Today's focus (goal): ..." / "Today's focus (mindset shift): ..."
-  // so the coach can open with the right framing.
-  kind: "goal" | "shift";
+  // Always "goal" today — the home Start Session menu only offers
+  // "work on a goal" or "blank slate", and the per-goal Start button
+  // on the Goals tab also passes a goal. Mindset-shift focus was
+  // removed when the home menu's "Work on my mindset" option was
+  // dropped. Kept as a discriminated field so downstream prompt
+  // formatting (`Today's focus (goal): ...`) doesn't have to change
+  // shape if a new focus kind is ever introduced.
+  kind: "goal";
   title: string;
 };
 
@@ -105,7 +110,7 @@ function formatClientProfile(src: ProfileSource): string {
     challenge: src.style_calibration.challenge,
   });
   const focusLine = src.focus
-    ? `Today's focus (${src.focus.kind === "goal" ? "goal" : "mindset shift"}): ${src.focus.title}`
+    ? `Today's focus (goal): ${src.focus.title}`
     : "";
   return [
     `Client: ${src.user_name}`,
@@ -121,14 +126,51 @@ function formatClientProfile(src: ProfileSource): string {
     .join("\n");
 }
 
+// Composes the special turn-1 opener used on a user's first-ever
+// session. Constrains the model to deliver the chosen coach's
+// welcome message body verbatim while allowing the closing question
+// to adapt when the user started the session with a focus. The body
+// (~150 words of personality intro + how-this-works) is large
+// enough that gpt-5.4-mini at low effort reproduces it
+// character-for-character; the exception is the final closing
+// sentence/question, which the model is told it MAY rewrite if a
+// focus is set.
+function buildWelcomeInjectionOpener(welcomeText: string): string {
+  return [
+    "For this turn ONLY — the user's first message of their first-ever coaching session — you MUST output the welcome message below.",
+    "",
+    "The body of the welcome (everything before the final closing question) is to be delivered VERBATIM, character-for-character. Do not paraphrase, summarize, shorten, expand, or otherwise alter the wording. Punctuation, capitalization, em-dashes, and contractions must match exactly.",
+    "",
+    "The ONLY part that may change is the welcome's final closing line — the last sentence or two, typically a question that invites the user to start (for example: \"So — what's on your mind?\", \"Where would you like to begin?\", \"What would you like to bring in today?\").",
+    "",
+    "- If the client profile has NO `Today's focus` line (the user is starting blank-slate), keep the closing question exactly as written.",
+    "- If the client profile DOES have a `Today's focus (goal): <title>` line, REPLACE the closing question with one or two short sentences in the same coach's voice that acknowledge the focus and invite the user to start there.",
+    "",
+    "Do not add a preamble, greeting, sign-off, or any commentary. Output ONLY the welcome message itself, with the closing line adapted as described above.",
+    "",
+    "WELCOME MESSAGE:",
+    "",
+    welcomeText,
+  ].join("\n");
+}
+
 // Loads every variable the session-start prompt needs for the signed-in
-// user and returns the two-message input array ready to hand to
+// user and returns the developer-message input array ready to hand to
 // OpenAI's /v1/responses. Fails loudly if there's no Clerk session or
 // if onboarding isn't complete (the /home gate should prevent this but
 // defense-in-depth).
+//
+// `isFirstSession` switches the opener prompt: on the user's very
+// first session, we send a verbatim-welcome injection prompt instead
+// of the dynamic opener rules. The welcome text comes from
+// reference/coach_welcome_messages.md, looked up by coach_name. If
+// the welcome lookup fails (unknown coach value, missing file,
+// etc.), we fall back to the normal opener so first sessions still
+// work — they just won't carry the curated welcome.
 export async function buildSessionStartInput(args: {
   userName: string;
   focus?: SessionFocus | null;
+  isFirstSession?: boolean;
 }): Promise<SessionStartInput> {
   const ctx = await supabaseForUser();
   if (!ctx) throw new Error("buildSessionStartInput: no Clerk session");
@@ -195,8 +237,15 @@ export async function buildSessionStartInput(args: {
     focus: args.focus ?? null,
   });
 
+  const welcomeText = args.isFirstSession
+    ? getCoachWelcome(onboarding.coach_name)
+    : null;
+  const openerPrompt = welcomeText
+    ? buildWelcomeInjectionOpener(welcomeText)
+    : SESSION_OPENER_PROMPT;
+
   const messages: SessionStartInput = [
-    { role: "developer", content: SESSION_OPENER_PROMPT },
+    { role: "developer", content: openerPrompt },
     { role: "developer", content: COACHING_PROMPT },
     { role: "developer", content: profile },
   ];

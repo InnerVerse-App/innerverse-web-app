@@ -8,7 +8,6 @@ import { ProgressBar } from "@/app/_components/ProgressBar";
 import {
   StartSessionMenu,
   type StartSessionGoal,
-  type StartSessionShift,
 } from "@/app/home/StartSessionMenu";
 import { loadActiveGoalsWithLazySeed } from "@/lib/goals";
 import { formatDateShort } from "@/lib/format";
@@ -26,10 +25,6 @@ import {
 } from "../progress/demo-data";
 
 export const dynamic = "force-dynamic";
-
-// Mirror of home/page.tsx — keep the menu's shift list scrollable
-// rather than unbounded for chatty users.
-const START_MENU_SHIFTS_LIMIT = 20;
 
 type SessionListRow = {
   id: string;
@@ -52,7 +47,6 @@ type SessionHistory = {
 
 type EmptyStateData = {
   goals: StartSessionGoal[];
-  shifts: StartSessionShift[];
 };
 
 // Loads sessions + the contributor maps the expanded-card view needs.
@@ -147,23 +141,14 @@ function formatDuration(startIso: string, endIso: string): string {
 
 async function loadEmptyStateMenuData(): Promise<EmptyStateData> {
   const ctx = await supabaseForUser();
-  if (!ctx) return { goals: [], shifts: [] };
-  const [goals, shiftsRes] = await Promise.all([
-    loadActiveGoalsWithLazySeed(ctx),
-    ctx.client
-      .from("insights")
-      .select("id, content, created_at")
-      .order("created_at", { ascending: false })
-      .limit(START_MENU_SHIFTS_LIMIT),
-  ]);
-  if (shiftsRes.error) throw shiftsRes.error;
+  if (!ctx) return { goals: [] };
+  const goals = await loadActiveGoalsWithLazySeed(ctx);
   return {
     goals: goals.map((g) => ({
       id: g.id,
       title: g.title,
       progress_percent: g.progress_percent,
     })),
-    shifts: (shiftsRes.data ?? []) as StartSessionShift[],
   };
 }
 
@@ -214,7 +199,6 @@ export default async function SessionsListPage({
             <div className="mt-4">
               <StartSessionMenu
                 goals={emptyMenu.goals}
-                shifts={emptyMenu.shifts}
                 buttonLabel="Start Your First Session"
               />
             </div>
@@ -496,7 +480,6 @@ export default async function SessionsListPage({
           <div className="mt-4">
             <StartSessionMenu
               goals={emptyMenu.goals}
-              shifts={emptyMenu.shifts}
               buttonLabel="Start Your First Session"
             />
           </div>

@@ -13,26 +13,17 @@ export type StartSessionGoal = {
   progress_percent: number | null;
 };
 
-export type StartSessionShift = {
-  id: string;
-  content: string;
-  created_at: string;
-};
-
 type Props = {
   goals: StartSessionGoal[];
-  // Empty array hides the "Work on my mindset" option entirely (per
-  // spec: new users with no observed shifts don't see it).
-  shifts: StartSessionShift[];
   buttonLabel: string;
 };
 
-type Focus = { kind: "goal" | "shift"; id: string } | null;
+type Focus = { kind: "goal"; id: string } | null;
 // "mode" is the new step that appears AFTER the user picks a focus —
 // they choose Type or Talk before the session is actually created.
-type Panel = "closed" | "options" | "goals" | "shifts" | "mode";
+type Panel = "closed" | "options" | "goals" | "mode";
 
-export function StartSessionMenu({ goals, shifts, buttonLabel }: Props) {
+export function StartSessionMenu({ goals, buttonLabel }: Props) {
   const [panel, setPanel] = useState<Panel>("closed");
   const [pendingFocus, setPendingFocus] = useState<Focus>(null);
   const [pending, startTransition] = useTransition();
@@ -91,13 +82,6 @@ export function StartSessionMenu({ goals, shifts, buttonLabel }: Props) {
             sublabel={`${goals.length} goal${goals.length === 1 ? "" : "s"}`}
             onClick={() => setPanel("goals")}
           />
-          {shifts.length > 0 ? (
-            <OptionButton
-              label="Work on my mindset"
-              sublabel={`${shifts.length} shift${shifts.length === 1 ? "" : "s"} so far`}
-              onClick={() => setPanel("shifts")}
-            />
-          ) : null}
           <OptionButton
             label="I'm bringing something specific today"
             sublabel="Open the session with a blank slate"
@@ -129,26 +113,6 @@ export function StartSessionMenu({ goals, shifts, buttonLabel }: Props) {
             </button>
           ))}
         </ListPanel>
-      ) : panel === "shifts" ? (
-        <ListPanel
-          title="Pick a mindset shift"
-          onBack={() => setPanel("options")}
-          empty={null}
-        >
-          {shifts.map((s) => (
-            <button
-              key={s.id}
-              type="button"
-              onClick={() => pickFocus({ kind: "shift", id: s.id })}
-              className="block w-full rounded-md border border-white/10 bg-white/[0.02] p-3 text-left transition hover:border-brand-primary/40 hover:bg-white/5"
-            >
-              <p className="text-sm text-white">{s.content}</p>
-              <p className="mt-1 text-[11px] text-neutral-500">
-                Noticed {formatRelative(s.created_at)}
-              </p>
-            </button>
-          ))}
-        </ListPanel>
       ) : (
         // panel === "mode" — final step, fires startSession on choice.
         <StartSessionModePicker
@@ -156,7 +120,6 @@ export function StartSessionMenu({ goals, shifts, buttonLabel }: Props) {
           onBack={() => {
             // Back from mode → return to whichever picker preceded it.
             if (pendingFocus?.kind === "goal") setPanel("goals");
-            else if (pendingFocus?.kind === "shift") setPanel("shifts");
             else setPanel("options");
             setPendingFocus(null);
           }}
@@ -218,14 +181,4 @@ function ListPanel({
       )}
     </div>
   );
-}
-
-function formatRelative(iso: string): string {
-  const days = Math.floor((Date.now() - Date.parse(iso)) / 86_400_000);
-  if (days <= 0) return "today";
-  if (days === 1) return "yesterday";
-  if (days < 7) return `${days}d ago`;
-  if (days < 30) return `${Math.floor(days / 7)}w ago`;
-  if (days < 365) return `${Math.floor(days / 30)}mo ago`;
-  return `${Math.floor(days / 365)}y ago`;
 }
