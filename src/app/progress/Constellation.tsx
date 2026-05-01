@@ -1315,9 +1315,12 @@ function SessionStar({
   // The dot's recency-fade opacity goes on the Link only — the
   // hover tooltip is a sibling of the Link inside the .group
   // wrapper so its readability doesn't decay with the dot.
+  // hover:z-50 pulls the whole wrapper above siblings on hover so
+  // a later-rendered breakthrough sun / halo doesn't paint over
+  // this tooltip.
   return (
     <span
-      className="group absolute -translate-x-1/2 -translate-y-1/2"
+      className="group absolute -translate-x-1/2 -translate-y-1/2 hover:z-50"
       style={{
         left: `${dot.x * 100}%`,
         top: `${dot.y * 100}%`,
@@ -1390,11 +1393,12 @@ function BreakthroughSun({
   // Wrapper holds halo, Link, and tooltip. Wrapper has NO opacity
   // so the tooltip stays full-brightness regardless of how dimmed
   // the dot itself becomes from recency fade. Halo span and Link
-  // each apply opacity individually to dim the visuals.
+  // each apply opacity individually to dim the visuals. hover:z-50
+  // matches the other star types so hover order is consistent.
   const dimOpacity = { opacity: dot.opacity };
   return (
     <span
-      className="group absolute block h-7 w-7 -translate-x-1/2 -translate-y-1/2"
+      className="group absolute block h-7 w-7 -translate-x-1/2 -translate-y-1/2 hover:z-50"
       style={{
         left: `${dot.x * 100}%`,
         top: `${dot.y * 100}%`,
@@ -1610,10 +1614,11 @@ function MindsetShiftStar({
   //
   // Tooltip is a sibling of the Link inside the .group wrapper so
   // it stays full brightness even when the dot itself is dimmed
-  // by recency fade.
+  // by recency fade. hover:z-50 ensures the tooltip + dot paint
+  // above later-rendered siblings (notably the breakthrough sun).
   return (
     <span
-      className="group absolute -translate-x-1/2 -translate-y-1/2"
+      className="group absolute -translate-x-1/2 -translate-y-1/2 hover:z-50"
       style={{
         left: `${dot.x * 100}%`,
         top: `${dot.y * 100}%`,
