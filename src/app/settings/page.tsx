@@ -112,7 +112,10 @@ export default async function SettingsPage() {
                 <span className="text-white">EU:</span> Call{" "}
                 <span className="text-white">112</span> for emergencies
               </li>
-              <li>Or go to your nearest emergency room.</li>
+              <li>
+                Or contact your local emergency services or go to your
+                nearest emergency room.
+              </li>
             </ul>
           </div>
           <div>
@@ -120,9 +123,9 @@ export default async function SettingsPage() {
             <p className="mt-1">
               Your conversations are private to you. They power your
               coach&apos;s memory and your progress view — nothing else.
-              They are not sold or shared for advertising or any other
-              purpose. All of your session conversations are
-              confidential. See our Privacy Policy for full details.
+              They are not sold, not shared with advertisers or other
+              third parties, and not used to train AI models. See our
+              Privacy Policy for full details.
             </p>
           </div>
           <div>
