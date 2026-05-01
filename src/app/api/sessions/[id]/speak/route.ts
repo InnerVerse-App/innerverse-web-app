@@ -60,12 +60,20 @@ export async function POST(
   }
 
   // Look up the user's chosen coach so we can pick the matching voice.
-  // One extra DB read per /speak call — acceptable since /speak is
-  // already authenticated + session-checked, and TTS itself dwarfs
-  // the cost. Falls back to the default voice if onboarding state
-  // is missing or has an unrecognized coach_name.
-  const onboarding = await getOnboardingState();
-  const coachName = onboarding?.coach_name ?? null;
+  // The lookup is wrapped: a transient Supabase failure here is
+  // cosmetic (worst case: one sentence in the default voice) and
+  // shouldn't break voice mode for a chat reply that already arrived
+  // successfully. Falls back to null → default voice.
+  let coachName: string | null = null;
+  try {
+    const onboarding = await getOnboardingState();
+    coachName = onboarding?.coach_name ?? null;
+  } catch (err) {
+    console.warn("speak route: coach lookup failed, using default voice", {
+      sessionId,
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
 
   let audio: ReadableStream<Uint8Array>;
   try {

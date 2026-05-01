@@ -189,7 +189,12 @@ export function ChatView({
         signal: controller.signal,
       });
       if (!res.ok || !res.body) {
-        throw new Error(`request failed (${res.status})`);
+        const err = new Error(`request failed (${res.status})`);
+        // Status carried so the catch block can branch on it without
+        // re-parsing the response body. 503 is the upstream-unavailable
+        // signal from the messages route when OpenAI itself fails.
+        Object.assign(err, { status: res.status });
+        throw err;
       }
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
@@ -229,7 +234,12 @@ export function ChatView({
         return "";
       }
       console.error("ChatView: send failed", err);
-      setError("Something went wrong. Please try again.");
+      const status = (err as { status?: number })?.status;
+      setError(
+        status === 503
+          ? "Your coach is briefly offline. Please try again in a moment."
+          : "Something went wrong. Please try again.",
+      );
       setMessages((prev) => prev.filter((m) => m.id !== aiMsgId));
       throw err;
     } finally {

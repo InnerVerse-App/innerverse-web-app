@@ -81,19 +81,38 @@ export async function POST(
   }
 
   // Create the OpenAI stream BEFORE persisting the user turn: if
-  // stream creation throws (auth, quota, rate limit), no orphan
-  // user turn is left in the transcript. req.signal is piped
-  // through so a client disconnect cancels the upstream call.
-  const openaiStream = await openaiClient().responses.create(
-    {
-      model: MODEL_SESSION_CHAT,
-      previous_response_id: previousResponseId,
-      input: [{ role: "user", content }],
-      max_output_tokens: MAX_OUTPUT_TOKENS,
-      stream: true,
-    },
-    { signal: req.signal },
-  );
+  // stream creation throws (auth, quota, rate limit, OpenAI 5xx),
+  // no orphan user turn is left in the transcript and we return a
+  // 503 the client can render as "your coach is briefly offline."
+  // req.signal is piped through so a client disconnect cancels the
+  // upstream call.
+  let openaiStream;
+  try {
+    openaiStream = await openaiClient().responses.create(
+      {
+        model: MODEL_SESSION_CHAT,
+        previous_response_id: previousResponseId,
+        input: [{ role: "user", content }],
+        max_output_tokens: MAX_OUTPUT_TOKENS,
+        stream: true,
+      },
+      { signal: req.signal },
+    );
+  } catch (err) {
+    // Client cancelled before the upstream call returned — drop
+    // silently rather than alerting on what is effectively user
+    // intent. Other failures are real and capture to Sentry.
+    const isAbort =
+      err instanceof Error &&
+      (err.name === "AbortError" || err.name === "APIUserAbortError");
+    if (!isAbort) {
+      captureSessionError(err, "session_chat_openai_create", sessionId);
+    }
+    return NextResponse.json(
+      { error: "upstream_unavailable" },
+      { status: 503 },
+    );
+  }
 
   await appendMessage(ctx, {
     session_id: sessionId,
