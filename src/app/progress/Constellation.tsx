@@ -1102,39 +1102,48 @@ export function Constellation({
                       top — but the larger dots have tightened hit
                       areas so they don't over-cover their smaller
                       neighbors. */}
-                  <div className="constellation-zoom-fade-in absolute inset-0">
-                    {layout.mindsetShifts.map((m) => (
-                      <MindsetShiftStar
-                        key={m.id}
-                        dot={
-                          boostedIds.has(m.id) ? { ...m, opacity: 1 } : m
-                        }
-                        buildHref={(id) =>
-                          buildUrl({ shift: id, constellation: null, goal: null })
-                        }
-                      />
-                    ))}
-                    {layout.sessions.map((s) => (
-                      <SessionStar
-                        key={s.id}
-                        dot={
-                          boostedIds.has(s.id) ? { ...s, opacity: 1 } : s
-                        }
-                        buildSessionHref={(id) =>
-                          // Stay on /progress and select the session as
-                          // the anchor — same UX as clicking any other
-                          // dot. To open the session detail page, the
-                          // user can use the Sessions tab.
-                          buildUrl({
-                            session: id,
-                            constellation: null,
-                            shift: null,
-                            goal: null,
-                          })
-                        }
-                      />
-                    ))}
-                  </div>
+                  {/* Used to be wrapped in a single div with the
+                      .constellation-zoom-fade-in class. That div's
+                      opacity (0.75-1.0 based on zoom) dimmed every
+                      child, including the hover tooltips, AND the
+                      stacking context it created from `opacity` made
+                      hover:z-50 useless against the breakthrough
+                      wrapper that comes after this group in DOM.
+                      Now session/shift wrappers are direct siblings
+                      of breakthrough wrappers, and the zoom fade
+                      lives on the dot SVG itself (see SessionStar /
+                      MindsetShiftStar) so it never touches tooltips. */}
+                  {layout.mindsetShifts.map((m) => (
+                    <MindsetShiftStar
+                      key={m.id}
+                      dot={
+                        boostedIds.has(m.id) ? { ...m, opacity: 1 } : m
+                      }
+                      buildHref={(id) =>
+                        buildUrl({ shift: id, constellation: null, goal: null })
+                      }
+                    />
+                  ))}
+                  {layout.sessions.map((s) => (
+                    <SessionStar
+                      key={s.id}
+                      dot={
+                        boostedIds.has(s.id) ? { ...s, opacity: 1 } : s
+                      }
+                      buildSessionHref={(id) =>
+                        // Stay on /progress and select the session as
+                        // the anchor — same UX as clicking any other
+                        // dot. To open the session detail page, the
+                        // user can use the Sessions tab.
+                        buildUrl({
+                          session: id,
+                          constellation: null,
+                          shift: null,
+                          goal: null,
+                        })
+                      }
+                    />
+                  ))}
 
                   {layout.goals.map((g) => (
                     <GoalComet
@@ -1343,7 +1352,7 @@ function SessionStar({
       >
         <svg
           viewBox="-8 -8 16 16"
-          className="block h-4 w-4 transition hover:scale-150"
+          className="constellation-zoom-fade-in block h-4 w-4 transition hover:scale-150"
           style={{ overflow: "visible" }}
           aria-hidden
         >
@@ -1641,7 +1650,7 @@ function MindsetShiftStar({
       >
         <svg
           viewBox="-8 -8 16 16"
-          className="block h-4 w-4 transition hover:scale-125"
+          className="constellation-zoom-fade-in block h-4 w-4 transition hover:scale-125"
           style={{ overflow: "visible" }}
           aria-hidden
         >
