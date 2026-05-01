@@ -1318,7 +1318,7 @@ function SelectionLabel({
 // the tooltip out of every parent stacking/transform context so its
 // position is purely screen-pixel — it never scales with zoom and
 // never gets clipped by the panel.
-type HoverAccent = "session" | "shift" | "breakthrough";
+type HoverAccent = "session" | "shift" | "breakthrough" | "goal";
 type HoverInfo = {
   id: string;
   text: string;
@@ -1334,6 +1334,7 @@ const ACCENT_RING: Record<HoverAccent, string> = {
   shift: "border-[rgba(167,139,250,0.45)] shadow-[0_0_14px_rgba(167,139,250,0.40)]",
   breakthrough:
     "border-[rgba(220,161,20,0.55)] shadow-[0_0_18px_rgba(220,161,20,0.50)]",
+  goal: "border-[rgba(74,222,128,0.45)] shadow-[0_0_14px_rgba(74,222,128,0.40)]",
 };
 
 // Generous threshold (in CSS px) used to decide when the tooltip
@@ -1430,9 +1431,12 @@ function useHoverReport(
   // bump into the RefObject<T|null> vs. RefObject<T> assignment
   // mismatch when JSX hands us a ref slot. We use a callback ref
   // that stashes the latest node, and the handlers read from it.
-  const nodeRef = useRef<HTMLSpanElement | null>(null);
+  // Typed to HTMLElement (not HTMLSpanElement) so it can be
+  // attached to the <span> wrappers used by SessionStar, etc., or
+  // directly to the <a> rendered by Next.js Link in GoalComet.
+  const nodeRef = useRef<HTMLElement | null>(null);
   const report = useContext(HoverReportContext);
-  const ref = (node: HTMLSpanElement | null): void => {
+  const ref = (node: HTMLElement | null): void => {
     nodeRef.current = node;
   };
   return {
@@ -1850,6 +1854,7 @@ function GoalComet({
 }) {
   const router = useRouter();
   const href = buildGoalHref(dot.id);
+  const { ref, handlers } = useHoverReport(dot.id, `Goal — ${dot.title}`, "goal");
   const headX = dot.x * 100;
   const headY = dot.y * 100;
   const tailEndX = (dot.x + Math.cos(dot.tailAngle) * dot.tailLength) * 100;
@@ -1948,9 +1953,9 @@ function GoalComet({
           the breakthrough sun, scaled down. Double-click jumps to the
           Goals tab with this goal highlighted. */}
       <Link
+        ref={ref}
         href={href}
         aria-label={`Goal: ${dot.title} (double-click to view in Goals tab)`}
-        title={`Goal — ${dot.title} (double-click to view in Goals tab)`}
         className={`absolute -translate-x-1/2 -translate-y-1/2 ${TAP_PADDING}`}
         style={{
           left: `${headX}%`,
@@ -1962,6 +1967,7 @@ function GoalComet({
           e.stopPropagation();
           router.push(`/goals?goal=${dot.id}#g-${dot.id}`);
         }}
+        {...handlers}
       >
         <svg
           viewBox="-8 -8 16 16"
