@@ -9,6 +9,7 @@ import * as Sentry from "@sentry/nextjs";
 // src/app/sessions, src/lib/session-end, and the cron sweep route.
 export type SessionErrorStage =
   | "session_start_openai"
+  | "session_chat_openai_create"
   | "session_chat_stream"
   | "session_chat_empty_response"
   | "session_chat_no_response_id"
