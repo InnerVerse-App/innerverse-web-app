@@ -9,7 +9,6 @@ import {
   useRef,
   useState,
 } from "react";
-import { createPortal } from "react-dom";
 import {
   type ReactZoomPanPinchRef,
   TransformComponent,
@@ -665,7 +664,6 @@ export function Constellation({
 
   return (
     <HoverReportContext.Provider value={setHoverInfo}>
-      {hoverInfo ? <FloatingTooltip info={hoverInfo} /> : null}
       <section id="constellation-map" className="mt-6 scroll-mt-4">
       <h2 className="text-base font-semibold text-white">Your Constellation</h2>
       <p className="mt-1 text-xs text-neutral-500">
@@ -819,6 +817,16 @@ export function Constellation({
           selectedAnchor={selectedAnchor}
           layout={layout}
         />
+        {/* Hover tooltip — rendered here, inside the panel div but
+            OUTSIDE the TransformComponent. Inside the panel means
+            overflow:hidden clips it to the visible map area, so the
+            tooltip never floats outside the panel onto page chrome.
+            Outside TransformComponent means it doesn't scale with
+            the panel's zoom. Position is computed in panel-relative
+            coords with auto-flip for edge dots. */}
+        {hoverInfo ? (
+          <FloatingTooltip info={hoverInfo} panelEl={panelRef.current} />
+        ) : null}
         <TransformWrapper
           ref={transformRef}
           initialScale={1}
@@ -1333,32 +1341,53 @@ const ACCENT_RING: Record<HoverAccent, string> = {
 // viewport. Roughly half of a typical tooltip's width.
 const TOOLTIP_EDGE_BUFFER = 160;
 
-function FloatingTooltip({ info }: { info: HoverInfo }) {
-  // Only render in the browser — createPortal needs a document. The
-  // first-render-on-server path (SSR) returns null so React doesn't
-  // try to portal during build.
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
-  if (!mounted) return null;
-
+// Renders the tooltip INSIDE the panel div but OUTSIDE the
+// TransformComponent. That gets us the best of both worlds:
+//
+//   * Inside panel    → clipped by panel's overflow:hidden so the
+//                       tooltip can't float into page background;
+//                       positioning is in panel-relative coords so
+//                       on a phone the tooltip stays on the map.
+//   * Outside Transform → not affected by the panel's zoom transform,
+//                       so the tooltip stays at native pixel size at
+//                       any zoom level.
+//
+// Edge-flip thresholds are computed from the PANEL's bounding rect
+// (not the viewport) so the tooltip auto-anchors correctly on
+// whatever device size we're rendering on.
+function FloatingTooltip({
+  info,
+  panelEl,
+}: {
+  info: HoverInfo;
+  panelEl: HTMLDivElement | null;
+}) {
+  if (!panelEl) return null;
+  const panelRect = panelEl.getBoundingClientRect();
   const { text, accent, rect } = info;
-  const dotCenterX = rect.left + rect.width / 2;
-  const dotTop = rect.top;
-  const dotBottom = rect.bottom;
 
-  // Vertical placement: above the dot by default; flip below if there
-  // isn't enough room above (top of dot < buffer from viewport top).
-  const placeBelow = dotTop < 60;
-  const verticalAnchor = placeBelow ? dotBottom + 8 : dotTop - 8;
+  // Convert dot's viewport-space rect into panel-relative coords.
+  const dotCenterX = rect.left + rect.width / 2 - panelRect.left;
+  const dotTopInPanel = rect.top - panelRect.top;
+  const dotBottomInPanel = rect.bottom - panelRect.top;
 
-  // Horizontal placement: centered on dot by default; anchor to an
-  // edge if the dot is too close to the corresponding viewport edge.
+  // Vertical placement: above the dot by default. Flip below when
+  // the dot doesn't have enough room above it inside the panel.
+  const placeBelow = dotTopInPanel < 40;
+  const verticalAnchor = placeBelow ? dotBottomInPanel + 8 : dotTopInPanel - 8;
+  const translateY = placeBelow ? "0%" : "-100%";
+  const originY = placeBelow ? "top" : "bottom";
+
+  // Horizontal placement: centered on dot when the dot is in the
+  // panel's middle band; anchor to an edge when the dot is too
+  // close to the corresponding panel edge for the tooltip to fit
+  // centered.
   let translateX: string;
   let originX: string;
   if (dotCenterX < TOOLTIP_EDGE_BUFFER) {
     translateX = "0%";
     originX = "left";
-  } else if (window.innerWidth - dotCenterX < TOOLTIP_EDGE_BUFFER) {
+  } else if (panelRect.width - dotCenterX < TOOLTIP_EDGE_BUFFER) {
     translateX = "-100%";
     originX = "right";
   } else {
@@ -1366,28 +1395,26 @@ function FloatingTooltip({ info }: { info: HoverInfo }) {
     originX = "center";
   }
 
-  // translateY moves the tooltip up by its own height when placed
-  // above (so the bottom edge is at the calculated top), or leaves
-  // it at the calculated top when placed below.
-  const translateY = placeBelow ? "0" : "-100%";
-  const originY = placeBelow ? "top" : "bottom";
+  // Cap the tooltip width to (panel width - small inset) so even an
+  // unusually long galaxy name stays inside the panel.
+  const maxWidthPx = Math.max(160, panelRect.width - 16);
 
-  return createPortal(
+  return (
     <div
       role="tooltip"
       style={{
-        position: "fixed",
+        position: "absolute",
         top: verticalAnchor,
         left: dotCenterX,
         transform: `translate(${translateX}, ${translateY})`,
         transformOrigin: `${originX} ${originY}`,
-        zIndex: 100,
+        maxWidth: `${maxWidthPx}px`,
+        zIndex: 50,
       }}
-      className={`pointer-events-none max-w-[280px] truncate rounded-md border bg-[rgba(8,12,22,0.92)] px-2.5 py-1 text-[11px] font-medium tracking-wide text-neutral-100 backdrop-blur-md ${ACCENT_RING[accent]}`}
+      className={`pointer-events-none truncate rounded-md border bg-[rgba(8,12,22,0.92)] px-2.5 py-1 text-[11px] font-medium tracking-wide text-neutral-100 backdrop-blur-md ${ACCENT_RING[accent]}`}
     >
       {text}
-    </div>,
-    document.body,
+    </div>
   );
 }
 
