@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 
 import { PendingDots } from "@/app/_components/PendingDots";
 import { ProgressBar } from "@/app/_components/ProgressBar";
+import { StartSessionModePicker } from "@/app/_components/StartSessionModePicker";
 import { startSession } from "@/app/sessions/actions";
 
 export type StartSessionGoal = {
@@ -26,19 +27,32 @@ type Props = {
   buttonLabel: string;
 };
 
-type Panel = "closed" | "options" | "goals" | "shifts";
+type Focus = { kind: "goal" | "shift"; id: string } | null;
+// "mode" is the new step that appears AFTER the user picks a focus —
+// they choose Type or Talk before the session is actually created.
+type Panel = "closed" | "options" | "goals" | "shifts" | "mode";
 
 export function StartSessionMenu({ goals, shifts, buttonLabel }: Props) {
   const [panel, setPanel] = useState<Panel>("closed");
+  const [pendingFocus, setPendingFocus] = useState<Focus>(null);
   const [pending, startTransition] = useTransition();
 
-  function startWith(focus: { kind: "goal" | "shift"; id: string } | null) {
+  // First step: user picked a focus. Don't fire startSession yet —
+  // stash the focus and advance to the mode picker.
+  function pickFocus(focus: Focus) {
+    setPendingFocus(focus);
+    setPanel("mode");
+  }
+
+  // Second step: mode chosen. Now actually start the session.
+  function confirmMode(mode: "text" | "voice") {
     startTransition(async () => {
       const fd = new FormData();
-      if (focus) {
-        fd.set("focus_kind", focus.kind);
-        fd.set("focus_id", focus.id);
+      if (pendingFocus) {
+        fd.set("focus_kind", pendingFocus.kind);
+        fd.set("focus_id", pendingFocus.id);
       }
+      fd.set("focus_mode", mode);
       await startSession(fd);
     });
   }
@@ -87,7 +101,7 @@ export function StartSessionMenu({ goals, shifts, buttonLabel }: Props) {
           <OptionButton
             label="I'm bringing something specific today"
             sublabel="Open the session with a blank slate"
-            onClick={() => startWith(null)}
+            onClick={() => pickFocus(null)}
           />
           <button
             type="button"
@@ -107,7 +121,7 @@ export function StartSessionMenu({ goals, shifts, buttonLabel }: Props) {
             <button
               key={g.id}
               type="button"
-              onClick={() => startWith({ kind: "goal", id: g.id })}
+              onClick={() => pickFocus({ kind: "goal", id: g.id })}
               className="block w-full rounded-md border border-white/10 bg-white/[0.02] p-3 text-left transition hover:border-brand-primary/40 hover:bg-white/5"
             >
               <p className="text-sm font-medium text-white">{g.title}</p>
@@ -115,7 +129,7 @@ export function StartSessionMenu({ goals, shifts, buttonLabel }: Props) {
             </button>
           ))}
         </ListPanel>
-      ) : (
+      ) : panel === "shifts" ? (
         <ListPanel
           title="Pick a mindset shift"
           onBack={() => setPanel("options")}
@@ -125,7 +139,7 @@ export function StartSessionMenu({ goals, shifts, buttonLabel }: Props) {
             <button
               key={s.id}
               type="button"
-              onClick={() => startWith({ kind: "shift", id: s.id })}
+              onClick={() => pickFocus({ kind: "shift", id: s.id })}
               className="block w-full rounded-md border border-white/10 bg-white/[0.02] p-3 text-left transition hover:border-brand-primary/40 hover:bg-white/5"
             >
               <p className="text-sm text-white">{s.content}</p>
@@ -135,6 +149,18 @@ export function StartSessionMenu({ goals, shifts, buttonLabel }: Props) {
             </button>
           ))}
         </ListPanel>
+      ) : (
+        // panel === "mode" — final step, fires startSession on choice.
+        <StartSessionModePicker
+          onSelect={confirmMode}
+          onBack={() => {
+            // Back from mode → return to whichever picker preceded it.
+            if (pendingFocus?.kind === "goal") setPanel("goals");
+            else if (pendingFocus?.kind === "shift") setPanel("shifts");
+            else setPanel("options");
+            setPendingFocus(null);
+          }}
+        />
       )}
     </div>
   );

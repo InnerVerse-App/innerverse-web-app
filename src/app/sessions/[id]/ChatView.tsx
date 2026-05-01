@@ -26,6 +26,11 @@ type Props = {
   coachName: string;
   ended: boolean;
   initialMessages: Message[];
+  // Set true when the start flow chose voice mode (?mode=voice on
+  // the URL, set by the startSession redirect). Otherwise opens in
+  // text mode. The user can toggle either way mid-session via the
+  // existing "Talk to your coach" / "Type instead" button.
+  initialVoiceMode: boolean;
 };
 
 export function ChatView({
@@ -33,6 +38,7 @@ export function ChatView({
   coachName,
   ended,
   initialMessages,
+  initialVoiceMode,
 }: Props) {
   const [messages, setMessages] = useState<Message[]>(initialMessages);
   const [input, setInput] = useState("");
@@ -41,9 +47,9 @@ export function ChatView({
   const [error, setError] = useState<string | null>(null);
   // Voice mode swaps the textarea + send button for a push-to-talk
   // interface backed by Whisper (transcribe) + OpenAI TTS (speak).
-  // Local-only state for now — no preference persistence across
-  // sessions yet. PR 3 will add VAD; PR 5 will add interrupt.
-  const [voiceMode, setVoiceMode] = useState(false);
+  // Initialized from the start-flow choice (URL ?mode=voice). Toggled
+  // mid-session via the in-session button below the input area.
+  const [voiceMode, setVoiceMode] = useState(initialVoiceMode);
 
   const bottomRef = useRef<HTMLDivElement | null>(null);
   // Auto-focus the textarea when the coach finishes streaming so the

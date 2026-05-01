@@ -1,13 +1,12 @@
 import Link from "next/link";
 
-import { PendingFormButton } from "@/app/_components/PendingFormButton";
 import { ProgressBar } from "@/app/_components/ProgressBar";
-import { startSession } from "@/app/sessions/actions";
 import { formatDateCompact } from "@/lib/format";
 import type { ActiveGoal } from "@/lib/goals";
 import { progressForGoal, progressToOpacity } from "@/lib/progress";
 
 import { ArchiveButton } from "./ArchiveButton";
+import { GoalStartButton } from "./GoalStartButton";
 
 export type GoalCardData = Pick<
   ActiveGoal,
@@ -212,18 +211,7 @@ export function GoalCard({ goal }: Props) {
         </div>
       ) : null}
 
-      <form action={startSession} className="mt-4 border-t border-white/5 pt-4">
-        <input type="hidden" name="focus_kind" value="goal" />
-        <input type="hidden" name="focus_id" value={goal.id} />
-        <PendingFormButton
-          className="flex w-full items-center justify-center gap-2 rounded-md border border-brand-primary/40 bg-brand-primary/10 px-4 py-2 text-sm font-medium text-brand-primary hover:bg-brand-primary/20"
-          pendingLabel="Starting your session"
-          dotsColorClass="bg-brand-primary"
-        >
-          <span aria-hidden>⚡</span>
-          Start a session for this goal
-        </PendingFormButton>
-      </form>
+      <GoalStartButton goalId={goal.id} />
     </section>
   );
 }

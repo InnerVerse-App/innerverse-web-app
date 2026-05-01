@@ -170,7 +170,16 @@ export async function startSession(formData?: FormData): Promise<void> {
     ai_response_id: responseId,
   });
 
-  redirect(`/sessions/${sessionRow.id}`);
+  // focus_mode (text|voice) chosen on the home/goal pickers — append
+  // ?mode=voice to the redirect so the session page can initialize
+  // ChatView's voiceMode state. Default (text) needs no query param.
+  const modeRaw = formData?.get("focus_mode");
+  const mode = typeof modeRaw === "string" ? modeRaw : "text";
+  const redirectPath =
+    mode === "voice"
+      ? `/sessions/${sessionRow.id}?mode=voice`
+      : `/sessions/${sessionRow.id}`;
+  redirect(redirectPath);
 }
 
 // Ends a session. For substantive sessions (≥ SUBSTANTIVE_MESSAGE_
