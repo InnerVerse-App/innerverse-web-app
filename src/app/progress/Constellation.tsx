@@ -1396,9 +1396,11 @@ function FloatingTooltip({
     originX = "center";
   }
 
-  // Cap the tooltip width to (panel width - small inset) so even an
-  // unusually long galaxy name stays inside the panel.
-  const maxWidthPx = Math.max(160, panelRect.width - 16);
+  // Cap tooltip width to a comfortable reading column. On big
+  // screens this is ~280px; on small phones where the panel itself
+  // is narrower, fall back to (panel width - small inset) so the
+  // tooltip never exceeds the visible map.
+  const maxWidthPx = Math.min(280, panelRect.width - 16);
 
   return (
     <div
@@ -1412,7 +1414,7 @@ function FloatingTooltip({
         maxWidth: `${maxWidthPx}px`,
         zIndex: 50,
       }}
-      className={`pointer-events-none truncate rounded-md border bg-[rgba(8,12,22,0.92)] px-2.5 py-1 text-[11px] font-medium tracking-wide text-neutral-100 backdrop-blur-md ${ACCENT_RING[accent]}`}
+      className={`pointer-events-none rounded-md border bg-[rgba(8,12,22,0.92)] px-2.5 py-1 text-[11px] font-medium leading-snug tracking-wide text-neutral-100 backdrop-blur-md ${ACCENT_RING[accent]}`}
     >
       {text}
     </div>
