@@ -1286,7 +1286,17 @@ function DotHoverLabel({
   return (
     <span
       role="tooltip"
-      className={`pointer-events-none absolute bottom-full left-1/2 z-40 mb-2 max-w-[60vw] -translate-x-1/2 truncate rounded-md border bg-[rgba(8,12,22,0.85)] px-2.5 py-1 text-[11px] font-medium tracking-wide text-neutral-100 opacity-0 backdrop-blur-md transition-opacity duration-150 [@media(hover:hover)]:group-hover:opacity-100 ${accentRing}`}
+      // The tooltip lives inside the panel's TransformComponent and
+      // therefore inherits its zoom scale. Without counter-scaling
+      // the text becomes enormous at any non-1x zoom (the panel
+      // sets --zoom-counter to 1/scale for exactly this purpose).
+      // transformOrigin pins the bottom-center so the tooltip stays
+      // anchored just above the dot when it scales.
+      style={{
+        transform: "translateX(-50%) scale(var(--zoom-counter, 1))",
+        transformOrigin: "center bottom",
+      }}
+      className={`pointer-events-none absolute bottom-full left-1/2 z-40 mb-2 max-w-[60vw] truncate rounded-md border bg-[rgba(8,12,22,0.85)] px-2.5 py-1 text-[11px] font-medium tracking-wide text-neutral-100 opacity-0 backdrop-blur-md transition-opacity duration-150 [@media(hover:hover)]:group-hover:opacity-100 ${accentRing}`}
     >
       {text}
     </span>
