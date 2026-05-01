@@ -1184,6 +1184,103 @@ export function Constellation({
                     />
                   ))}
 
+                  {/* TEMPORARY VISUALIZATION — full demo galaxy at the
+                      brightest star in the nebula photo. Renders the
+                      same visual elements a real data-driven galaxy
+                      would: breakthrough sun, member stars (sessions /
+                      shifts) scattered in an ellipse aligned with the
+                      disc's tilt, all over the disc rendered separately
+                      above with breakthroughId="demo-bright-star".
+                      Remove this block + the disc one before merging. */}
+                  {(() => {
+                    const cx = 0.35;
+                    const cy = 0.27;
+                    const tiltDeg = 25;
+                    const tiltRad = (tiltDeg * Math.PI) / 180;
+                    const cosT = Math.cos(tiltRad);
+                    const sinT = Math.sin(tiltRad);
+                    const memberOffsets: Array<
+                      [number, number, "cyan" | "violet" | "white"]
+                    > = [
+                      [0.04, 0.005, "cyan"],
+                      [-0.045, -0.005, "violet"],
+                      [0.058, -0.012, "white"],
+                      [-0.055, 0.011, "cyan"],
+                      [0.022, 0.014, "violet"],
+                      [-0.022, -0.014, "white"],
+                      [0.072, 0.003, "cyan"],
+                      [-0.07, -0.003, "white"],
+                    ];
+                    const palette = {
+                      cyan: { core: "rgb(120,200,230)", glow: "rgba(120,200,230,0.45)" },
+                      violet: { core: "rgb(167,139,250)", glow: "rgba(167,139,250,0.45)" },
+                      white: { core: "rgb(245,245,255)", glow: "rgba(220,230,255,0.45)" },
+                    };
+                    return (
+                      <>
+                        {memberOffsets.map(([dx, dy, color], i) => {
+                          const x = cx + dx * cosT - dy * sinT;
+                          const y = cy + dx * sinT + dy * cosT;
+                          const c = palette[color];
+                          return (
+                            <span
+                              key={`demo-member-${i}`}
+                              className="pointer-events-none absolute -translate-x-1/2 -translate-y-1/2"
+                              style={{
+                                left: `${x * 100}%`,
+                                top: `${y * 100}%`,
+                              }}
+                              aria-hidden
+                            >
+                              <svg
+                                viewBox="-8 -8 16 16"
+                                className="block h-4 w-4"
+                                style={{ overflow: "visible" }}
+                              >
+                                <circle r={7} fill={c.glow} />
+                                <circle r={2.4} fill={c.core} />
+                                <circle r={0.7} fill="#ffffff" fillOpacity={0.85} />
+                              </svg>
+                            </span>
+                          );
+                        })}
+                        <span
+                          className="pointer-events-none absolute -translate-x-1/2 -translate-y-1/2"
+                          style={{
+                            left: `${cx * 100}%`,
+                            top: `${cy * 100}%`,
+                          }}
+                          aria-hidden
+                        >
+                          <svg
+                            viewBox="-12 -12 24 24"
+                            className="block h-7 w-7"
+                            style={{ overflow: "visible" }}
+                          >
+                            <line
+                              x1={-32}
+                              y1={0}
+                              x2={32}
+                              y2={0}
+                              stroke="url(#spike-h)"
+                              strokeWidth={0.7}
+                            />
+                            <line
+                              x1={0}
+                              y1={-32}
+                              x2={0}
+                              y2={32}
+                              stroke="url(#spike-v)"
+                              strokeWidth={0.7}
+                            />
+                            <circle r={11} fill="url(#halo-sun)" />
+                            <circle r={4.5} fill={BREAKTHROUGH_COLOR} />
+                          </svg>
+                        </span>
+                      </>
+                    );
+                  })()}
+
                   {isEmpty ? (
                     <div className="absolute inset-0 flex items-center justify-center px-8 text-center">
                       <p className="text-sm text-neutral-400">
