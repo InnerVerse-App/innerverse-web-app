@@ -729,25 +729,27 @@ export function Constellation({
         ref={panelRef}
         className="relative mt-4 aspect-square w-full overflow-hidden rounded-xl"
         style={{
-          // Multi-layer cosmic atmosphere. All radial-gradients live on
-          // the panel's (un-transformed) background, so they survive the
-          // zoom/pan stack cleanly — the previous Milky Way attempt put
-          // a blurred element inside the TransformComponent and got
-          // clipped into a hard rectangle. Painted top → bottom:
+          // Multi-layer cosmic atmosphere. All layers live on the
+          // panel's (un-transformed) background, so they survive the
+          // zoom/pan stack cleanly — the previous Milky Way attempt
+          // put a blurred element inside the TransformComponent and
+          // got clipped into a hard rectangle. Painted top → bottom
+          // (CSS layer order is reverse of array order):
           //   1. Three overlapping ellipses across the top ~15% form a
-          //      Milky-Way-style stellar band (magenta → violet → blue)
-          //      that stays well above the central data cluster.
+          //      Milky-Way-style stellar band that stays well above
+          //      the central data cluster.
           //   2. A wide thin lower-edge dust hint to balance.
-          //   3. Side wisps at the left + right edges for atmospheric
-          //      depth.
-          //   4. Existing center + corner blue glows (amped slightly).
-          //   5. Base dark teal gradient.
+          //   3. Side wisps at the left + right edges.
+          //   4. Existing center + corner blue glows.
+          //   5. A dim dark overlay sitting on the nebula photo to
+          //      keep dots readable against the busy background.
+          //   6. The InnerVerse nebula photograph itself, sized to
+          //      cover the panel.
+          //   7. Solid dark fallback (only visible if the image fails
+          //      to load).
           background: [
             // Milky-Way upper band (three overlapping ellipses for an
-            // organic non-rectangular silhouette). Larger ellipses +
-            // intermediate stops + lower peak opacity give a gentler
-            // fade than the previous pass, so the band feathers into
-            // the panel instead of reading as discrete blobs.
+            // organic non-rectangular silhouette).
             "radial-gradient(ellipse 36% 14% at 28% 12%, rgba(186,104,200,0.20) 0%, rgba(186,104,200,0.10) 50%, rgba(186,104,200,0) 100%)",
             "radial-gradient(ellipse 40% 15% at 56% 10%, rgba(167,139,250,0.22) 0%, rgba(167,139,250,0.10) 50%, rgba(167,139,250,0) 100%)",
             "radial-gradient(ellipse 34% 13% at 82% 14%, rgba(120,160,220,0.18) 0%, rgba(120,160,220,0.08) 50%, rgba(120,160,220,0) 100%)",
@@ -756,12 +758,20 @@ export function Constellation({
             // Side wisps.
             "radial-gradient(ellipse 18% 32% at 6% 55%, rgba(186,104,200,0.14) 0%, transparent 70%)",
             "radial-gradient(ellipse 18% 32% at 96% 70%, rgba(89,140,200,0.16) 0%, transparent 70%)",
-            // Existing center + corner blue glows (slightly amped).
+            // Center + corner blue glows.
             "radial-gradient(circle at center, rgba(89,164,192,0.14) 0%, transparent 38%)",
             "radial-gradient(ellipse at 75% 25%, rgba(89,164,192,0.07) 0%, transparent 50%)",
             "radial-gradient(ellipse at 25% 75%, rgba(89,164,192,0.06) 0%, transparent 50%)",
-            // Base.
-            "radial-gradient(circle at center, #02101c 0%, #00050a 80%)",
+            // Dim overlay over the nebula image. Keeps the photograph
+            // present but quiet enough that the rendered dots and
+            // galaxies still pop. Tune the alpha (currently 0.62) to
+            // brighten or dim the photo: lower = more nebula visible,
+            // higher = nebula recedes more.
+            "linear-gradient(rgba(0,5,10,0.62), rgba(0,5,10,0.62))",
+            // Nebula photograph.
+            "url(/star-map-nebula.png) center / cover no-repeat",
+            // Solid fallback if the image fails to load.
+            "#00050a",
           ].join(", "),
           touchAction: "none",
         }}
