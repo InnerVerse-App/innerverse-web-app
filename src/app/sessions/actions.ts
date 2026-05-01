@@ -104,6 +104,18 @@ async function readUserName(ctx: UserSupabase): Promise<string> {
   return "friend";
 }
 
+// Returns the user's session count BEFORE the new row is created.
+// Used by startSession to gate the first-session-only coach welcome
+// message. RLS scopes the query to the calling user, so no
+// `eq("user_id", ...)` filter is needed.
+async function countPriorSessions(ctx: UserSupabase): Promise<number> {
+  const { count, error } = await ctx.client
+    .from("sessions")
+    .select("id", { count: "exact", head: true });
+  if (error) throw error;
+  return count ?? 0;
+}
+
 // Creates a new coaching session and the coach's opening message,
 // then redirects to the chat page. Called from the "Start session"
 // button on /home as a <form action={startSession}>.
@@ -113,8 +125,10 @@ async function readUserName(ctx: UserSupabase): Promise<string> {
 // Subsequent user turns stream (see /api/sessions/[id]/messages).
 //
 // Optional formData fields:
-//   focus_kind: "goal" | "shift" — what the user wants to focus on
-//   focus_id:   the corresponding goal.id or insights.id
+//   focus_kind: "goal" — what the user wants to focus on (only "goal"
+//               is currently accepted; "shift" was removed when the
+//               home menu's Work-on-my-mindset option was dropped)
+//   focus_id:   the corresponding goal.id
 // When both present and the row belongs to the caller, the focus
 // title is injected into the session-start prompt so the coach can
 // open with "I see you want to work on <title> today" instead of a
@@ -126,14 +140,25 @@ export async function startSession(formData?: FormData): Promise<void> {
   const ctx = await supabaseForUser();
   if (!ctx) redirect("/sign-in");
 
-  const [userName] = await Promise.all([
+  // Count any prior sessions BEFORE creating the new row. count==0
+  // unlocks the curated coach welcome (lib/coach-welcome.ts) on the
+  // user's first-ever session. Empty sessions are deleted in the
+  // end-session flow, so this count reflects "real sessions" — a
+  // user who started + abandoned several before their first real
+  // one will still see the welcome on the one that sticks.
+  const [userName, , priorSessionCount] = await Promise.all([
     readUserName(ctx),
     ensureCoachingState(ctx),
+    countPriorSessions(ctx),
   ]);
 
   const focus = await resolveFocus(ctx, formData);
 
-  const input = await buildSessionStartInput({ userName, focus });
+  const input = await buildSessionStartInput({
+    userName,
+    focus,
+    isFirstSession: priorSessionCount === 0,
+  });
 
   // Call OpenAI BEFORE inserting any rows. If the call fails (network,
   // auth, quota, missing env), we leave no orphan `sessions` row. Once
@@ -332,35 +357,26 @@ export async function submitSessionResponse(
 }
 
 // Validates the focus form fields against the caller's own rows so a
-// crafted focus_id can't pull another user's goal/shift title into the
+// crafted focus_id can't pull another user's goal title into the
 // prompt. Returns null when no focus is set, malformed, or the row
-// isn't visible to this user.
+// isn't visible to this user. Only `kind: "goal"` is accepted today
+// — see SessionFocus in lib/coaching-prompt.ts for context.
 async function resolveFocus(
   ctx: UserSupabase,
   formData: FormData | undefined,
-): Promise<{ kind: "goal" | "shift"; title: string } | null> {
+): Promise<{ kind: "goal"; title: string } | null> {
   if (!formData) return null;
   const kindRaw = formData.get("focus_kind");
   const idRaw = formData.get("focus_id");
   if (typeof kindRaw !== "string" || typeof idRaw !== "string") return null;
-  if (kindRaw !== "goal" && kindRaw !== "shift") return null;
+  if (kindRaw !== "goal") return null;
   if (idRaw.length === 0) return null;
 
-  if (kindRaw === "goal") {
-    const { data, error } = await ctx.client
-      .from("goals")
-      .select("title")
-      .eq("id", idRaw)
-      .maybeSingle();
-    if (error || !data?.title) return null;
-    return { kind: "goal", title: data.title };
-  }
-  // shift
   const { data, error } = await ctx.client
-    .from("insights")
-    .select("content")
+    .from("goals")
+    .select("title")
     .eq("id", idRaw)
     .maybeSingle();
-  if (error || !data?.content) return null;
-  return { kind: "shift", title: data.content };
+  if (error || !data?.title) return null;
+  return { kind: "goal", title: data.title };
 }

@@ -17,10 +17,7 @@ import {
   LastSessionCard,
   type LastSession,
 } from "./LastSessionCard";
-import type {
-  StartSessionGoal,
-  StartSessionShift,
-} from "./StartSessionMenu";
+import type { StartSessionGoal } from "./StartSessionMenu";
 import { MessageFromCoachCard } from "./MessageFromCoachCard";
 import {
   PersonalGrowthProgressCard,
@@ -49,12 +46,6 @@ const GROWTH_PROGRESS_LIMIT = 3;
 // 2). Full history lives on the Progress tab.
 const BREAKTHROUGHS_LIMIT = 3;
 
-// Cap on how many recent mindset shifts the StartSessionMenu lists.
-// Picks the freshest — older shifts fall off the picker but stay
-// visible elsewhere. 20 keeps the sheet scrollable without becoming
-// a wall.
-const START_MENU_SHIFTS_LIMIT = 20;
-
 type HomeData = {
   lastSession: LastSession | null;
   sessionCount: number;
@@ -62,7 +53,6 @@ type HomeData = {
   recentGrowth: RecentGrowthItem[];
   recentBreakthroughs: RecentBreakthrough[];
   activeGoals: ActiveGoal[];
-  recentShifts: StartSessionShift[];
 };
 
 type GrowthRow = {
@@ -99,8 +89,8 @@ function buildGrowthItems(rows: GrowthRow[]): RecentGrowthItem[] {
     });
 }
 
-// Six parallel Supabase reads. All are RLS-scoped so the
-// supabaseForUser context is required; an unauthenticated caller
+// Parallel Supabase reads for the home page. All are RLS-scoped so
+// the supabaseForUser context is required; an unauthenticated caller
 // short-circuits to empty counts (though HomePage's auth gate above
 // should prevent that).
 async function loadHomeData(): Promise<HomeData> {
@@ -113,7 +103,6 @@ async function loadHomeData(): Promise<HomeData> {
       recentGrowth: [],
       recentBreakthroughs: [],
       activeGoals: [],
-      recentShifts: [],
     };
   }
 
@@ -128,7 +117,6 @@ async function loadHomeData(): Promise<HomeData> {
     growthRes,
     breakthroughsRes,
     activeGoals,
-    shiftsRes,
   ] = await Promise.all([
     ctx.client
       .from("sessions")
@@ -170,11 +158,6 @@ async function loadHomeData(): Promise<HomeData> {
       .order("created_at", { ascending: false })
       .limit(BREAKTHROUGHS_LIMIT),
     loadActiveGoalsWithLazySeed(ctx),
-    ctx.client
-      .from("insights")
-      .select("id, content, created_at")
-      .order("created_at", { ascending: false })
-      .limit(START_MENU_SHIFTS_LIMIT),
   ]);
 
   if (lastRes.error) throw lastRes.error;
@@ -182,7 +165,6 @@ async function loadHomeData(): Promise<HomeData> {
   if (tsRes.error) throw tsRes.error;
   if (growthRes.error) throw growthRes.error;
   if (breakthroughsRes.error) throw breakthroughsRes.error;
-  if (shiftsRes.error) throw shiftsRes.error;
 
   const timestampRows = (tsRes.data ?? []) as Array<{
     ended_at: string | null;
@@ -204,7 +186,6 @@ async function loadHomeData(): Promise<HomeData> {
       createdAt: b.created_at,
     })),
     activeGoals,
-    recentShifts: (shiftsRes.data ?? []) as StartSessionShift[],
   };
 }
 
@@ -231,7 +212,6 @@ export default async function HomePage({
   let recentGrowth: RecentGrowthItem[] = [];
   let recentBreakthroughs: RecentBreakthrough[] = [];
   let activeGoals: ActiveGoal[] = [];
-  let recentShifts: StartSessionShift[] = [];
 
   if (isDemo) {
     coach = "Maya";
@@ -300,9 +280,6 @@ export default async function HomePage({
       is_predefined: g.completionType === "practice",
       completion_type: g.completionType,
     }));
-    // Demo-mode start-session menu: leave shifts empty so the
-    // mindset-shift option auto-hides per the menu's own spec.
-    recentShifts = [];
   } else {
     const session = await auth();
     if (!session?.userId) {
@@ -322,7 +299,6 @@ export default async function HomePage({
     recentGrowth = homeData.recentGrowth;
     recentBreakthroughs = homeData.recentBreakthroughs;
     activeGoals = homeData.activeGoals;
-    recentShifts = homeData.recentShifts;
   }
 
   const goalCount = activeGoals.length;
@@ -372,17 +348,9 @@ export default async function HomePage({
       </p>
 
       {lastSession ? (
-        <LastSessionCard
-          session={lastSession}
-          goals={menuGoals}
-          shifts={recentShifts}
-        />
+        <LastSessionCard session={lastSession} goals={menuGoals} />
       ) : (
-        <FirstSessionCard
-          coachLabelText={coach}
-          goals={menuGoals}
-          shifts={recentShifts}
-        />
+        <FirstSessionCard coachLabelText={coach} goals={menuGoals} />
       )}
 
       {/* Stays 2-col on narrow mobile per the Bubble design — cards

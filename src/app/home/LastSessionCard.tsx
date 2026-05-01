@@ -2,11 +2,7 @@ import Link from "next/link";
 
 import { formatDateLong } from "@/lib/format";
 
-import {
-  StartSessionMenu,
-  type StartSessionGoal,
-  type StartSessionShift,
-} from "./StartSessionMenu";
+import { StartSessionMenu, type StartSessionGoal } from "./StartSessionMenu";
 
 export type LastSession = {
   id: string;
@@ -19,11 +15,9 @@ export type LastSession = {
 export function FirstSessionCard({
   coachLabelText,
   goals,
-  shifts,
 }: {
   coachLabelText: string;
   goals: StartSessionGoal[];
-  shifts: StartSessionShift[];
 }) {
   return (
     <section className="mt-6 rounded-xl border border-white/10 bg-white/[0.02] p-5 sm:p-6">
@@ -56,7 +50,6 @@ export function FirstSessionCard({
       <div className="mt-5">
         <StartSessionMenu
           goals={goals}
-          shifts={shifts}
           buttonLabel="Start Your First Session"
         />
       </div>
@@ -67,11 +60,9 @@ export function FirstSessionCard({
 export function LastSessionCard({
   session,
   goals,
-  shifts,
 }: {
   session: LastSession;
   goals: StartSessionGoal[];
-  shifts: StartSessionShift[];
 }) {
   const summaryText =
     session.summary ??
@@ -103,11 +94,7 @@ export function LastSessionCard({
       </p>
       <p className="mt-3 text-sm text-neutral-300">{summaryText}</p>
       <div className="mt-5">
-        <StartSessionMenu
-          goals={goals}
-          shifts={shifts}
-          buttonLabel="Start a New Session"
-        />
+        <StartSessionMenu goals={goals} buttonLabel="Start a New Session" />
       </div>
       <Link
         href={`/sessions/${session.id}`}

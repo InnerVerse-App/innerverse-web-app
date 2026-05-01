@@ -50,6 +50,14 @@ type Props = {
   // the user starts speaking over the coach. Cancels the upstream
   // OpenAI call too.
   abortChat: () => void;
+  // When non-null, this text is TTS-played once at mount BEFORE the
+  // VAD starts listening. ChatView passes the existing AI opener
+  // (or the curated first-session welcome) when the user enters the
+  // session in voice mode and hasn't spoken yet, so they hear the
+  // coach instead of having to read the message. On any failure
+  // (network, /speak error, audio playback issue) we fall through
+  // to listening — the message stays visible on screen.
+  speakOnMount: string | null;
 };
 
 // CDN paths for the VAD model + ONNX runtime WASM. Avoids needing to
@@ -75,7 +83,11 @@ export function VoiceComposer({
   disabled,
   sendChat,
   abortChat,
+  speakOnMount,
 }: Props) {
+  // Pin the speakOnMount value taken at mount in a ref so re-renders
+  // (state updates, etc.) can't re-trigger the welcome playback.
+  const speakOnMountRef = useRef<string | null>(speakOnMount);
   const [phase, setPhase] = useState<Phase>("loading");
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
@@ -169,8 +181,22 @@ export function VoiceComposer({
           return;
         }
         vadRef.current = vad;
-        vad.start();
-        setPhaseSafe("listening");
+
+        // If ChatView told us to speak something at mount (welcome /
+        // existing AI opener while in voice mode), play it FIRST and
+        // delay starting the VAD until playback completes. Starting
+        // VAD before would risk it picking up our own audio (browser
+        // echo cancellation usually catches this, but not always —
+        // and during the very first turn an interruption misfire
+        // would be confusing). speakWelcomeThenListen always
+        // transitions to listening at the end, success or not.
+        const welcome = speakOnMountRef.current;
+        if (welcome) {
+          await speakWelcomeThenListen(welcome, vad);
+        } else {
+          vad.start();
+          setPhaseSafe("listening");
+        }
       } catch (err) {
         if (cancelled) return;
         const message =
@@ -258,6 +284,46 @@ export function VoiceComposer({
   // Single-chunk errors are swallowed — dropping one chunk is better
   // than aborting the whole turn. Sentry-side capture lives in the
   // /speak route.
+  // One-shot TTS playback for the message that's already on screen
+  // when voice mode opens (the curated first-session welcome, or
+  // a normal opener the user hasn't replied to yet). Plays via a
+  // standalone Audio element rather than the chat-streaming queue
+  // — simpler, and we know there's exactly one chunk. Always
+  // transitions to listening at the end so a failed /speak call
+  // doesn't strand the user in "speaking" forever.
+  async function speakWelcomeThenListen(
+    text: string,
+    vad: MicVADInstance,
+  ): Promise<void> {
+    const finishToListening = () => {
+      currentAudioRef.current = null;
+      vad.start();
+      setPhaseSafe("listening");
+    };
+    setPhaseSafe("speaking");
+    try {
+      const res = await fetch(`/api/sessions/${sessionId}/speak`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text }),
+      });
+      if (!res.ok) {
+        finishToListening();
+        return;
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      audioUrlsRef.current.push(url);
+      const audio = new Audio(url);
+      currentAudioRef.current = audio;
+      audio.onended = finishToListening;
+      audio.onerror = finishToListening;
+      await audio.play();
+    } catch {
+      finishToListening();
+    }
+  }
+
   async function synthesizeAndQueue(chunk: string): Promise<void> {
     try {
       const res = await fetch(`/api/sessions/${sessionId}/speak`, {

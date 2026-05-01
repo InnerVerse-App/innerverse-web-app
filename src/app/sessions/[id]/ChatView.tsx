@@ -347,6 +347,22 @@ export function ChatView({
               // straight into the existing streamAbortRef → cancels
               // the upstream OpenAI call too.
               abortChat={() => streamAbortRef.current?.abort()}
+              // Auto-play the existing AI message at mount when voice
+              // mode opens with only the coach's opener on screen and
+              // no user replies yet. Covers both the curated
+              // first-session welcome and ordinary openers — without
+              // this the user would have to read the coach's first
+              // turn even though they chose to talk. Once any user
+              // turn lands the condition flips to null and re-mounts
+              // (toggle-text-then-voice) won't re-speak.
+              speakOnMount={
+                !ended &&
+                messages.length === 1 &&
+                messages[0].fromAi &&
+                messages[0].content.trim().length > 0
+                  ? messages[0].content
+                  : null
+              }
             />
           ) : (
             <form onSubmit={send}>
