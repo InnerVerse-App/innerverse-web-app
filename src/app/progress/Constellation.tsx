@@ -1185,13 +1185,16 @@ export function Constellation({
                   ))}
 
                   {/* TEMPORARY VISUALIZATION — full demo galaxy at the
-                      brightest star in the nebula photo. Renders the
-                      same visual elements a real data-driven galaxy
-                      would: breakthrough sun, member stars (sessions /
-                      shifts) scattered in an ellipse aligned with the
-                      disc's tilt, all over the disc rendered separately
-                      above with breakthroughId="demo-bright-star".
-                      Remove this block + the disc one before merging. */}
+                      brightest star in the nebula photo. Mirrors the
+                      visuals a real data-driven galaxy renders:
+                      breakthrough sun (with diffraction spikes) and
+                      member stars (sessions in cyan, mindset shifts
+                      in violet) scattered in an ellipse aligned with
+                      the disc's tilt. Uses the same SVG halo gradient
+                      defs as the real SessionStar / MindsetShiftStar
+                      so the soft-fade halo matches. Disc renders
+                      separately above with breakthroughId="demo-bright-star".
+                      Remove this block + the disc demo before merging. */}
                   {(() => {
                     const cx = 0.35;
                     const cy = 0.27;
@@ -1199,29 +1202,30 @@ export function Constellation({
                     const tiltRad = (tiltDeg * Math.PI) / 180;
                     const cosT = Math.cos(tiltRad);
                     const sinT = Math.sin(tiltRad);
+                    // Tilt-local (along, perpendicular) offsets. 6
+                    // sessions + 2 shifts mirrors the typical data
+                    // distribution where mindset shifts are rarer.
                     const memberOffsets: Array<
-                      [number, number, "cyan" | "violet" | "white"]
+                      [number, number, "session" | "shift"]
                     > = [
-                      [0.04, 0.005, "cyan"],
-                      [-0.045, -0.005, "violet"],
-                      [0.058, -0.012, "white"],
-                      [-0.055, 0.011, "cyan"],
-                      [0.022, 0.014, "violet"],
-                      [-0.022, -0.014, "white"],
-                      [0.072, 0.003, "cyan"],
-                      [-0.07, -0.003, "white"],
+                      [0.04, 0.005, "session"],
+                      [-0.045, -0.005, "shift"],
+                      [0.058, -0.012, "session"],
+                      [-0.055, 0.011, "session"],
+                      [0.022, 0.014, "shift"],
+                      [-0.022, -0.014, "session"],
+                      [0.072, 0.003, "session"],
+                      [-0.07, -0.003, "session"],
                     ];
-                    const palette = {
-                      cyan: { core: "rgb(120,200,230)", glow: "rgba(120,200,230,0.45)" },
-                      violet: { core: "rgb(167,139,250)", glow: "rgba(167,139,250,0.45)" },
-                      white: { core: "rgb(245,245,255)", glow: "rgba(220,230,255,0.45)" },
-                    };
                     return (
                       <>
-                        {memberOffsets.map(([dx, dy, color], i) => {
+                        {memberOffsets.map(([dx, dy, kind], i) => {
                           const x = cx + dx * cosT - dy * sinT;
                           const y = cy + dx * sinT + dy * cosT;
-                          const c = palette[color];
+                          const haloId =
+                            kind === "session" ? "halo-session" : "halo-shift";
+                          const coreColor =
+                            kind === "session" ? SESSION_COLOR : MINDSET_COLOR;
                           return (
                             <span
                               key={`demo-member-${i}`}
@@ -1237,9 +1241,13 @@ export function Constellation({
                                 className="block h-4 w-4"
                                 style={{ overflow: "visible" }}
                               >
-                                <circle r={7} fill={c.glow} />
-                                <circle r={2.4} fill={c.core} />
-                                <circle r={0.7} fill="#ffffff" fillOpacity={0.85} />
+                                <circle r={7} fill={`url(#${haloId})`} />
+                                <circle r={2.4} fill={coreColor} />
+                                <circle
+                                  r={0.7}
+                                  fill="#ffffff"
+                                  fillOpacity={0.85}
+                                />
                               </svg>
                             </span>
                           );
