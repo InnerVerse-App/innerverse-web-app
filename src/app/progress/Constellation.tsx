@@ -1262,9 +1262,14 @@ function SelectionLabel({
 // Replaces the browser-native title-attribute tooltip (a white box
 // with black text, drawn by the OS) with a cosmic-themed popup that
 // matches the panel: dark glassy fill, soft blur, a subtle glow whose
-// hue hints at the dot category. Shown via CSS group-hover from the
-// star's Link, hidden otherwise. Mobile (no hover) still gets the
-// existing tap-then-SelectionLabel path.
+// hue hints at the dot category.
+//
+// Gated to hover-capable devices via @media (hover: hover). On touch
+// devices a tap activates :hover until the user taps elsewhere, which
+// would briefly pop this tooltip — but the panel's zoom transform
+// scales it along with the dots, so the text becomes uselessly huge
+// at any non-1x zoom. On touch the existing tap-then-SelectionLabel
+// at the top of the panel covers the same information cleanly.
 function DotHoverLabel({
   text,
   accent,
@@ -1281,7 +1286,7 @@ function DotHoverLabel({
   return (
     <span
       role="tooltip"
-      className={`pointer-events-none absolute bottom-full left-1/2 z-40 mb-2 max-w-[60vw] -translate-x-1/2 truncate rounded-md border bg-[rgba(8,12,22,0.85)] px-2.5 py-1 text-[11px] font-medium tracking-wide text-neutral-100 opacity-0 backdrop-blur-md transition-opacity duration-150 group-hover:opacity-100 ${accentRing}`}
+      className={`pointer-events-none absolute bottom-full left-1/2 z-40 mb-2 max-w-[60vw] -translate-x-1/2 truncate rounded-md border bg-[rgba(8,12,22,0.85)] px-2.5 py-1 text-[11px] font-medium tracking-wide text-neutral-100 opacity-0 backdrop-blur-md transition-opacity duration-150 [@media(hover:hover)]:group-hover:opacity-100 ${accentRing}`}
     >
       {text}
     </span>
