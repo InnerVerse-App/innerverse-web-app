@@ -2,7 +2,14 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useRef } from "react";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
+import { createPortal } from "react-dom";
 import {
   type ReactZoomPanPinchRef,
   TransformComponent,
@@ -276,6 +283,30 @@ export function Constellation({
 
   const panelRef = useRef<HTMLDivElement | null>(null);
   const transformRef = useRef<ReactZoomPanPinchRef | null>(null);
+
+  // Hover state for the floating tooltip (see HoverReportContext +
+  // FloatingTooltip above). Lives at the Constellation level so a
+  // single tooltip element exists outside the panel's transform.
+  const [hoverInfo, setHoverInfo] = useState<HoverInfo | null>(null);
+
+  // When the time-window param changes the data updates underneath
+  // the user, but if they were zoomed in the TransformWrapper's
+  // internal scale state is preserved across the re-render — meaning
+  // visually nothing seems to happen. Reset the zoom so the change
+  // is unmistakable.
+  const currentWindowParam = currentParams.window ?? "";
+  useEffect(() => {
+    transformRef.current?.resetTransform();
+  }, [currentWindowParam]);
+
+  // Hide any active hover tooltip on scroll or zoom-pan change since
+  // its position would otherwise become stale (the rect we captured
+  // is now in the wrong screen-space spot).
+  useEffect(() => {
+    const clear = () => setHoverInfo(null);
+    window.addEventListener("scroll", clear, true);
+    return () => window.removeEventListener("scroll", clear, true);
+  }, []);
 
   const isEmpty =
     layout.sessions.length === 0 &&
@@ -633,7 +664,9 @@ export function Constellation({
   const currentWindow = currentParams.window ?? "30";
 
   return (
-    <section id="constellation-map" className="mt-6 scroll-mt-4">
+    <HoverReportContext.Provider value={setHoverInfo}>
+      {hoverInfo ? <FloatingTooltip info={hoverInfo} /> : null}
+      <section id="constellation-map" className="mt-6 scroll-mt-4">
       <h2 className="text-base font-semibold text-white">Your Constellation</h2>
       <p className="mt-1 text-xs text-neutral-500">
         Your growth radiating outward. The center is now; older stars
@@ -1220,6 +1253,7 @@ export function Constellation({
         <Legend color={BREAKTHROUGH_COLOR} label="Breakthrough" size={14} />
       </div>
     </section>
+    </HoverReportContext.Provider>
   );
 }
 
@@ -1258,72 +1292,140 @@ function SelectionLabel({
   );
 }
 
-// Custom hover tooltip for dot stars (sessions, shifts, breakthroughs).
-// Replaces the browser-native title-attribute tooltip (a white box
-// with black text, drawn by the OS) with a cosmic-themed popup that
-// matches the panel: dark glassy fill, soft blur, a subtle glow whose
-// hue hints at the dot category.
+// Hover-tooltip pipeline. Three pieces:
 //
-// Gated to hover-capable devices via @media (hover: hover). On touch
-// devices a tap activates :hover until the user taps elsewhere, which
-// would briefly pop this tooltip — but the panel's zoom transform
-// scales it along with the dots, so the text becomes uselessly huge
-// at any non-1x zoom. On touch the existing tap-then-SelectionLabel
-// at the top of the panel covers the same information cleanly.
-function DotHoverLabel({
-  text,
-  accent,
-  xPct,
-  yPct,
-}: {
+//   1. HoverInfo — what's currently being hovered (text, category for
+//      accent color, and the dot's screen-space rect from
+//      getBoundingClientRect).
+//   2. HoverReportContext — set by Constellation, consumed by each
+//      dot wrapper; the dot calls it from onMouseEnter / onMouseLeave.
+//   3. FloatingTooltip — rendered ONCE at Constellation level via a
+//      portal to document.body. Position is computed in screen pixels
+//      using the rect, with auto-flip to stay inside the viewport.
+//
+// Why a portal: previous attempts (DotHoverLabel rendered as a child
+// of the dot's wrapper) lived inside the panel's TransformComponent.
+// At any non-1x zoom the tooltip scaled with the panel and at any
+// edge dot it clipped against the panel boundary. The portal pulls
+// the tooltip out of every parent stacking/transform context so its
+// position is purely screen-pixel — it never scales with zoom and
+// never gets clipped by the panel.
+type HoverAccent = "session" | "shift" | "breakthrough";
+type HoverInfo = {
+  id: string;
   text: string;
-  accent: "session" | "shift" | "breakthrough";
-  // Dot's panel-fraction position (0-1 for both axes). Used to flip
-  // the tooltip's anchor when the dot is near a panel edge so the
-  // text never spills off the visible map.
-  xPct: number;
-  yPct: number;
-}) {
-  const accentRing = {
-    session: "border-[rgba(89,164,192,0.45)] shadow-[0_0_14px_rgba(89,164,192,0.40)]",
-    shift: "border-[rgba(167,139,250,0.45)] shadow-[0_0_14px_rgba(167,139,250,0.40)]",
-    breakthrough:
-      "border-[rgba(220,161,20,0.55)] shadow-[0_0_18px_rgba(220,161,20,0.50)]",
-  }[accent];
-  // Edge-aware anchoring. Defaults are centered above the dot (the
-  // visually preferred placement when there's room). When the dot
-  // sits near the left/right/top edge of the panel, swap to an
-  // anchor that keeps the tooltip on-screen.
-  //
-  // Thresholds are tuned conservatively (0.3 / 0.7 / 0.2 — i.e.
-  // 30% from each edge) so a typical tooltip fits without spilling
-  // even with a longer label. Tooltip can be up to 60vw, so on a
-  // square panel the dot needs ~30% clearance on each side.
-  const isLeftEdge = xPct < 0.3;
-  const isRightEdge = xPct > 0.7;
-  const isTopEdge = yPct < 0.2;
-  const translateX = isLeftEdge ? "0%" : isRightEdge ? "-100%" : "-50%";
-  const originX = isLeftEdge ? "left" : isRightEdge ? "right" : "center";
-  const originY = isTopEdge ? "top" : "bottom";
-  const verticalClass = isTopEdge ? "top-full mt-2" : "bottom-full mb-2";
-  return (
-    <span
+  accent: HoverAccent;
+  rect: DOMRect;
+};
+const HoverReportContext = createContext<
+  ((info: HoverInfo | null) => void) | null
+>(null);
+
+const ACCENT_RING: Record<HoverAccent, string> = {
+  session: "border-[rgba(89,164,192,0.45)] shadow-[0_0_14px_rgba(89,164,192,0.40)]",
+  shift: "border-[rgba(167,139,250,0.45)] shadow-[0_0_14px_rgba(167,139,250,0.40)]",
+  breakthrough:
+    "border-[rgba(220,161,20,0.55)] shadow-[0_0_18px_rgba(220,161,20,0.50)]",
+};
+
+// Generous threshold (in CSS px) used to decide when the tooltip
+// should flip to the other side of the dot to stay inside the
+// viewport. Roughly half of a typical tooltip's width.
+const TOOLTIP_EDGE_BUFFER = 160;
+
+function FloatingTooltip({ info }: { info: HoverInfo }) {
+  // Only render in the browser — createPortal needs a document. The
+  // first-render-on-server path (SSR) returns null so React doesn't
+  // try to portal during build.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+  if (!mounted) return null;
+
+  const { text, accent, rect } = info;
+  const dotCenterX = rect.left + rect.width / 2;
+  const dotTop = rect.top;
+  const dotBottom = rect.bottom;
+
+  // Vertical placement: above the dot by default; flip below if there
+  // isn't enough room above (top of dot < buffer from viewport top).
+  const placeBelow = dotTop < 60;
+  const verticalAnchor = placeBelow ? dotBottom + 8 : dotTop - 8;
+
+  // Horizontal placement: centered on dot by default; anchor to an
+  // edge if the dot is too close to the corresponding viewport edge.
+  let translateX: string;
+  let originX: string;
+  if (dotCenterX < TOOLTIP_EDGE_BUFFER) {
+    translateX = "0%";
+    originX = "left";
+  } else if (window.innerWidth - dotCenterX < TOOLTIP_EDGE_BUFFER) {
+    translateX = "-100%";
+    originX = "right";
+  } else {
+    translateX = "-50%";
+    originX = "center";
+  }
+
+  // translateY moves the tooltip up by its own height when placed
+  // above (so the bottom edge is at the calculated top), or leaves
+  // it at the calculated top when placed below.
+  const translateY = placeBelow ? "0" : "-100%";
+  const originY = placeBelow ? "top" : "bottom";
+
+  return createPortal(
+    <div
       role="tooltip"
-      // The tooltip lives inside the panel's TransformComponent and
-      // therefore inherits its zoom scale. Without counter-scaling
-      // the text becomes enormous at any non-1x zoom (the panel
-      // sets --zoom-counter to 1/scale for exactly this purpose).
-      // transformOrigin matches the on-screen anchor so scaling
-      // doesn't visually slide the tooltip away from the dot.
       style={{
-        transform: `translateX(${translateX}) scale(var(--zoom-counter, 1))`,
+        position: "fixed",
+        top: verticalAnchor,
+        left: dotCenterX,
+        transform: `translate(${translateX}, ${translateY})`,
         transformOrigin: `${originX} ${originY}`,
+        zIndex: 100,
       }}
-      className={`pointer-events-none absolute left-1/2 z-40 max-w-[60vw] truncate rounded-md border bg-[rgba(8,12,22,0.85)] px-2.5 py-1 text-[11px] font-medium tracking-wide text-neutral-100 opacity-0 backdrop-blur-md transition-opacity duration-150 [@media(hover:hover)]:group-hover:opacity-100 ${verticalClass} ${accentRing}`}
+      className={`pointer-events-none max-w-[280px] truncate rounded-md border bg-[rgba(8,12,22,0.92)] px-2.5 py-1 text-[11px] font-medium tracking-wide text-neutral-100 backdrop-blur-md ${ACCENT_RING[accent]}`}
     >
       {text}
-    </span>
+    </div>,
+    document.body,
   );
+}
+
+// Hook used inside each dot wrapper to wire mouseenter/leave into
+// the parent Constellation's hover state. Returns props you can
+// spread onto the wrapping <span>, plus the ref it needs.
+function useHoverReport(
+  id: string,
+  text: string,
+  accent: HoverAccent,
+) {
+  // Plain mutable holder — not a React ref object — so we don't
+  // bump into the RefObject<T|null> vs. RefObject<T> assignment
+  // mismatch when JSX hands us a ref slot. We use a callback ref
+  // that stashes the latest node, and the handlers read from it.
+  const nodeRef = useRef<HTMLSpanElement | null>(null);
+  const report = useContext(HoverReportContext);
+  const ref = (node: HTMLSpanElement | null): void => {
+    nodeRef.current = node;
+  };
+  return {
+    ref,
+    handlers: {
+      onMouseEnter: (): void => {
+        if (!nodeRef.current || !report) return;
+        report({
+          id,
+          text,
+          accent,
+          rect: nodeRef.current.getBoundingClientRect(),
+        });
+      },
+      onMouseLeave: (): void => {
+        if (!report) return;
+        report(null);
+      },
+    },
+  };
 }
 
 function ZoomButton({
@@ -1356,25 +1458,28 @@ function SessionStar({
 }) {
   const router = useRouter();
   const dateLabel = formatDateCompact(dot.endedAt);
+  const tooltipText = dot.title
+    ? `${dot.title} — ${dateLabel}`
+    : `Session — ${dateLabel}`;
+  const { ref, handlers } = useHoverReport(dot.id, tooltipText, "session");
   // Single-click: highlight on the constellation map (Link href).
   // Double-click: jump to the Sessions tab with this session
   // highlighted in the list, NOT to the full session chat. Symmetric
   // with BreakthroughSun (scroll to detail card) and GoalComet
   // (jump to Goals tab) — every star's double-click takes you to
   // the item's "home" with it highlighted, never to its raw chat.
-  // The dot's recency-fade opacity goes on the Link only — the
-  // hover tooltip is a sibling of the Link inside the .group
-  // wrapper so its readability doesn't decay with the dot.
-  // hover:z-50 pulls the whole wrapper above siblings on hover so
-  // a later-rendered breakthrough sun / halo doesn't paint over
-  // this tooltip.
+  // The hover tooltip itself is rendered ONCE at the Constellation
+  // level (FloatingTooltip) via portal — see useHoverReport and
+  // HoverReportContext above.
   return (
     <span
-      className="group absolute -translate-x-1/2 -translate-y-1/2 hover:z-50"
+      ref={ref}
+      className="group absolute -translate-x-1/2 -translate-y-1/2"
       style={{
         left: `${dot.x * 100}%`,
         top: `${dot.y * 100}%`,
       }}
+      {...handlers}
     >
       <Link
         href={buildSessionHref(dot.id)}
@@ -1408,12 +1513,6 @@ function SessionStar({
           <circle r={0.7} fill="#ffffff" fillOpacity={0.85} />
         </svg>
       </Link>
-      <DotHoverLabel
-        text={dot.title ? `${dot.title} — ${dateLabel}` : `Session — ${dateLabel}`}
-        accent="session"
-        xPct={dot.x}
-        yPct={dot.y}
-      />
     </span>
   );
 }
@@ -1442,19 +1541,24 @@ function BreakthroughSun({
   // Keeps the visible look identical (the disc SVG still has
   // overflow:visible so the disc renders at the right size) while
   // freeing up the surrounding pixels for clicks on neighbors.
-  // Wrapper holds halo, Link, and tooltip. Wrapper has NO opacity
-  // so the tooltip stays full-brightness regardless of how dimmed
-  // the dot itself becomes from recency fade. Halo span and Link
-  // each apply opacity individually to dim the visuals. hover:z-50
-  // matches the other star types so hover order is consistent.
+  // Wrapper holds halo + Link. Wrapper has NO opacity so anything
+  // we layer on top stays full-brightness regardless of how dim
+  // the dot becomes from recency fade. Halo span and Link each
+  // apply opacity individually to dim the visuals. The hover
+  // tooltip is rendered once at the Constellation level via
+  // useHoverReport — see HoverReportContext / FloatingTooltip.
   const dimOpacity = { opacity: dot.opacity };
+  const tooltipText = `Breakthrough — ${dot.galaxyName || dot.content}`;
+  const { ref, handlers } = useHoverReport(dot.id, tooltipText, "breakthrough");
   return (
     <span
-      className="group absolute block h-7 w-7 -translate-x-1/2 -translate-y-1/2 hover:z-50"
+      ref={ref}
+      className="group absolute block h-7 w-7 -translate-x-1/2 -translate-y-1/2"
       style={{
         left: `${dot.x * 100}%`,
         top: `${dot.y * 100}%`,
       }}
+      {...handlers}
     >
       <span
         className="pointer-events-none absolute inset-0 flex items-center justify-center"
@@ -1526,12 +1630,6 @@ function BreakthroughSun({
           <circle r={4.5} fill={BREAKTHROUGH_COLOR} />
         </svg>
       </Link>
-      <DotHoverLabel
-        text={`Breakthrough — ${dot.galaxyName || dot.content}`}
-        accent="breakthrough"
-        xPct={dot.x}
-        yPct={dot.y}
-      />
     </span>
   );
 }
@@ -1661,22 +1759,21 @@ function MindsetShiftStar({
   dot: Positioned<MindsetShiftDot>;
   buildHref: (id: string) => string;
 }) {
+  const tooltipText = `Mindset shift — ${dot.content}`;
+  const { ref, handlers } = useHoverReport(dot.id, tooltipText, "shift");
   // Single-click highlights on the map (Link href); double-click
   // scrolls to the matching card in the Mindset Shifts list below.
-  // Mirrors BreakthroughSun. The list lives on /progress so no
-  // navigation needed — just scroll.
-  //
-  // Tooltip is a sibling of the Link inside the .group wrapper so
-  // it stays full brightness even when the dot itself is dimmed
-  // by recency fade. hover:z-50 ensures the tooltip + dot paint
-  // above later-rendered siblings (notably the breakthrough sun).
+  // Hover tooltip is rendered once at the Constellation level via
+  // useHoverReport — see HoverReportContext / FloatingTooltip above.
   return (
     <span
-      className="group absolute -translate-x-1/2 -translate-y-1/2 hover:z-50"
+      ref={ref}
+      className="group absolute -translate-x-1/2 -translate-y-1/2"
       style={{
         left: `${dot.x * 100}%`,
         top: `${dot.y * 100}%`,
       }}
+      {...handlers}
     >
       <Link
         href={buildHref(dot.id)}
@@ -1708,12 +1805,6 @@ function MindsetShiftStar({
           <circle r={0.8} fill="#ffffff" fillOpacity={0.9} />
         </svg>
       </Link>
-      <DotHoverLabel
-        text={`Mindset shift — ${dot.content}`}
-        accent="shift"
-        xPct={dot.x}
-        yPct={dot.y}
-      />
     </span>
   );
 }
