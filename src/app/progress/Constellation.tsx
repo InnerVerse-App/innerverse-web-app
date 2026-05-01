@@ -1273,9 +1273,16 @@ function SelectionLabel({
 function DotHoverLabel({
   text,
   accent,
+  xPct,
+  yPct,
 }: {
   text: string;
   accent: "session" | "shift" | "breakthrough";
+  // Dot's panel-fraction position (0-1 for both axes). Used to flip
+  // the tooltip's anchor when the dot is near a panel edge so the
+  // text never spills off the visible map.
+  xPct: number;
+  yPct: number;
 }) {
   const accentRing = {
     session: "border-[rgba(89,164,192,0.45)] shadow-[0_0_14px_rgba(89,164,192,0.40)]",
@@ -1283,6 +1290,17 @@ function DotHoverLabel({
     breakthrough:
       "border-[rgba(220,161,20,0.55)] shadow-[0_0_18px_rgba(220,161,20,0.50)]",
   }[accent];
+  // Edge-aware anchoring. Defaults are centered above the dot (the
+  // visually preferred placement when there's room). When the dot
+  // sits near the left/right/top edge of the panel, swap to an
+  // anchor that keeps the tooltip on-screen.
+  const isLeftEdge = xPct < 0.2;
+  const isRightEdge = xPct > 0.8;
+  const isTopEdge = yPct < 0.15;
+  const translateX = isLeftEdge ? "0%" : isRightEdge ? "-100%" : "-50%";
+  const originX = isLeftEdge ? "left" : isRightEdge ? "right" : "center";
+  const originY = isTopEdge ? "top" : "bottom";
+  const verticalClass = isTopEdge ? "top-full mt-2" : "bottom-full mb-2";
   return (
     <span
       role="tooltip"
@@ -1290,13 +1308,13 @@ function DotHoverLabel({
       // therefore inherits its zoom scale. Without counter-scaling
       // the text becomes enormous at any non-1x zoom (the panel
       // sets --zoom-counter to 1/scale for exactly this purpose).
-      // transformOrigin pins the bottom-center so the tooltip stays
-      // anchored just above the dot when it scales.
+      // transformOrigin matches the on-screen anchor so scaling
+      // doesn't visually slide the tooltip away from the dot.
       style={{
-        transform: "translateX(-50%) scale(var(--zoom-counter, 1))",
-        transformOrigin: "center bottom",
+        transform: `translateX(${translateX}) scale(var(--zoom-counter, 1))`,
+        transformOrigin: `${originX} ${originY}`,
       }}
-      className={`pointer-events-none absolute bottom-full left-1/2 z-40 mb-2 max-w-[60vw] truncate rounded-md border bg-[rgba(8,12,22,0.85)] px-2.5 py-1 text-[11px] font-medium tracking-wide text-neutral-100 opacity-0 backdrop-blur-md transition-opacity duration-150 [@media(hover:hover)]:group-hover:opacity-100 ${accentRing}`}
+      className={`pointer-events-none absolute left-1/2 z-40 max-w-[60vw] truncate rounded-md border bg-[rgba(8,12,22,0.85)] px-2.5 py-1 text-[11px] font-medium tracking-wide text-neutral-100 opacity-0 backdrop-blur-md transition-opacity duration-150 [@media(hover:hover)]:group-hover:opacity-100 ${verticalClass} ${accentRing}`}
     >
       {text}
     </span>
@@ -1388,6 +1406,8 @@ function SessionStar({
       <DotHoverLabel
         text={dot.title ? `${dot.title} — ${dateLabel}` : `Session — ${dateLabel}`}
         accent="session"
+        xPct={dot.x}
+        yPct={dot.y}
       />
     </span>
   );
@@ -1504,6 +1524,8 @@ function BreakthroughSun({
       <DotHoverLabel
         text={`Breakthrough — ${dot.galaxyName || dot.content}`}
         accent="breakthrough"
+        xPct={dot.x}
+        yPct={dot.y}
       />
     </span>
   );
@@ -1681,7 +1703,12 @@ function MindsetShiftStar({
           <circle r={0.8} fill="#ffffff" fillOpacity={0.9} />
         </svg>
       </Link>
-      <DotHoverLabel text={`Mindset shift — ${dot.content}`} accent="shift" />
+      <DotHoverLabel
+        text={`Mindset shift — ${dot.content}`}
+        accent="shift"
+        xPct={dot.x}
+        yPct={dot.y}
+      />
     </span>
   );
 }
