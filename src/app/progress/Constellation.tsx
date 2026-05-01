@@ -1034,10 +1034,12 @@ export function Constellation({
                     <GalaxyGlow key={`glow-${g.breakthroughId}`} galaxy={g} />
                   ))}
 
-                  {/* TEMPORARY VISUALIZATION — demo galaxy positioned
-                      over the brightest star in the nebula photo, so
-                      we can see how a galaxy reads when it sits on
-                      top of a real bright spot in the background.
+                  {/* TEMPORARY VISUALIZATION — demo galaxy disc
+                      positioned over the brightest star in the
+                      nebula photo. Sized to a realistic ~10-member
+                      galaxy (radius 0.117 = the formula's value for
+                      memberCount=10), so the comparison with real
+                      galaxies elsewhere on the panel is fair.
                       Remove this block before merging. */}
                   <GalaxyGlow
                     key="glow-demo-bright-star"
@@ -1045,8 +1047,8 @@ export function Constellation({
                       breakthroughId: "demo-bright-star",
                       centerX: 0.35,
                       centerY: 0.27,
-                      radius: 0.07,
-                      memberCount: 4,
+                      radius: 0.117,
+                      memberCount: 10,
                       tiltDeg: 25,
                     }}
                   />
@@ -1208,14 +1210,14 @@ export function Constellation({
                     const memberOffsets: Array<
                       [number, number, "session" | "shift"]
                     > = [
-                      [0.04, 0.005, "session"],
-                      [-0.045, -0.005, "shift"],
-                      [0.058, -0.012, "session"],
-                      [-0.055, 0.011, "session"],
-                      [0.022, 0.014, "shift"],
-                      [-0.022, -0.014, "session"],
-                      [0.072, 0.003, "session"],
-                      [-0.07, -0.003, "session"],
+                      [0.05, 0.008, "session"],
+                      [-0.06, -0.008, "shift"],
+                      [0.078, -0.018, "session"],
+                      [-0.072, 0.016, "session"],
+                      [0.025, 0.022, "shift"],
+                      [-0.025, -0.022, "session"],
+                      [0.095, 0.005, "session"],
+                      [-0.095, -0.005, "session"],
                     ];
                     return (
                       <>
