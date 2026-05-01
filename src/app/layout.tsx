@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { ClerkProvider } from "@clerk/nextjs";
+import { SpeedInsights } from "@vercel/speed-insights/next";
 import { BRAND } from "@/lib/brand";
 import "./globals.css";
 
@@ -25,6 +26,7 @@ export default function RootLayout({
           suppressHydrationWarning
         >
           {children}
+          <SpeedInsights />
         </body>
       </html>
     </ClerkProvider>
