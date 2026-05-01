@@ -10,6 +10,8 @@ import {
 } from "@/lib/onboarding";
 import { supabaseForUser } from "@/lib/supabase";
 
+import { DeleteAccountSection } from "./DeleteAccountSection";
+
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Settings" };
 
@@ -79,6 +81,8 @@ export default async function SettingsPage() {
           <SettingsLink href="/privacy" label="Privacy Policy" />
         </ul>
       </section>
+
+      <DeleteAccountSection />
 
       <p className="mt-8 text-center text-xs text-neutral-500">
         InnerVerse is in active development.
