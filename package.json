@@ -13,6 +13,7 @@
     "@ricky0123/vad-web": "^0.0.30",
     "@sentry/nextjs": "^10.49.0",
     "@supabase/supabase-js": "^2.104.0",
+    "@vercel/speed-insights": "^2.0.0",
     "next": "15.5.15",
     "onnxruntime-web": "^1.25.1",
     "openai": "^6.34.0",
