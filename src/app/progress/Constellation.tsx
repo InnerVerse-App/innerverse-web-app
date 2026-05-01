@@ -1246,6 +1246,36 @@ function SelectionLabel({
   );
 }
 
+// Custom hover tooltip for dot stars (sessions, shifts, breakthroughs).
+// Replaces the browser-native title-attribute tooltip (a white box
+// with black text, drawn by the OS) with a cosmic-themed popup that
+// matches the panel: dark glassy fill, soft blur, a subtle glow whose
+// hue hints at the dot category. Shown via CSS group-hover from the
+// star's Link, hidden otherwise. Mobile (no hover) still gets the
+// existing tap-then-SelectionLabel path.
+function DotHoverLabel({
+  text,
+  accent,
+}: {
+  text: string;
+  accent: "session" | "shift" | "breakthrough";
+}) {
+  const accentRing = {
+    session: "border-[rgba(89,164,192,0.45)] shadow-[0_0_14px_rgba(89,164,192,0.40)]",
+    shift: "border-[rgba(167,139,250,0.45)] shadow-[0_0_14px_rgba(167,139,250,0.40)]",
+    breakthrough:
+      "border-[rgba(220,161,20,0.55)] shadow-[0_0_18px_rgba(220,161,20,0.50)]",
+  }[accent];
+  return (
+    <span
+      role="tooltip"
+      className={`pointer-events-none absolute bottom-full left-1/2 z-40 mb-2 max-w-[60vw] -translate-x-1/2 truncate rounded-md border bg-[rgba(8,12,22,0.85)] px-2.5 py-1 text-[11px] font-medium tracking-wide text-neutral-100 opacity-0 backdrop-blur-md transition-opacity duration-150 group-hover:opacity-100 ${accentRing}`}
+    >
+      {text}
+    </span>
+  );
+}
+
 function ZoomButton({
   onClick,
   ariaLabel,
@@ -1290,12 +1320,7 @@ function SessionStar({
           ? `${dot.title} — ${dateLabel} (double-click to view in Sessions tab)`
           : `Session from ${dateLabel} (double-click to view in Sessions tab)`
       }
-      title={
-        dot.title
-          ? `${dot.title} — ${dateLabel}`
-          : `Session — ${dateLabel}`
-      }
-      className={`absolute -translate-x-1/2 -translate-y-1/2 ${TAP_PADDING}`}
+      className={`group absolute -translate-x-1/2 -translate-y-1/2 ${TAP_PADDING}`}
       style={{
         left: `${dot.x * 100}%`,
         top: `${dot.y * 100}%`,
@@ -1323,6 +1348,10 @@ function SessionStar({
             point rather than a flat sticker. */}
         <circle r={0.7} fill="#ffffff" fillOpacity={0.85} />
       </svg>
+      <DotHoverLabel
+        text={dot.title ? `${dot.title} — ${dateLabel}` : `Session — ${dateLabel}`}
+        accent="session"
+      />
     </Link>
   );
 }
@@ -1401,8 +1430,7 @@ function BreakthroughSun({
         // re-applies the fragment scroll.
         scroll={false}
         aria-label={`Breakthrough: ${dot.galaxyName || dot.content}`}
-        title={`Breakthrough — ${dot.galaxyName || dot.content}`}
-        className="absolute -translate-x-1/2 -translate-y-1/2"
+        className="group absolute -translate-x-1/2 -translate-y-1/2"
         style={positionStyle}
         onDoubleClick={(e) => {
           e.preventDefault();
@@ -1420,6 +1448,10 @@ function BreakthroughSun({
         >
           <circle r={4.5} fill={BREAKTHROUGH_COLOR} />
         </svg>
+        <DotHoverLabel
+          text={`Breakthrough — ${dot.galaxyName || dot.content}`}
+          accent="breakthrough"
+        />
       </Link>
     </>
   );
@@ -1559,8 +1591,7 @@ function MindsetShiftStar({
       href={buildHref(dot.id)}
       scroll={false}
       aria-label={`Mindset shift: ${dot.content} (double-click to view in list)`}
-      title={`Mindset shift — ${dot.content} (double-click to view in list)`}
-      className={`absolute -translate-x-1/2 -translate-y-1/2 ${TAP_PADDING}`}
+      className={`group absolute -translate-x-1/2 -translate-y-1/2 ${TAP_PADDING}`}
       style={{
         left: `${dot.x * 100}%`,
         top: `${dot.y * 100}%`,
@@ -1589,6 +1620,7 @@ function MindsetShiftStar({
         {/* White-hot core matching SessionStar. */}
         <circle r={0.8} fill="#ffffff" fillOpacity={0.9} />
       </svg>
+      <DotHoverLabel text={`Mindset shift — ${dot.content}`} accent="shift" />
     </Link>
   );
 }
