@@ -5,8 +5,8 @@ import {
   MODEL_TRANSCRIBE,
   MODEL_TTS,
   openaiClient,
-  TTS_SPEED,
-  TTS_VOICE,
+  ttsSpeedForCoach,
+  ttsVoiceForCoach,
 } from "@/lib/openai";
 
 // Maximum audio file size we'll accept on the transcribe endpoint.
@@ -63,9 +63,13 @@ export async function transcribeAudio(
 // and any caching/length headers. Streaming is enabled at the SDK
 // level so chunks come down as the model produces them — important
 // for the eventual full-duplex chat where every ms of latency shows.
+//
+// `coachName` selects the voice + speed via the per-coach mapping in
+// openai.ts. Pass null to fall back to the default (nova @ 0.95).
 export async function synthesizeSpeech(
   text: string,
   sessionId: string,
+  coachName: string | null,
 ): Promise<ReadableStream<Uint8Array>> {
   const trimmed = text.trim();
   if (trimmed.length === 0) {
@@ -85,9 +89,9 @@ export async function synthesizeSpeech(
   try {
     response = await openaiClient().audio.speech.create({
       model: MODEL_TTS,
-      voice: TTS_VOICE,
+      voice: ttsVoiceForCoach(coachName),
       input: trimmed,
-      speed: TTS_SPEED,
+      speed: ttsSpeedForCoach(coachName),
       response_format: "mp3",
     });
   } catch (err) {

@@ -29,14 +29,55 @@ export const MODEL_GROWTH_NARRATIVE = "gpt-5.4";
 export const MODEL_STYLE_CALIBRATION = "gpt-5.4-mini";
 
 // Voice mode models. Whisper for speech-to-text (user → coach),
-// TTS-1-HD for the coach's voice (coach → user). Voice "nova" picked
-// for warmth and professional pacing — coaching needs a calm,
-// grounded voice without being saccharine. Speed slightly under 1
-// so the coach doesn't sound rushed.
+// gpt-4o-mini-tts for the coach's voice (coach → user). The newer
+// model gives access to all 13 OpenAI voices so each of the seven
+// coach personas can have their own voice (see ttsVoiceForCoach).
 export const MODEL_TRANSCRIBE = "whisper-1";
-export const MODEL_TTS = "tts-1-hd";
-export const TTS_VOICE = "nova";
-export const TTS_SPEED = 0.95;
+export const MODEL_TTS = "gpt-4o-mini-tts";
+
+// Per-coach voice + speed mapping. Each coach picks the OpenAI voice
+// that best matches their gender and personality archetype:
+//   buddy   → alloy   — friendly, warm male
+//   dante   → onyx    — deep, measured male, fits "wise and thoughtful"
+//   kelly   → shimmer — bright, expressive female, fits "energetic"
+//   maya    → sage    — calm, grounded female, fits "calm and centered"
+//   orion   → verse   — expressive, dynamic male, fits "adventurous"
+//   pierre  → fable   — British-accented male, fits "sophisticated"
+//   sigmund → echo    — smooth, even male, fits "analytical and deep"
+//
+// Speed is 0.9 for the deliberately contemplative archetypes (Maya,
+// Dante) and 0.95 for the rest — voice itself carries most of the
+// personality, so speed is a small accent rather than a big knob.
+//
+// Fallback: any unknown coach_name (legacy data, future drift) falls
+// back to nova @ 0.95 — the original single-voice default.
+const COACH_VOICE_MAP: Record<string, string> = {
+  buddy: "alloy",
+  dante: "onyx",
+  kelly: "shimmer",
+  maya: "sage",
+  orion: "verse",
+  pierre: "fable",
+  sigmund: "echo",
+};
+
+const COACH_SPEED_MAP: Record<string, number> = {
+  dante: 0.9,
+  maya: 0.9,
+};
+
+const DEFAULT_TTS_VOICE = "nova";
+const DEFAULT_TTS_SPEED = 0.95;
+
+export function ttsVoiceForCoach(coachName: string | null): string {
+  if (!coachName) return DEFAULT_TTS_VOICE;
+  return COACH_VOICE_MAP[coachName.toLowerCase()] ?? DEFAULT_TTS_VOICE;
+}
+
+export function ttsSpeedForCoach(coachName: string | null): number {
+  if (!coachName) return DEFAULT_TTS_SPEED;
+  return COACH_SPEED_MAP[coachName.toLowerCase()] ?? DEFAULT_TTS_SPEED;
+}
 
 // Bumped from 2000 (v5) to 4000 (v6) to 6000 (v7) as the prompts
 // have grown. v7 adds per-theme rationales + per-sub-score

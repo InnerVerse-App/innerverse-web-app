@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 
+import { getOnboardingState } from "@/lib/onboarding";
 import { supabaseForUser } from "@/lib/supabase";
 import { synthesizeSpeech } from "@/lib/voice";
 
@@ -58,9 +59,17 @@ export async function POST(
     return NextResponse.json({ error: "empty_text" }, { status: 400 });
   }
 
+  // Look up the user's chosen coach so we can pick the matching voice.
+  // One extra DB read per /speak call — acceptable since /speak is
+  // already authenticated + session-checked, and TTS itself dwarfs
+  // the cost. Falls back to the default voice if onboarding state
+  // is missing or has an unrecognized coach_name.
+  const onboarding = await getOnboardingState();
+  const coachName = onboarding?.coach_name ?? null;
+
   let audio: ReadableStream<Uint8Array>;
   try {
-    audio = await synthesizeSpeech(text, sessionId);
+    audio = await synthesizeSpeech(text, sessionId, coachName);
   } catch (err) {
     const message = err instanceof Error ? err.message : "speak_failed";
     return NextResponse.json({ error: message }, { status: 500 });
