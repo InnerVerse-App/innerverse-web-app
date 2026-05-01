@@ -1034,6 +1034,23 @@ export function Constellation({
                     <GalaxyGlow key={`glow-${g.breakthroughId}`} galaxy={g} />
                   ))}
 
+                  {/* TEMPORARY VISUALIZATION — demo galaxy positioned
+                      over the brightest star in the nebula photo, so
+                      we can see how a galaxy reads when it sits on
+                      top of a real bright spot in the background.
+                      Remove this block before merging. */}
+                  <GalaxyGlow
+                    key="glow-demo-bright-star"
+                    galaxy={{
+                      breakthroughId: "demo-bright-star",
+                      centerX: 0.35,
+                      centerY: 0.27,
+                      radius: 0.07,
+                      memberCount: 4,
+                      tiltDeg: 25,
+                    }}
+                  />
+
                   {chainEdges.length > 0 ? (
                     <svg
                       className="pointer-events-none absolute inset-0 h-full w-full"
