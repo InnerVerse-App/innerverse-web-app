@@ -73,6 +73,8 @@ export async function createEntry(formData: FormData): Promise<void> {
 
   revalidatePath("/journal");
   revalidatePath("/sessions");
+  revalidatePath("/home");
+  revalidatePath("/goals");
   redirect("/journal");
 }
 
@@ -95,6 +97,8 @@ export async function updateEntry(formData: FormData): Promise<void> {
   revalidatePath("/journal");
   revalidatePath(`/journal/${id}`);
   revalidatePath("/sessions");
+  revalidatePath("/home");
+  revalidatePath("/goals");
   redirect(`/journal/${id}`);
 }
 
@@ -117,6 +121,8 @@ export async function toggleFlag(formData: FormData): Promise<void> {
   revalidatePath("/journal");
   revalidatePath(`/journal/${id}`);
   revalidatePath("/sessions");
+  revalidatePath("/home");
+  revalidatePath("/goals");
 }
 
 export async function deleteEntry(formData: FormData): Promise<void> {
@@ -133,5 +139,7 @@ export async function deleteEntry(formData: FormData): Promise<void> {
 
   revalidatePath("/journal");
   revalidatePath("/sessions");
+  revalidatePath("/home");
+  revalidatePath("/goals");
   redirect("/journal");
 }

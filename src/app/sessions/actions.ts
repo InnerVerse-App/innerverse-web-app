@@ -1,6 +1,7 @@
 "use server";
 
 import { after } from "next/server";
+import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { auth, currentUser } from "@clerk/nextjs/server";
 
@@ -221,6 +222,14 @@ export async function startSession(formData?: FormData): Promise<void> {
         ctx,
         sharedJournalEntries.map((e) => e.id),
       );
+      // Bust client router caches that render journal entries with
+      // their flagged state — /home, /goals, /journal, /sessions —
+      // so the cleared flags are reflected when the user navigates
+      // back from the live chat.
+      revalidatePath("/home");
+      revalidatePath("/goals");
+      revalidatePath("/journal");
+      revalidatePath("/sessions");
     } catch (err) {
       captureSessionError(err, "journal_flag_clear", sessionRow.id);
     }
