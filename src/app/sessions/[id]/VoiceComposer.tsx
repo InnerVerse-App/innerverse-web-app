@@ -100,13 +100,24 @@ export function VoiceComposer({
   );
   // Streaming-TTS playback state. The chat response is chunked into
   // sentence-bounded pieces, each of which gets its own TTS call.
-  // The resulting audio elements are queued up and played
-  // sequentially. `chatCompleteRef` flips true when the chat stream
-  // ends, so the last-chunk playback completion can transition us
-  // back to listening.
-  const audioQueueRef = useRef<HTMLAudioElement[]>([]);
-  const audioUrlsRef = useRef<string[]>([]);
-  const currentAudioRef = useRef<HTMLAudioElement | null>(null);
+  // Decoded audio buffers are queued up and played sequentially via
+  // BufferSourceNodes off a single shared AudioContext.
+  // `chatCompleteRef` flips true when the chat stream ends, so the
+  // last-chunk playback completion can transition us back to
+  // listening.
+  //
+  // Why Web Audio instead of HTMLAudioElement: on iOS, an HTMLAudio
+  // element's play() is silently blocked when called outside the
+  // immediate user-gesture window. The first turn would play (gesture
+  // still active from voice-mode click) but subsequent turns would
+  // fail without rejection or onerror — silent dropout, no telemetry.
+  // A Web Audio AudioContext, once resumed via gesture, stays
+  // unlocked indefinitely; BufferSource.start() works regardless of
+  // gesture proximity. This is how YouTube, Spotify, Whisper Web etc.
+  // do non-gesture-driven media playback on iOS.
+  const audioCtxRef = useRef<AudioContext | null>(null);
+  const audioBufferQueueRef = useRef<AudioBuffer[]>([]);
+  const currentSourceRef = useRef<AudioBufferSourceNode | null>(null);
   const chatCompleteRef = useRef(false);
   // Tracks the latest phase synchronously so VAD callbacks (which
   // close over an old setState reading) can dispatch on current
@@ -118,10 +129,37 @@ export function VoiceComposer({
     setPhase(next);
   }
 
+  // Lazy-init the shared AudioContext. Called from useEffect on
+  // mount AND from any user-tap handler — whichever runs first
+  // creates it, subsequent calls just resume() if iOS suspended it.
+  // The AudioContext must be created/resumed from inside a user-
+  // gesture-derived task on iOS for it to actually produce sound.
+  function ensureAudioContext(): AudioContext | null {
+    if (typeof window === "undefined") return null;
+    if (!audioCtxRef.current) {
+      const Ctor =
+        window.AudioContext ??
+        (window as unknown as { webkitAudioContext?: typeof AudioContext })
+          .webkitAudioContext;
+      if (!Ctor) return null;
+      audioCtxRef.current = new Ctor();
+    }
+    const ctx = audioCtxRef.current;
+    if (ctx.state === "suspended") {
+      // Fire-and-forget; the next BufferSource.start() will work once
+      // the resume() promise settles, even if we don't await here.
+      void ctx.resume();
+    }
+    return ctx;
+  }
+
   // Dynamic import + VAD bootstrap. Runs once on mount; teardown
   // destroys the VAD instance and releases the mic stream.
   useEffect(() => {
     let cancelled = false;
+    // Pre-create the AudioContext now so any subsequent user gesture
+    // (mic-circle tap, test buttons) is enough to fully unlock it.
+    ensureAudioContext();
     (async () => {
       try {
         const vadModule = await import("@ricky0123/vad-web");
@@ -219,6 +257,15 @@ export function VoiceComposer({
       vadRef.current?.destroy();
       vadRef.current = null;
       stopAndClearPlayback();
+      // Close the shared AudioContext on unmount. .close() releases
+      // the OS-level audio output handle so we're not holding it
+      // when voice mode is dismissed. A new mount creates a fresh
+      // context.
+      const ctx = audioCtxRef.current;
+      if (ctx && ctx.state !== "closed") {
+        void ctx.close().catch(() => {});
+      }
+      audioCtxRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -235,94 +282,91 @@ export function VoiceComposer({
     chatCompleteRef.current = true;
   }
 
-  // Stop any currently-playing audio, clear the queue, and revoke
-  // every blob URL we created during the turn. Called on unmount,
-  // on error, and during interruption.
+  // Stop any currently-playing audio and clear the pending buffer
+  // queue. Called on unmount, on error, and during interruption. The
+  // shared AudioContext stays alive across calls — only the source
+  // and queue get torn down.
   function stopAndClearPlayback(): void {
-    const current = currentAudioRef.current;
+    const current = currentSourceRef.current;
     if (current) {
-      current.pause();
-      current.src = "";
-      currentAudioRef.current = null;
+      // Detach onended FIRST so source.stop() doesn't trigger our
+      // queue-advancement and start a fresh chunk during teardown.
+      current.onended = null;
+      try {
+        current.stop();
+      } catch {
+        // Already stopped or never started — both fine.
+      }
+      try {
+        current.disconnect();
+      } catch {
+        // Already disconnected.
+      }
+      currentSourceRef.current = null;
     }
-    audioQueueRef.current = [];
-    for (const url of audioUrlsRef.current) {
-      URL.revokeObjectURL(url);
-    }
-    audioUrlsRef.current = [];
+    audioBufferQueueRef.current = [];
   }
 
-  // Play the next audio in the queue. If the queue is empty, mark
-  // the speaking phase complete only when the chat stream is also
-  // done. Otherwise we just wait — the next enqueue will pick this
-  // back up.
+  // Play the next decoded buffer in the queue. If the queue is
+  // empty, transition back to listening only when the chat stream
+  // is also done — otherwise wait for the next enqueue.
   function playNextInQueue(): void {
-    const next = audioQueueRef.current.shift();
+    const next = audioBufferQueueRef.current.shift();
     if (!next) {
-      currentAudioRef.current = null;
+      currentSourceRef.current = null;
       if (chatCompleteRef.current) {
-        // All chunks done + chat finished — return to listening.
         vadRef.current?.start();
         setPhaseSafe("listening");
       }
       return;
     }
-    currentAudioRef.current = next;
-    next.onended = playNextInQueue;
-    next.onerror = () => {
-      Sentry.captureMessage("voice_tts_audio_element_error", {
+    const ctx = ensureAudioContext();
+    if (!ctx) {
+      Sentry.captureMessage("voice_tts_no_audio_context", {
         level: "warning",
         tags: { stage: "voice_tts_play", session_id: sessionId },
+      });
+      return;
+    }
+    const source = ctx.createBufferSource();
+    source.buffer = next;
+    source.connect(ctx.destination);
+    source.onended = () => {
+      // Guard against late onended callbacks from a source that
+      // stopAndClearPlayback already replaced — without this, an
+      // interruption mid-playback could re-trigger queue advance
+      // after we've already moved on.
+      if (currentSourceRef.current === source) {
+        playNextInQueue();
+      }
+    };
+    currentSourceRef.current = source;
+    try {
+      source.start();
+      Sentry.captureMessage("voice_tts_source_started", {
+        level: "info",
+        tags: { stage: "voice_tts_play", session_id: sessionId },
         extra: {
-          mediaError: next.error
-            ? { code: next.error.code, message: next.error.message }
-            : null,
+          duration: next.duration,
+          ctxState: ctx.state,
+          ctxSampleRate: ctx.sampleRate,
         },
       });
-      setErrorMsg("Audio playback failed");
-      setPhaseSafe("error");
-    };
-    // audio.play() returns a Promise that REJECTS when the browser
-    // blocks playback (autoplay policy, user-gesture required, etc.).
-    // We were doing `void next.play()` which silently swallowed the
-    // rejection — leaving the queue stalled with no telemetry. Catch
-    // it, capture to Sentry, and skip to the next chunk so a single
-    // bad audio doesn't lock the queue forever.
-    next.play()
-      .then(() => {
-        Sentry.captureMessage("voice_tts_play_resolved", {
-          level: "info",
-          tags: { stage: "voice_tts_play", session_id: sessionId },
-          extra: snapshotAudio(next),
-        });
-        window.setTimeout(() => {
-          if (currentAudioRef.current === next) {
-            Sentry.captureMessage("voice_tts_play_500ms", {
-              level: "info",
-              tags: { stage: "voice_tts_play", session_id: sessionId },
-              extra: snapshotAudio(next),
-            });
-          }
-        }, 500);
-      })
-      .catch((err) => {
-        Sentry.captureException(err, {
-          level: "warning",
-          tags: { stage: "voice_tts_play", session_id: sessionId },
-          extra: {
-            errorName: err?.name ?? "unknown",
-            ...snapshotAudio(next),
-          },
-        });
-        // Move on rather than stalling. The chunk is lost (text already
-        // landed in the transcript), but subsequent chunks still play.
-        currentAudioRef.current = null;
-        playNextInQueue();
+    } catch (err) {
+      Sentry.captureException(err, {
+        level: "warning",
+        tags: { stage: "voice_tts_play", session_id: sessionId },
+        extra: { errorName: (err as Error)?.name ?? "unknown" },
       });
+      currentSourceRef.current = null;
+      playNextInQueue();
+    }
   }
 
   // Helper for diagnostic Sentry payloads. Pulls the audio element
-  // state we care about for "did it actually play?" debugging.
+  // state we care about for "did it actually play?" debugging. Only
+  // used by the HTML5 test button now that the live flow runs on
+  // Web Audio.
   function snapshotAudio(a: HTMLAudioElement) {
     return {
       duration: a.duration,
@@ -340,9 +384,10 @@ export function VoiceComposer({
   }
 
   // Diagnostic: play a short test phrase via the SAME HTML5 <audio>
-  // primitive the live flow uses. If this is silent on the user's
-  // device, the bug is in the audio primitive itself, not the
-  // streaming/queue logic. Removable once the TTS dropout is fixed.
+  // primitive the live flow USED TO use. After the Web Audio refactor
+  // this lets us cross-check "is HTML5 audio working in this context"
+  // against the live Web Audio path. Removable once we're confident
+  // the dropout stays fixed.
   async function testPlayHtml5(): Promise<void> {
     Sentry.addBreadcrumb({
       category: "voice_test",
@@ -508,7 +553,7 @@ export function VoiceComposer({
     vad: MicVADInstance,
   ): Promise<void> {
     const finishToListening = () => {
-      currentAudioRef.current = null;
+      currentSourceRef.current = null;
       vad.start();
       setPhaseSafe("listening");
     };
@@ -528,41 +573,42 @@ export function VoiceComposer({
         finishToListening();
         return;
       }
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      audioUrlsRef.current.push(url);
-      const audio = new Audio(url);
-      currentAudioRef.current = audio;
-      audio.onended = () => {
-        Sentry.captureMessage("voice_welcome_audio_ended", {
-          level: "info",
-          tags: { stage: "voice_welcome", session_id: sessionId },
-          extra: snapshotAudio(audio),
-        });
-        finishToListening();
-      };
-      audio.onerror = () => {
-        Sentry.captureMessage("voice_welcome_audio_error", {
+      const bytes = await res.arrayBuffer();
+      const ctx = ensureAudioContext();
+      if (!ctx) {
+        Sentry.captureMessage("voice_welcome_no_audio_context", {
           level: "warning",
           tags: { stage: "voice_welcome", session_id: sessionId },
-          extra: snapshotAudio(audio),
+        });
+        finishToListening();
+        return;
+      }
+      // .slice(0) gives decodeAudioData its own non-detached buffer
+      // (some Safari versions detach the original after decode).
+      const audioBuffer = await ctx.decodeAudioData(bytes.slice(0));
+      const source = ctx.createBufferSource();
+      source.buffer = audioBuffer;
+      source.connect(ctx.destination);
+      source.onended = () => {
+        Sentry.captureMessage("voice_welcome_source_ended", {
+          level: "info",
+          tags: { stage: "voice_welcome", session_id: sessionId },
+          extra: { duration: audioBuffer.duration, ctxState: ctx.state },
         });
         finishToListening();
       };
+      currentSourceRef.current = source;
       try {
-        await audio.play();
-        Sentry.captureMessage("voice_welcome_play_resolved", {
+        source.start();
+        Sentry.captureMessage("voice_welcome_source_started", {
           level: "info",
           tags: { stage: "voice_welcome", session_id: sessionId },
-          extra: snapshotAudio(audio),
+          extra: {
+            duration: audioBuffer.duration,
+            ctxState: ctx.state,
+            ctxSampleRate: ctx.sampleRate,
+          },
         });
-        window.setTimeout(() => {
-          Sentry.captureMessage("voice_welcome_play_500ms", {
-            level: "info",
-            tags: { stage: "voice_welcome", session_id: sessionId },
-            extra: snapshotAudio(audio),
-          });
-        }, 500);
       } catch (err) {
         Sentry.captureException(err, {
           level: "warning",
@@ -599,26 +645,32 @@ export function VoiceComposer({
         });
         return;
       }
-      const blob = await res.blob();
+      const bytes = await res.arrayBuffer();
       // Late-arrival guard. If phase has moved past thinking/speaking
       // (interruption, error, unmount), drop this chunk silently.
       const phase = phaseRef.current;
       if (phase !== "thinking" && phase !== "speaking") {
         return;
       }
-      const url = URL.createObjectURL(blob);
-      audioUrlsRef.current.push(url);
-      const audio = new Audio(url);
-      audioQueueRef.current.push(audio);
-      if (!currentAudioRef.current) {
+      const ctx = ensureAudioContext();
+      if (!ctx) {
+        Sentry.captureMessage("voice_tts_no_audio_context_at_decode", {
+          level: "warning",
+          tags: { stage: "voice_tts_fetch", session_id: sessionId },
+        });
+        return;
+      }
+      const audioBuffer = await ctx.decodeAudioData(bytes.slice(0));
+      audioBufferQueueRef.current.push(audioBuffer);
+      if (!currentSourceRef.current) {
         if (phaseRef.current !== "speaking") {
           setPhaseSafe("speaking");
         }
         playNextInQueue();
       }
     } catch (err) {
-      // Network error or aborted fetch. Same non-fatal posture for
-      // the chat flow; capture so debugging has data.
+      // Network error, decode error, or aborted fetch. Same non-fatal
+      // posture for the chat flow; capture so debugging has data.
       Sentry.captureException(err, {
         level: "warning",
         tags: { stage: "voice_tts_fetch", session_id: sessionId },
@@ -704,7 +756,7 @@ export function VoiceComposer({
     // listening. If no chunks ever queued (empty response, error
     // partway through), transition immediately.
     chatCompleteRef.current = true;
-    if (!currentAudioRef.current && audioQueueRef.current.length === 0) {
+    if (!currentSourceRef.current && audioBufferQueueRef.current.length === 0) {
       vadRef.current?.start();
       setPhaseSafe("listening");
       return;
