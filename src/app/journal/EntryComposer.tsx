@@ -197,8 +197,8 @@ export function EntryComposer(props: Props) {
     content.length < MAX_ENTRY_CONTENT_CHARS;
 
   return (
-    <form onSubmit={handleSubmit} className="mt-6 flex flex-col gap-4">
-      <div className="flex flex-col gap-1">
+    <form onSubmit={handleSubmit} className="mt-6 flex w-full flex-col gap-4">
+      <div className="flex w-full flex-col gap-1">
         <label
           htmlFor="entry-title"
           className="text-xs uppercase tracking-wide text-neutral-500"
@@ -213,12 +213,14 @@ export function EntryComposer(props: Props) {
           value={title}
           onChange={(e) => setTitle(e.target.value)}
           placeholder="Leave blank to use the date"
-          className="rounded-md border border-white/10 bg-white/[0.04] px-3 py-2 text-sm text-white placeholder:text-neutral-500 focus:border-brand-primary/50 focus:outline-none"
+          className="w-full min-w-0 rounded-md border border-white/10 bg-white/[0.04] px-3 py-2 text-sm text-white placeholder:text-neutral-500 focus:border-brand-primary/50 focus:outline-none"
         />
       </div>
 
-      <div className="flex flex-col gap-1">
-        <div className="flex items-center justify-between gap-2">
+      <div className="flex w-full flex-col gap-1">
+        {/* Mic button + counter live ABOVE the textarea so the on-screen
+            keyboard never covers the mic when the user is editing. */}
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <label
             htmlFor="entry-content"
             className="text-xs uppercase tracking-wide text-neutral-500"
@@ -227,7 +229,7 @@ export function EntryComposer(props: Props) {
           </label>
           <span
             className={
-              "text-[11px] " +
+              "shrink-0 tabular-nums text-[11px] " +
               (charsRemaining < 0
                 ? "text-red-400"
                 : showSoftWarning
@@ -238,25 +240,14 @@ export function EntryComposer(props: Props) {
             {content.length.toLocaleString()} / {MAX_ENTRY_CONTENT_CHARS.toLocaleString()}
           </span>
         </div>
-        <textarea
-          ref={textareaRef}
-          id="entry-content"
-          name="content"
-          rows={6}
-          maxLength={MAX_ENTRY_CONTENT_CHARS}
-          value={content}
-          onChange={(e) => setContent(e.target.value)}
-          placeholder="Type or tap the mic to speak..."
-          className="min-h-[10rem] resize-none whitespace-pre-wrap rounded-md border border-white/10 bg-white/[0.04] px-3 py-2 text-sm leading-relaxed text-white placeholder:text-neutral-500 focus:border-brand-primary/50 focus:outline-none"
-        />
-        <div className="mt-1 flex items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
             onClick={handleMicClick}
             disabled={micBusy}
             aria-pressed={micRecording}
             className={
-              "flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-medium transition disabled:opacity-50 " +
+              "flex shrink-0 items-center gap-2 rounded-full px-3 py-1.5 text-xs font-medium transition disabled:opacity-50 " +
               (micRecording
                 ? "bg-red-500/20 text-red-300 ring-1 ring-red-500/40"
                 : "bg-white/5 text-neutral-300 ring-1 ring-white/10 hover:bg-white/10 hover:text-white")
@@ -271,11 +262,22 @@ export function EntryComposer(props: Props) {
             ) : null}
           </button>
           {recorder.errorMessage ? (
-            <p className="text-right text-[11px] text-red-300">
+            <p className="min-w-0 flex-1 break-words text-[11px] text-red-300">
               {recorder.errorMessage}
             </p>
           ) : null}
         </div>
+        <textarea
+          ref={textareaRef}
+          id="entry-content"
+          name="content"
+          rows={6}
+          maxLength={MAX_ENTRY_CONTENT_CHARS}
+          value={content}
+          onChange={(e) => setContent(e.target.value)}
+          placeholder="Type or tap the mic to speak..."
+          className="mt-1 min-h-[10rem] w-full min-w-0 resize-none whitespace-pre-wrap rounded-md border border-white/10 bg-white/[0.04] px-3 py-2 text-sm leading-relaxed text-white placeholder:text-neutral-500 focus:border-brand-primary/50 focus:outline-none"
+        />
       </div>
 
       {!isEdit ? (
