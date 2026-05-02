@@ -2,16 +2,27 @@ import type { NextConfig } from "next";
 import { withSentryConfig } from "@sentry/nextjs";
 
 const nextConfig: NextConfig = {
-  // Several server modules read prompt files from reference/ at
-  // runtime via fs.readFileSync (the opener, master coaching prompt,
-  // session-end analyzer, response parser, and growth-narrative
-  // pipeline). Next.js's bundler only tracks static imports, so the
+  // Several server modules read prompt + welcome files from
+  // reference/ at runtime via fs.readFileSync (the opener, master
+  // coaching prompt, session-end analyzer, response parser,
+  // growth-narrative pipeline, and the first-session coach welcome
+  // loader). Next.js's bundler only tracks static imports, so the
   // .md files need to be explicitly included in the serverless
-  // function bundle or production reads ENOENT. The glob covers all
-  // prompt-*.md variants at the top level — archived/superseded
-  // prompts under reference/archive/ are intentionally NOT bundled.
+  // function bundle or production reads ENOENT.
+  //
+  // Why two patterns instead of `./reference/*.md`:
+  //   - The prompt-*.md glob covers every prompt variant including
+  //     future model-renamed ones, AND excludes the archived prompts
+  //     under reference/archive/ which we don't want at runtime.
+  //   - coach_welcome_messages.md doesn't fit the prompt-* prefix, so
+  //     it's listed explicitly. Anything else added to reference/
+  //     that's read by server code at runtime needs the same
+  //     treatment — add it here.
   outputFileTracingIncludes: {
-    "/**/*": ["./reference/prompt-*.md"],
+    "/**/*": [
+      "./reference/prompt-*.md",
+      "./reference/coach_welcome_messages.md",
+    ],
   },
 };
 
