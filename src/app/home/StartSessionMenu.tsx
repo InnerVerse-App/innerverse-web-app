@@ -2,10 +2,12 @@
 
 import { useState, useTransition } from "react";
 
+import { JournalSharePanel } from "@/app/_components/JournalSharePanel";
 import { PendingDots } from "@/app/_components/PendingDots";
 import { ProgressBar } from "@/app/_components/ProgressBar";
 import { StartSessionModePicker } from "@/app/_components/StartSessionModePicker";
 import { startSession } from "@/app/sessions/actions";
+import type { JournalEntry } from "@/lib/journal";
 
 export type StartSessionGoal = {
   id: string;
@@ -15,28 +17,58 @@ export type StartSessionGoal = {
 
 type Props = {
   goals: StartSessionGoal[];
+  // Newest-first journal entries. When the array is non-empty a
+  // "Bring something from my journal" focus option appears in the
+  // picker. Journal entries reach a session ONLY via that path —
+  // goals and "specific" sessions never include journal context.
+  journalEntries: JournalEntry[];
   buttonLabel: string;
 };
 
 type Focus = { kind: "goal"; id: string } | null;
-// "mode" is the new step that appears AFTER the user picks a focus —
-// they choose Type or Talk before the session is actually created.
-type Panel = "closed" | "options" | "goals" | "mode";
 
-export function StartSessionMenu({ goals, buttonLabel }: Props) {
+// Three discrete paths through the start flow. They never combine:
+//   goals    → goals list → mode → session
+//   journal  → entry picker (share panel) → mode → session
+//   specific → mode → session (blank slate)
+type Panel = "closed" | "options" | "goals" | "mode" | "journal-share";
+
+export function StartSessionMenu({
+  goals,
+  journalEntries,
+  buttonLabel,
+}: Props) {
   const [panel, setPanel] = useState<Panel>("closed");
   const [pendingFocus, setPendingFocus] = useState<Focus>(null);
+  const [pendingJournalIds, setPendingJournalIds] = useState<string[]>([]);
   const [pending, startTransition] = useTransition();
 
-  // First step: user picked a focus. Don't fire startSession yet —
-  // stash the focus and advance to the mode picker.
+  const hasJournalEntries = journalEntries.length > 0;
+  // Set when the user enters the share panel via "Bring something from
+  // my journal" — used to know whether the back-from-mode path goes
+  // back to the share panel (journal path) or to the options/goals
+  // pickers (other paths).
+  const isJournalPath = pendingJournalIds.length > 0 || panel === "journal-share";
+
   function pickFocus(focus: Focus) {
     setPendingFocus(focus);
+    setPendingJournalIds([]);
     setPanel("mode");
   }
 
-  // Second step: mode chosen. Now actually start the session.
+  function pickJournalAsFocus() {
+    setPendingFocus(null);
+    setPanel("journal-share");
+  }
+
   function confirmMode(mode: "text" | "voice") {
+    fireStartSession(mode, isJournalPath ? pendingJournalIds : []);
+  }
+
+  function fireStartSession(
+    mode: "text" | "voice",
+    sharedJournalIds: string[],
+  ) {
     startTransition(async () => {
       const fd = new FormData();
       if (pendingFocus) {
@@ -44,6 +76,9 @@ export function StartSessionMenu({ goals, buttonLabel }: Props) {
         fd.set("focus_id", pendingFocus.id);
       }
       fd.set("focus_mode", mode);
+      for (const id of sharedJournalIds) {
+        fd.append("shared_journal_ids", id);
+      }
       await startSession(fd);
     });
   }
@@ -82,8 +117,15 @@ export function StartSessionMenu({ goals, buttonLabel }: Props) {
             sublabel={`${goals.length} goal${goals.length === 1 ? "" : "s"}`}
             onClick={() => setPanel("goals")}
           />
+          {hasJournalEntries ? (
+            <OptionButton
+              label="Bring something from my journal"
+              sublabel={`${journalEntries.length} ${journalEntries.length === 1 ? "entry" : "entries"} to choose from`}
+              onClick={pickJournalAsFocus}
+            />
+          ) : null}
           <OptionButton
-            label="I'm bringing something specific today"
+            label="I want to focus on something specific today"
             sublabel="Open the session with a blank slate"
             onClick={() => pickFocus(null)}
           />
@@ -113,15 +155,29 @@ export function StartSessionMenu({ goals, buttonLabel }: Props) {
             </button>
           ))}
         </ListPanel>
-      ) : (
-        // panel === "mode" — final step, fires startSession on choice.
+      ) : panel === "mode" ? (
         <StartSessionModePicker
           onSelect={confirmMode}
           onBack={() => {
-            // Back from mode → return to whichever picker preceded it.
+            if (isJournalPath) {
+              setPanel("journal-share");
+              return;
+            }
             if (pendingFocus?.kind === "goal") setPanel("goals");
             else setPanel("options");
             setPendingFocus(null);
+          }}
+        />
+      ) : (
+        <JournalSharePanel
+          entries={journalEntries}
+          onBack={() => {
+            setPendingJournalIds([]);
+            setPanel("options");
+          }}
+          onContinue={(selectedIds) => {
+            setPendingJournalIds(selectedIds);
+            setPanel("mode");
           }}
         />
       )}

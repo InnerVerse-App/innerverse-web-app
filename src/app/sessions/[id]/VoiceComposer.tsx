@@ -142,8 +142,10 @@ export function VoiceComposer({
           preSpeechPadMs: 250,
           // Wait this long after speech-end probability drops before
           // firing onSpeechEnd. Coaching needs longer pauses than
-          // chat — set generously.
-          redemptionMs: 800,
+          // chat — a user pausing mid-thought should not be cut off
+          // by the coach. Tunable; revisit if testers report either
+          // sluggishness (too long) or being interrupted (too short).
+          redemptionMs: 2000,
           onSpeechStart: () => {
             const prev = phaseRef.current;
             if (prev === "listening") {
@@ -378,7 +380,18 @@ export function VoiceComposer({
         method: "POST",
         body: fd,
       });
-      if (!res.ok) throw new Error(`Transcription failed (${res.status})`);
+      if (!res.ok) {
+        if (res.status === 429) {
+          const body = (await res.json().catch(() => null)) as
+            | { message?: string }
+            | null;
+          throw new Error(
+            body?.message ??
+              "You've reached today's voice limit. Try again tomorrow or type instead.",
+          );
+        }
+        throw new Error(`Transcription failed (${res.status})`);
+      }
       const data = (await res.json()) as { text?: string };
       transcribed = (data.text ?? "").trim();
     } catch (err) {

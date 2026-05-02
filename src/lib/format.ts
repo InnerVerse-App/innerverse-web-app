@@ -34,3 +34,13 @@ export function formatTime(iso: string): string {
     hour12: true,
   });
 }
+
+// "May 2, 2026 at 7:14 AM" — used on journal-entry headers.
+export function formatDateTimeLong(iso: string): string {
+  return `${formatDateLong(iso)} at ${formatTime(iso)}`;
+}
+
+// "May 2, 7:14 AM" — used on tighter journal-entry rows.
+export function formatDateTimeCompact(iso: string): string {
+  return `${formatDateCompact(iso)}, ${formatTime(iso)}`;
+}

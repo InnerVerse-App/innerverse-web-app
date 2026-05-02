@@ -5,11 +5,13 @@ import { auth } from "@clerk/nextjs/server";
 import { AutoScrollToTarget } from "@/app/_components/AutoScrollToTarget";
 import { PageShell } from "@/app/_components/PageShell";
 import { ProgressBar } from "@/app/_components/ProgressBar";
+import { SessionsJournalTabBar } from "@/app/_components/SessionsJournalTabBar";
 import {
   StartSessionMenu,
   type StartSessionGoal,
 } from "@/app/home/StartSessionMenu";
 import { loadActiveGoalsWithLazySeed } from "@/lib/goals";
+import { listEntries, type JournalEntry } from "@/lib/journal";
 import { formatDateShort } from "@/lib/format";
 import { progressForSession, progressToOpacity } from "@/lib/progress";
 import {
@@ -47,6 +49,7 @@ type SessionHistory = {
 
 type EmptyStateData = {
   goals: StartSessionGoal[];
+  journalEntries: JournalEntry[];
 };
 
 // Loads sessions + the contributor maps the expanded-card view needs.
@@ -141,14 +144,18 @@ function formatDuration(startIso: string, endIso: string): string {
 
 async function loadEmptyStateMenuData(): Promise<EmptyStateData> {
   const ctx = await supabaseForUser();
-  if (!ctx) return { goals: [] };
-  const goals = await loadActiveGoalsWithLazySeed(ctx);
+  if (!ctx) return { goals: [], journalEntries: [] };
+  const [goals, journalEntries] = await Promise.all([
+    loadActiveGoalsWithLazySeed(ctx),
+    listEntries(ctx),
+  ]);
   return {
     goals: goals.map((g) => ({
       id: g.id,
       title: g.title,
       progress_percent: g.progress_percent,
     })),
+    journalEntries,
   };
 }
 
@@ -190,6 +197,9 @@ export default async function SessionsListPage({
         <p className="mt-1 text-sm text-neutral-400">
           A log of your coaching sessions.
         </p>
+        <div className="mt-6">
+          <SessionsJournalTabBar active="sessions" />
+        </div>
         {sessions.length === 0 && emptyMenu ? (
           <div className="mt-8 rounded-xl border border-white/10 bg-white/[0.02] p-5">
             <p className="text-sm text-neutral-400">
@@ -199,6 +209,7 @@ export default async function SessionsListPage({
             <div className="mt-4">
               <StartSessionMenu
                 goals={emptyMenu.goals}
+                journalEntries={emptyMenu.journalEntries}
                 buttonLabel="Start Your First Session"
               />
             </div>
@@ -470,6 +481,9 @@ export default async function SessionsListPage({
         A log of your coaching sessions.{" "}
         <span className="text-amber-400">(demo mode)</span>
       </p>
+      <div className="mt-6">
+        <SessionsJournalTabBar active="sessions" />
+      </div>
 
       {sessions.length === 0 && emptyMenu ? (
         <div className="mt-8 rounded-xl border border-white/10 bg-white/[0.02] p-5">
@@ -480,6 +494,7 @@ export default async function SessionsListPage({
           <div className="mt-4">
             <StartSessionMenu
               goals={emptyMenu.goals}
+              journalEntries={emptyMenu.journalEntries}
               buttonLabel="Start Your First Session"
             />
           </div>

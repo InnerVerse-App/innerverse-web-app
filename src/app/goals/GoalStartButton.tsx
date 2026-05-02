@@ -6,10 +6,11 @@ import { PendingDots } from "@/app/_components/PendingDots";
 import { StartSessionModePicker } from "@/app/_components/StartSessionModePicker";
 import { startSession } from "@/app/sessions/actions";
 
-// Per-goal "Start a session for this goal" CTA used inside the
-// server-rendered GoalCard. Lives in a client component because we
-// need to show the mode picker (Type / Talk) inline before firing
-// the startSession server action.
+// Per-goal "Start a session for this goal" CTA on each GoalCard.
+// The user already chose what they want to work on by tapping this
+// button — no journal-share step here, by design (journal entries
+// only reach a session via the home page's "Bring something from
+// my journal" focus path).
 export function GoalStartButton({ goalId }: { goalId: string }) {
   const [showModePicker, setShowModePicker] = useState(false);
   const [pending, startTransition] = useTransition();

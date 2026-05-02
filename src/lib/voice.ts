@@ -8,14 +8,21 @@ import {
   ttsSpeedForCoach,
   ttsVoiceForCoach,
 } from "@/lib/openai";
+import { ensureCoachingState } from "@/lib/sessions";
+import type { UserSupabase } from "@/lib/supabase";
 
-// Maximum audio file size we'll accept on the transcribe endpoint.
-// 25 MB matches OpenAI's Whisper API limit. A typical 30-second
-// coaching utterance at 16 kHz mono is well under 1 MB, so this is
-// generous headroom — if a request exceeds it the user is doing
-// something pathological (a 30-minute monologue) and we want to
-// reject before hitting the upstream API.
-export const MAX_AUDIO_BYTES = 25 * 1024 * 1024;
+// Maximum audio file size accepted by Whisper itself. Kept here as
+// a documented upper bound; the route-level cap below is what we
+// actually enforce.
+export const WHISPER_MAX_AUDIO_BYTES = 25 * 1024 * 1024;
+
+// App-level cap: 5 MB. Real audio sizes for our use cases are far
+// below this — a 2-minute journal recording at standard browser
+// voice quality is ~1 MB; coaching-session utterances are typically
+// 30 seconds or less and weigh tens of kilobytes. 5 MB gives 5×
+// headroom over realistic max usage and bounds the per-call Whisper
+// cost an attacker (or a runaway client bug) can drive.
+export const MAX_AUDIO_BYTES = 5 * 1024 * 1024;
 
 // Cap the text length we'll synthesize per request. OpenAI TTS
 // supports up to 4096 chars; coaching responses are usually 100-500
@@ -23,13 +30,69 @@ export const MAX_AUDIO_BYTES = 25 * 1024 * 1024;
 // the practical cap.
 export const MAX_TTS_CHARS = 4000;
 
-// Whisper transcription. Takes a File or Blob (already extracted
-// from FormData on the route side) and returns the transcribed
-// text. Failures are captured to Sentry and re-thrown so the route
-// handler can return an appropriate status code.
+// Per-user daily Whisper transcription cap. Both transcribe routes
+// check this BEFORE forwarding to OpenAI; an over-cap call returns
+// 429 + a clear message. Sized for normal heavy use (a 20-minute
+// voice session generates ~30-60 calls; a heavy day with multiple
+// sessions + voice journal entries lands at ~150) with comfortable
+// headroom; an attacker maxing out a single account is bounded to
+// 200 calls × MAX_AUDIO_BYTES per day.
+export const TRANSCRIPTION_DAILY_CAP = 200;
+
+// Returns whether the user can spend one more transcription unit
+// today, AND consumes the unit if so. Atomic enough for our scale
+// (single-user race conditions across two concurrent transcribe
+// calls would at worst over-count by 1; never under-count). Resets
+// the counter automatically when the date rolls over.
+//
+// Result.ok === false means the cap is exhausted; the caller should
+// return 429. The response shape (count + cap) is suitable for
+// surfacing to the client as part of the error payload.
+export async function tryConsumeTranscriptionQuota(
+  ctx: UserSupabase,
+): Promise<{ ok: boolean; count: number; cap: number }> {
+  await ensureCoachingState(ctx);
+
+  const todayIso = new Date().toISOString().slice(0, 10);
+
+  const { data, error: readErr } = await ctx.client
+    .from("coaching_state")
+    .select("transcription_count_today, transcription_count_date")
+    .maybeSingle();
+  if (readErr) throw readErr;
+
+  const sameDay =
+    data?.transcription_count_date === todayIso;
+  const currentCount = sameDay
+    ? Number(data?.transcription_count_today ?? 0)
+    : 0;
+
+  if (currentCount >= TRANSCRIPTION_DAILY_CAP) {
+    return {
+      ok: false,
+      count: currentCount,
+      cap: TRANSCRIPTION_DAILY_CAP,
+    };
+  }
+
+  const nextCount = currentCount + 1;
+  const { error: updateErr } = await ctx.client
+    .from("coaching_state")
+    .update({
+      transcription_count_today: nextCount,
+      transcription_count_date: todayIso,
+    });
+  if (updateErr) throw updateErr;
+
+  return { ok: true, count: nextCount, cap: TRANSCRIPTION_DAILY_CAP };
+}
+
+// Whisper transcription. Failures captured to Sentry and re-thrown.
+// `sessionId` is an optional Sentry tag — omit for non-session
+// contexts (journal voice entries).
 export async function transcribeAudio(
   audioFile: File,
-  sessionId: string,
+  sessionId?: string,
 ): Promise<string> {
   if (audioFile.size === 0) {
     const err = new Error("transcribe: empty audio file");

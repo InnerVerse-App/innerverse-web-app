@@ -39,7 +39,8 @@ export type SessionErrorStage =
   | "voice_transcribe_openai"
   | "voice_transcribe_input"
   | "voice_speak_openai"
-  | "voice_speak_input";
+  | "voice_speak_input"
+  | "journal_flag_clear";
 
 export function captureSessionError(
   err: unknown,

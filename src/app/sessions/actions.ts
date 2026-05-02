@@ -1,10 +1,15 @@
 "use server";
 
 import { after } from "next/server";
+import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { auth, currentUser } from "@clerk/nextjs/server";
 
 import { buildSessionStartInput } from "@/lib/coaching-prompt";
+import {
+  clearFlagsOnEntries,
+  getEntriesByIds,
+} from "@/lib/journal";
 import { captureSessionError } from "@/lib/observability";
 import {
   MAX_OUTPUT_TOKENS,
@@ -129,7 +134,15 @@ async function countPriorSessions(ctx: UserSupabase): Promise<number> {
 //               is currently accepted; "shift" was removed when the
 //               home menu's Work-on-my-mindset option was dropped)
 //   focus_id:   the corresponding goal.id
-// When both present and the row belongs to the caller, the focus
+//   shared_journal_ids: zero or more journal entry IDs the user
+//               picked in the StartSessionMenu's journal-share panel.
+//               Resolved through getEntriesByIds (RLS-scoped) so a
+//               crafted ID can't pull another user's entries into
+//               the prompt. Successfully-shared entries have their
+//               flagged_for_session flag cleared after the session
+//               row is inserted (the flag has done its job — the
+//               LLM has read the entry).
+// When focus is present and the row belongs to the caller, the focus
 // title is injected into the session-start prompt so the coach can
 // open with "I see you want to work on <title> today" instead of a
 // blank-slate greeting.
@@ -152,12 +165,16 @@ export async function startSession(formData?: FormData): Promise<void> {
     countPriorSessions(ctx),
   ]);
 
-  const focus = await resolveFocus(ctx, formData);
+  const [focus, sharedJournalEntries] = await Promise.all([
+    resolveFocus(ctx, formData),
+    resolveSharedJournalEntries(ctx, formData),
+  ]);
 
   const input = await buildSessionStartInput({
     userName,
     focus,
     isFirstSession: priorSessionCount === 0,
+    sharedJournalEntries,
   });
 
   // Call OpenAI BEFORE inserting any rows. If the call fails (network,
@@ -194,6 +211,18 @@ export async function startSession(formData?: FormData): Promise<void> {
     content: openingText,
     ai_response_id: responseId,
   });
+
+  // Flag-clear runs inside resolveSharedJournalEntries above (the
+  // user's act of submitting the share-step IS the signal). Just
+  // bust the client router caches so the cleared flags reflect on
+  // /home, /goals, /journal, /sessions when the user navigates back
+  // from the live chat.
+  if (sharedJournalEntries.length > 0) {
+    revalidatePath("/home");
+    revalidatePath("/goals");
+    revalidatePath("/journal");
+    revalidatePath("/sessions");
+  }
 
   // focus_mode (text|voice) chosen on the home/goal pickers — append
   // ?mode=voice to the redirect so the session page can initialize
@@ -354,6 +383,52 @@ export async function submitSessionResponse(
   }
 
   redirect("/home");
+}
+
+// Resolve the journal entry IDs the user selected in the share-step
+// into full entry rows, scoped by RLS so a crafted ID can't read
+// another user's entry. Drops missing rows silently (deleted between
+// share-step submit and now, or never owned by the caller). Returns
+// [] for any state where the form is missing the field, has no
+// values, or no IDs resolve.
+//
+// Side effect: clears flagged_for_session on every resolved entry —
+// the user's act of submitting the share-step IS the signal that
+// they wanted to bring this entry forward, regardless of whether
+// the OpenAI call later succeeds. This replaces the prior
+// post-session flag-clear, which was non-fatal but could fail
+// silently and leave entries pre-selected forever (audit F3).
+// Pre-resolve cleanup is self-healing: if a previous session's
+// post-clear failed and an entry stayed flagged, sharing it again
+// here clears it.
+async function resolveSharedJournalEntries(
+  ctx: UserSupabase,
+  formData: FormData | undefined,
+) {
+  if (!formData) return [];
+  const raw = formData.getAll("shared_journal_ids");
+  const ids: string[] = [];
+  for (const value of raw) {
+    if (typeof value === "string" && value.length > 0) {
+      ids.push(value);
+    }
+  }
+  if (ids.length === 0) return [];
+  const entries = await getEntriesByIds(ctx, ids);
+  const flaggedIds = entries
+    .filter((e) => e.flagged_for_session)
+    .map((e) => e.id);
+  if (flaggedIds.length > 0) {
+    try {
+      await clearFlagsOnEntries(ctx, flaggedIds);
+    } catch (err) {
+      // Best-effort. If this throws (RLS blip, network), the entries
+      // stay flagged and will be re-pre-selected next time — the
+      // same self-healing path catches them. Never block the session.
+      captureSessionError(err, "journal_flag_clear");
+    }
+  }
+  return entries;
 }
 
 // Validates the focus form fields against the caller's own rows so a

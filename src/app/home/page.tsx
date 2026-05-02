@@ -3,6 +3,7 @@ import { auth } from "@clerk/nextjs/server";
 
 import { PageShell } from "@/app/_components/PageShell";
 import { type ActiveGoal, loadActiveGoalsWithLazySeed } from "@/lib/goals";
+import { listEntries, type JournalEntry } from "@/lib/journal";
 import {
   getOnboardingState,
   isOnboardingComplete,
@@ -53,6 +54,7 @@ type HomeData = {
   recentGrowth: RecentGrowthItem[];
   recentBreakthroughs: RecentBreakthrough[];
   activeGoals: ActiveGoal[];
+  journalEntries: JournalEntry[];
 };
 
 type GrowthRow = {
@@ -103,6 +105,7 @@ async function loadHomeData(): Promise<HomeData> {
       recentGrowth: [],
       recentBreakthroughs: [],
       activeGoals: [],
+      journalEntries: [],
     };
   }
 
@@ -117,6 +120,7 @@ async function loadHomeData(): Promise<HomeData> {
     growthRes,
     breakthroughsRes,
     activeGoals,
+    journalEntries,
   ] = await Promise.all([
     ctx.client
       .from("sessions")
@@ -158,6 +162,7 @@ async function loadHomeData(): Promise<HomeData> {
       .order("created_at", { ascending: false })
       .limit(BREAKTHROUGHS_LIMIT),
     loadActiveGoalsWithLazySeed(ctx),
+    listEntries(ctx),
   ]);
 
   if (lastRes.error) throw lastRes.error;
@@ -186,6 +191,7 @@ async function loadHomeData(): Promise<HomeData> {
       createdAt: b.created_at,
     })),
     activeGoals,
+    journalEntries,
   };
 }
 
@@ -212,6 +218,7 @@ export default async function HomePage({
   let recentGrowth: RecentGrowthItem[] = [];
   let recentBreakthroughs: RecentBreakthrough[] = [];
   let activeGoals: ActiveGoal[] = [];
+  let journalEntries: JournalEntry[] = [];
 
   if (isDemo) {
     coach = "Maya";
@@ -299,6 +306,7 @@ export default async function HomePage({
     recentGrowth = homeData.recentGrowth;
     recentBreakthroughs = homeData.recentBreakthroughs;
     activeGoals = homeData.activeGoals;
+    journalEntries = homeData.journalEntries;
   }
 
   const goalCount = activeGoals.length;
@@ -348,9 +356,17 @@ export default async function HomePage({
       </p>
 
       {lastSession ? (
-        <LastSessionCard session={lastSession} goals={menuGoals} />
+        <LastSessionCard
+          session={lastSession}
+          goals={menuGoals}
+          journalEntries={journalEntries}
+        />
       ) : (
-        <FirstSessionCard coachLabelText={coach} goals={menuGoals} />
+        <FirstSessionCard
+          coachLabelText={coach}
+          goals={menuGoals}
+          journalEntries={journalEntries}
+        />
       )}
 
       {/* Stays 2-col on narrow mobile per the Bubble design — cards
