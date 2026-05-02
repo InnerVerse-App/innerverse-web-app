@@ -118,13 +118,15 @@ html {
 
 /* iOS Safari auto-zooms the page when a focused text input has a
    font-size below 16px. Most of the app uses Tailwind's text-sm
-   (14px) on inputs and textareas to match the visual density of
-   surrounding text, which trips that behavior on iPhone — the page
-   suddenly jumps in size when the user taps the chat composer or
-   the journal new-entry textarea, and other elements (send button,
-   prior messages) get pushed off-screen.
+   (14px) on inputs and textareas, which trips that behavior on
+   iPhone — the page suddenly jumps in size when the user taps the
+   chat composer or the journal new-entry textarea, and other
+   elements (send button, prior messages) get pushed off-screen.
    Force a 16px minimum on mobile only so the visual density on
-   sm+ screens (where the zoom never fires) is unchanged. */
+   sm+ screens (where the zoom never fires) is unchanged.
+   `!important` is needed because Tailwind's .text-sm class has
+   higher specificity than a bare element selector for textarea —
+   without it the rule loses the cascade for the textarea case. */
 @media (max-width: 640px) {
   input[type="text"],
   input[type="email"],
@@ -133,6 +135,6 @@ html {
   input[type="tel"],
   input[type="url"],
   textarea {
-    font-size: 16px;
+    font-size: 16px !important;
   }
 }
