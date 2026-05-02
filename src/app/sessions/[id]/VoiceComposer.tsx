@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import * as Sentry from "@sentry/nextjs";
 
 // Voice mode composer. PR 3 of 5: VAD (voice activity detection)
 // replaces the previous push-to-talk button. Continuous listening:
@@ -143,9 +144,11 @@ export function VoiceComposer({
           // Wait this long after speech-end probability drops before
           // firing onSpeechEnd. Coaching needs longer pauses than
           // chat — a user pausing mid-thought should not be cut off
-          // by the coach. Tunable; revisit if testers report either
-          // sluggishness (too long) or being interrupted (too short).
-          redemptionMs: 2000,
+          // by the coach. 4s is on the high end (you'll feel a beat
+          // of "is it listening?" before the coach takes over) but
+          // operator preferred this over interruption risk. Tunable;
+          // revisit if testers report sluggishness vs being cut off.
+          redemptionMs: 4000,
           onSpeechStart: () => {
             const prev = phaseRef.current;
             if (prev === "listening") {
@@ -333,7 +336,18 @@ export function VoiceComposer({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text: chunk }),
       });
-      if (!res.ok) return;
+      if (!res.ok) {
+        // Capture so we have visibility on sustained TTS outages.
+        // Single-chunk drops are still non-fatal to the chat flow
+        // (the text reply landed in the transcript) but we want to
+        // know if /speak starts erroring repeatedly.
+        Sentry.captureMessage("voice_tts_chunk_dropped", {
+          level: "warning",
+          tags: { stage: "voice_tts_response", session_id: sessionId },
+          extra: { status: res.status, chunkChars: chunk.length },
+        });
+        return;
+      }
       const blob = await res.blob();
       // Late-arrival guard. If phase has moved past thinking/speaking
       // (interruption, error, unmount), drop this chunk silently.
@@ -351,8 +365,13 @@ export function VoiceComposer({
         }
         playNextInQueue();
       }
-    } catch {
-      // see comment above — silent intentional
+    } catch (err) {
+      // Network error or aborted fetch. Same non-fatal posture for
+      // the chat flow; capture so debugging has data.
+      Sentry.captureException(err, {
+        level: "warning",
+        tags: { stage: "voice_tts_fetch", session_id: sessionId },
+      });
     }
   }
 
