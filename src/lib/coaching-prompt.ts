@@ -9,6 +9,7 @@ import {
   formatGoalsForPrompt,
   loadActiveGoalsWithLazySeed,
 } from "@/lib/goals";
+import type { JournalEntry } from "@/lib/journal";
 import { supabaseForUser } from "@/lib/supabase";
 
 // How many of each cross-session signal to pull into the prompt.
@@ -135,6 +136,49 @@ function formatClientProfile(src: ProfileSource): string {
 // character-for-character; the exception is the final closing
 // sentence/question, which the model is told it MAY rewrite if a
 // focus is set.
+// Soft cap on total characters of journal content injected into a
+// single session prompt. ~20K chars ≈ 5K tokens; combined with the
+// existing prompt + transcript it keeps the session-start request
+// well under context limits even when a user shares many long
+// entries. Older entries are dropped first when the budget overflows
+// (each entry's full content is preserved or omitted whole — never
+// truncated mid-thought).
+const MAX_INJECTED_JOURNAL_CHARS = 20_000;
+
+// Format the entries the user explicitly chose to bring into this
+// session. Surfaced as its own developer message (not folded into
+// the client profile) so the boundary is clear: these are the user's
+// own writing, not derived facts about them. The acknowledgment
+// instruction lives in the master coaching prompt; this helper just
+// packages the data.
+function formatSharedJournalMessage(entries: JournalEntry[]): string {
+  const trimmed: JournalEntry[] = [];
+  let total = 0;
+  for (const entry of entries) {
+    const len = entry.content.length;
+    if (trimmed.length > 0 && total + len > MAX_INJECTED_JOURNAL_CHARS) break;
+    trimmed.push(entry);
+    total += len;
+  }
+  const blocks = trimmed.map((entry, i) => {
+    const ts = new Date(entry.created_at);
+    const stamp = Number.isNaN(ts.getTime())
+      ? entry.created_at
+      : `${ts.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })} at ${ts.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}`;
+    const titleLine = entry.title?.trim()
+      ? `Title: ${entry.title.trim()}\n`
+      : "";
+    return `--- Entry ${i + 1} of ${trimmed.length} — ${stamp}\n${titleLine}${entry.content}`;
+  });
+  return [
+    "The user shared the following journal entries with you for this session. These are their own words, written outside of a coaching session — treat them as raw material the user has chosen to bring forward, not as facts about them. Each entry is bounded by --- markers below. Newlines inside an entry are part of the entry's structure.",
+    "",
+    "Journal entries shared today:",
+    "",
+    blocks.join("\n\n"),
+  ].join("\n");
+}
+
 function buildWelcomeInjectionOpener(welcomeText: string): string {
   return [
     "For this turn ONLY — the user's first message of their first-ever coaching session — you MUST output the welcome message below.",
@@ -167,10 +211,18 @@ function buildWelcomeInjectionOpener(welcomeText: string): string {
 // the welcome lookup fails (unknown coach value, missing file,
 // etc.), we fall back to the normal opener so first sessions still
 // work — they just won't carry the curated welcome.
+//
+// `sharedJournalEntries` are entries the user explicitly chose to
+// bring into this session via the StartSessionMenu's journal-share
+// panel. They get appended as a separate developer message — see
+// formatSharedJournalMessage. Empty array (or undefined) means the
+// user skipped the share-step; the journal isn't mentioned in the
+// prompt at all in that case.
 export async function buildSessionStartInput(args: {
   userName: string;
   focus?: SessionFocus | null;
   isFirstSession?: boolean;
+  sharedJournalEntries?: JournalEntry[];
 }): Promise<SessionStartInput> {
   const ctx = await supabaseForUser();
   if (!ctx) throw new Error("buildSessionStartInput: no Clerk session");
@@ -260,6 +312,18 @@ export async function buildSessionStartInput(args: {
     messages.push({
       role: "developer",
       content: `Style calibration for this session:\n${styleSummary}`,
+    });
+  }
+
+  // Append shared journal entries as a separate developer message
+  // when the user picked at least one in the share-step. Skipped
+  // entirely when they skipped the share-step OR have no journal
+  // entries at all — keeps the prompt clean for the common case.
+  const sharedEntries = args.sharedJournalEntries ?? [];
+  if (sharedEntries.length > 0) {
+    messages.push({
+      role: "developer",
+      content: formatSharedJournalMessage(sharedEntries),
     });
   }
 

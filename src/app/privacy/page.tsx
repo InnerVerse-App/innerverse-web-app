@@ -24,6 +24,11 @@ export default function PrivacyPage() {
           </li>
           <li>Messages you write to the coach and the coach&apos;s responses</li>
           <li>
+            Journal entries you write (text or voice-transcribed). Entries are
+            private by default; the coach only sees an entry when you
+            explicitly choose to share it as part of a session
+          </li>
+          <li>
             Session-end analysis: summaries, breakthroughs, insights, and next
             steps generated from your sessions
           </li>
@@ -63,7 +68,9 @@ export default function PrivacyPage() {
             messages
           </li>
           <li>
-            OpenAI for generating coaching responses and session-end analysis
+            OpenAI for generating coaching responses, session-end analysis, and
+            voice-to-text transcription (used in voice sessions and when you
+            tap the mic to dictate a journal entry)
           </li>
           <li>Vercel for web hosting</li>
           <li>Sentry for error tracking</li>

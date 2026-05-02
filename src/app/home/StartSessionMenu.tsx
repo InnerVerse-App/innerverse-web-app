@@ -2,10 +2,12 @@
 
 import { useState, useTransition } from "react";
 
+import { JournalSharePanel } from "@/app/_components/JournalSharePanel";
 import { PendingDots } from "@/app/_components/PendingDots";
 import { ProgressBar } from "@/app/_components/ProgressBar";
 import { StartSessionModePicker } from "@/app/_components/StartSessionModePicker";
 import { startSession } from "@/app/sessions/actions";
+import type { JournalEntry } from "@/lib/journal";
 
 export type StartSessionGoal = {
   id: string;
@@ -15,28 +17,62 @@ export type StartSessionGoal = {
 
 type Props = {
   goals: StartSessionGoal[];
+  // All of the user's journal entries, newest first. The share-step
+  // panel only renders when this list is non-empty (skipping it when
+  // the user has nothing to share avoids asking a meaningless
+  // question). Pass an empty array to disable the share-step entirely.
+  journalEntries: JournalEntry[];
   buttonLabel: string;
 };
 
 type Focus = { kind: "goal"; id: string } | null;
-// "mode" is the new step that appears AFTER the user picks a focus —
-// they choose Type or Talk before the session is actually created.
-type Panel = "closed" | "options" | "goals" | "mode";
+// Panels:
+//   closed         — nothing shown, just the "Start session" button
+//   options        — pick "work on a goal" or "blank slate"
+//   goals          — pick a specific goal
+//   mode           — pick text or voice
+//   journal-share  — pick which journal entries to bring (only when
+//                    user has entries; flagged ones pre-selected)
+type Panel = "closed" | "options" | "goals" | "mode" | "journal-share";
 
-export function StartSessionMenu({ goals, buttonLabel }: Props) {
+export function StartSessionMenu({
+  goals,
+  journalEntries,
+  buttonLabel,
+}: Props) {
   const [panel, setPanel] = useState<Panel>("closed");
   const [pendingFocus, setPendingFocus] = useState<Focus>(null);
+  // Stash the picked mode so we can advance to journal-share before
+  // actually firing startSession. Cleared when starting over.
+  const [pendingMode, setPendingMode] = useState<"text" | "voice" | null>(
+    null,
+  );
   const [pending, startTransition] = useTransition();
 
-  // First step: user picked a focus. Don't fire startSession yet —
-  // stash the focus and advance to the mode picker.
   function pickFocus(focus: Focus) {
     setPendingFocus(focus);
     setPanel("mode");
   }
 
-  // Second step: mode chosen. Now actually start the session.
+  // Mode picked. If the user has any journal entries, advance to the
+  // share-step panel so they can choose what to bring. Otherwise
+  // create the session immediately.
   function confirmMode(mode: "text" | "voice") {
+    if (journalEntries.length > 0) {
+      setPendingMode(mode);
+      setPanel("journal-share");
+      return;
+    }
+    fireStartSession(mode, []);
+  }
+
+  // Final step — actually create the session. Called from confirmMode
+  // (when no journal entries exist) or from the journal-share panel's
+  // Continue / Skip buttons.
+  function fireStartSession(
+    mode: "text" | "voice",
+    sharedJournalIds: string[],
+  ) {
     startTransition(async () => {
       const fd = new FormData();
       if (pendingFocus) {
@@ -44,6 +80,9 @@ export function StartSessionMenu({ goals, buttonLabel }: Props) {
         fd.set("focus_id", pendingFocus.id);
       }
       fd.set("focus_mode", mode);
+      for (const id of sharedJournalIds) {
+        fd.append("shared_journal_ids", id);
+      }
       await startSession(fd);
     });
   }
@@ -113,8 +152,7 @@ export function StartSessionMenu({ goals, buttonLabel }: Props) {
             </button>
           ))}
         </ListPanel>
-      ) : (
-        // panel === "mode" — final step, fires startSession on choice.
+      ) : panel === "mode" ? (
         <StartSessionModePicker
           onSelect={confirmMode}
           onBack={() => {
@@ -122,6 +160,21 @@ export function StartSessionMenu({ goals, buttonLabel }: Props) {
             if (pendingFocus?.kind === "goal") setPanel("goals");
             else setPanel("options");
             setPendingFocus(null);
+          }}
+        />
+      ) : (
+        // panel === "journal-share" — final step before session creation
+        // when the user has at least one journal entry.
+        <JournalSharePanel
+          entries={journalEntries}
+          onBack={() => setPanel("mode")}
+          onSkip={() => {
+            if (!pendingMode) return;
+            fireStartSession(pendingMode, []);
+          }}
+          onContinue={(selectedIds) => {
+            if (!pendingMode) return;
+            fireStartSession(pendingMode, selectedIds);
           }}
         />
       )}

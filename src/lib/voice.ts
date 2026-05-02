@@ -23,13 +23,12 @@ export const MAX_AUDIO_BYTES = 25 * 1024 * 1024;
 // the practical cap.
 export const MAX_TTS_CHARS = 4000;
 
-// Whisper transcription. Takes a File or Blob (already extracted
-// from FormData on the route side) and returns the transcribed
-// text. Failures are captured to Sentry and re-thrown so the route
-// handler can return an appropriate status code.
+// Whisper transcription. Failures captured to Sentry and re-thrown.
+// `sessionId` is an optional Sentry tag — omit for non-session
+// contexts (journal voice entries).
 export async function transcribeAudio(
   audioFile: File,
-  sessionId: string,
+  sessionId?: string,
 ): Promise<string> {
   if (audioFile.size === 0) {
     const err = new Error("transcribe: empty audio file");
