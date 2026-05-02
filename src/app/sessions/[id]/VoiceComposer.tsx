@@ -270,10 +270,35 @@ export function VoiceComposer({
     currentAudioRef.current = next;
     next.onended = playNextInQueue;
     next.onerror = () => {
+      Sentry.captureMessage("voice_tts_audio_element_error", {
+        level: "warning",
+        tags: { stage: "voice_tts_play", session_id: sessionId },
+        extra: {
+          mediaError: next.error
+            ? { code: next.error.code, message: next.error.message }
+            : null,
+        },
+      });
       setErrorMsg("Audio playback failed");
       setPhaseSafe("error");
     };
-    void next.play();
+    // audio.play() returns a Promise that REJECTS when the browser
+    // blocks playback (autoplay policy, user-gesture required, etc.).
+    // We were doing `void next.play()` which silently swallowed the
+    // rejection — leaving the queue stalled with no telemetry. Catch
+    // it, capture to Sentry, and skip to the next chunk so a single
+    // bad audio doesn't lock the queue forever.
+    next.play().catch((err) => {
+      Sentry.captureException(err, {
+        level: "warning",
+        tags: { stage: "voice_tts_play", session_id: sessionId },
+        extra: { errorName: err?.name ?? "unknown" },
+      });
+      // Move on rather than stalling. The chunk is lost (text already
+      // landed in the transcript), but subsequent chunks still play.
+      currentAudioRef.current = null;
+      playNextInQueue();
+    });
   }
 
   // Synthesize a single chunk and enqueue the resulting audio. If
