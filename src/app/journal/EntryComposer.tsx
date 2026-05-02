@@ -53,16 +53,36 @@ function insertAtCursor(
   return { next, cursor };
 }
 
+// 90s ceiling — Whisper rarely takes longer for sub-2-min audio.
+// Without this, a hung route or cold-start variance pins the mic
+// button on "Transcribing…" with no escape but a tab close.
+const TRANSCRIBE_TIMEOUT_MS = 90_000;
+
 async function uploadForTranscription(blob: Blob): Promise<string> {
   const fd = new FormData();
   fd.append("file", blob, "journal-recording.webm");
-  const res = await fetch("/api/journal/transcribe", {
-    method: "POST",
-    body: fd,
-  });
-  if (!res.ok) throw new Error("Transcription request failed");
-  const data = (await res.json()) as { text?: string };
-  return (data.text ?? "").trim();
+  const controller = new AbortController();
+  const timer = window.setTimeout(
+    () => controller.abort(),
+    TRANSCRIBE_TIMEOUT_MS,
+  );
+  try {
+    const res = await fetch("/api/journal/transcribe", {
+      method: "POST",
+      body: fd,
+      signal: controller.signal,
+    });
+    if (!res.ok) throw new Error("Transcription request failed");
+    const data = (await res.json()) as { text?: string };
+    return (data.text ?? "").trim();
+  } catch (err) {
+    if (err instanceof DOMException && err.name === "AbortError") {
+      throw new Error("Transcription timed out — try again or type instead.");
+    }
+    throw err;
+  } finally {
+    window.clearTimeout(timer);
+  }
 }
 
 export function EntryComposer(props: Props) {
