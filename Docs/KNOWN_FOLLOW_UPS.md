@@ -47,6 +47,17 @@ None yet. First audit will populate this section.
 
 <!-- Audits append below this line. Keep newest at bottom. -->
 
+## 2026-05-02 — Cross-session continuity feature (designed, on hold)
+
+Note: Conditional follow-up — designed but not yet triggered
+Severity: N/A (no current bug; designed feature on hold)
+Lens: operator
+Location: `Docs/cross-session-continuity-plan.md`
+Root cause: Another planning session proposed a heavyweight "synthesized user brief" feature for cross-session coaching coherence. Walking through it surfaced that most of the proposed system already exists in the current `formatClientProfile` injection (last summary, breakthroughs, goals, style, growth narrative). The actual gap — if there is one — is **unresolved threads** the user mentioned but didn't work. Could be a real coaching gap, but might just be a hypothetical concern.
+Blast radius: None today. Building speculatively for an unobserved problem risks (a) implementing the wrong thing, (b) introducing pattern-locking / loss-of-beginner's-mind failure modes, (c) wasting cycles on an imagined gap.
+Suggested fix: If a beta tester reports any of these — *"the coach feels like it forgets what we worked on,"* *"I have to re-explain context every session,"* *"my sessions don't feel connected,"* or surfaces an unresolved thread the coach failed to acknowledge — ship the lightest version detailed in `Docs/cross-session-continuity-plan.md`. Plan includes schema, synthesis-prompt extension, injection helper, master-prompt update, and structural defenses against pattern-locking. Designed to be implementable from the doc alone.
+Status: ON HOLD (pending real-user signal)
+
 ## 2026-04-21 — Bootstrap exception
 
 Note: Bootstrap exception
