@@ -16,7 +16,6 @@ import {
   type ActiveGoal,
   loadActiveGoalsWithLazySeed,
 } from "@/lib/goals";
-import { listEntries } from "@/lib/journal";
 import {
   getOnboardingState,
   isOnboardingComplete,
@@ -306,14 +305,8 @@ export default async function GoalsPage({
   const ctx = await supabaseForUser();
   if (!ctx) redirect("/sign-in");
 
-  // listEntries is independent of buildCardData but both depend on
-  // having activeGoals. Run goals first (lazy-seed may need to write),
-  // then overlap the two follow-up reads.
   const activeGoals = await loadActiveGoalsWithLazySeed(ctx);
-  const [cards, journalEntries] = await Promise.all([
-    buildCardData(ctx, activeGoals),
-    listEntries(ctx),
-  ]);
+  const cards = await buildCardData(ctx, activeGoals);
 
   return (
     <PageShell active="goals">
@@ -371,7 +364,7 @@ export default async function GoalsPage({
                     : "")
                 }
               >
-                <GoalCard goal={card} journalEntries={journalEntries} />
+                <GoalCard goal={card} />
               </li>
             );
           })}

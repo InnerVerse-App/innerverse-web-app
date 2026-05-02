@@ -3,7 +3,6 @@ import Link from "next/link";
 import { ProgressBar } from "@/app/_components/ProgressBar";
 import { formatDateCompact } from "@/lib/format";
 import type { ActiveGoal } from "@/lib/goals";
-import type { JournalEntry } from "@/lib/journal";
 import { progressForGoal, progressToOpacity } from "@/lib/progress";
 
 import { ArchiveButton } from "./ArchiveButton";
@@ -33,7 +32,6 @@ const GOAL_COLOR = "#4ADE80";
 
 type Props = {
   goal: GoalCardData;
-  journalEntries: JournalEntry[];
 };
 
 const STATUS_LABELS: Record<GoalCardData["status"], string | null> = {
@@ -48,7 +46,7 @@ const STATUS_PILL_CLASSES: Record<GoalCardData["status"], string> = {
   at_risk: "border-amber-400/40 bg-amber-400/10 text-amber-300",
 };
 
-export function GoalCard({ goal, journalEntries }: Props) {
+export function GoalCard({ goal }: Props) {
   const statusLabel = STATUS_LABELS[goal.status];
 
   return (
@@ -213,7 +211,7 @@ export function GoalCard({ goal, journalEntries }: Props) {
         </div>
       ) : null}
 
-      <GoalStartButton goalId={goal.id} journalEntries={journalEntries} />
+      <GoalStartButton goalId={goal.id} />
     </section>
   );
 }
