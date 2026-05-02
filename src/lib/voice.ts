@@ -58,6 +58,7 @@ export async function tryConsumeTranscriptionQuota(
   const { data, error: readErr } = await ctx.client
     .from("coaching_state")
     .select("transcription_count_today, transcription_count_date")
+    .eq("user_id", ctx.userId)
     .maybeSingle();
   if (readErr) throw readErr;
 
@@ -81,7 +82,8 @@ export async function tryConsumeTranscriptionQuota(
     .update({
       transcription_count_today: nextCount,
       transcription_count_date: todayIso,
-    });
+    })
+    .eq("user_id", ctx.userId);
   if (updateErr) throw updateErr;
 
   return { ok: true, count: nextCount, cap: TRANSCRIPTION_DAILY_CAP };
