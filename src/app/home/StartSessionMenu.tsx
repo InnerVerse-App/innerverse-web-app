@@ -175,10 +175,6 @@ export function StartSessionMenu({
             setPendingJournalIds([]);
             setPanel("options");
           }}
-          onSkip={() => {
-            setPendingJournalIds([]);
-            setPanel("mode");
-          }}
           onContinue={(selectedIds) => {
             setPendingJournalIds(selectedIds);
             setPanel("mode");

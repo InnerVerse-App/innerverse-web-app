@@ -5,23 +5,17 @@ import { useMemo, useState } from "react";
 import { formatDateTimeCompact } from "@/lib/format";
 import type { JournalEntry } from "@/lib/journal";
 
-// Share-step shown between mode pick and session creation when the
-// user has at least one journal entry. Flagged entries are
-// pre-selected. The parent gates rendering on its own pending state,
-// so this panel doesn't need its own loading mode.
+// Entry picker shown when the user picks "Bring something from my
+// journal" as a session focus. Flagged entries are pre-selected.
+// User must pick at least one entry to continue, or use Back to
+// return to the focus picker and choose differently.
 type Props = {
   entries: JournalEntry[];
   onContinue: (selectedIds: string[]) => void;
-  onSkip: () => void;
   onBack: () => void;
 };
 
-export function JournalSharePanel({
-  entries,
-  onContinue,
-  onSkip,
-  onBack,
-}: Props) {
+export function JournalSharePanel({ entries, onContinue, onBack }: Props) {
   const initialSelected = useMemo(
     () => new Set(entries.filter((e) => e.flagged_for_session).map((e) => e.id)),
     [entries],
@@ -40,8 +34,10 @@ export function JournalSharePanel({
   const flaggedCount = entries.filter((e) => e.flagged_for_session).length;
   const headerSubtext =
     flaggedCount > 0
-      ? `${flaggedCount} flagged ${flaggedCount === 1 ? "entry" : "entries"} pre-selected. Add or remove anything before continuing.`
-      : "Pick anything you want your coach to see for this session.";
+      ? `${flaggedCount} starred ${flaggedCount === 1 ? "entry" : "entries"} pre-selected. Add or remove anything before continuing.`
+      : "Pick at least one entry to bring into this session.";
+
+  const canContinue = selected.size > 0;
 
   return (
     <div className="flex flex-col gap-3">
@@ -54,7 +50,7 @@ export function JournalSharePanel({
           ← Back
         </button>
         <p className="text-xs uppercase tracking-wide text-neutral-500">
-          Bring anything from your journal?
+          Pick what to share
         </p>
         <span className="w-12" aria-hidden />
       </div>
@@ -91,8 +87,8 @@ export function JournalSharePanel({
                       {entry.flagged_for_session ? (
                         <span
                           className="text-xs text-amber-300"
-                          aria-label="This entry was flagged for this session"
-                          title="Flagged for next session"
+                          aria-label="This entry was starred for next session"
+                          title="Starred for next session"
                         >
                           ★
                         </span>
@@ -114,22 +110,16 @@ export function JournalSharePanel({
         </ul>
       </div>
 
-      <div className="mt-1 flex items-center justify-between gap-3">
-        <button
-          type="button"
-          onClick={onSkip}
-          className="rounded-full border border-white/10 bg-white/[0.04] px-5 py-2 text-sm text-neutral-300 transition hover:bg-white/10 hover:text-white"
-        >
-          Skip
-        </button>
+      <div className="mt-1 flex items-center justify-end gap-3">
         <button
           type="button"
           onClick={() => onContinue(Array.from(selected))}
-          className="rounded-full bg-brand-primary px-5 py-2 text-sm font-semibold text-brand-primary-contrast shadow-lg transition hover:bg-brand-primary/90 active:scale-[0.98]"
+          disabled={!canContinue}
+          className="rounded-full bg-brand-primary px-5 py-2 text-sm font-semibold text-brand-primary-contrast shadow-lg transition hover:bg-brand-primary/90 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
         >
-          {selected.size === 0
-            ? "Continue without sharing"
-            : `Continue with ${selected.size} ${selected.size === 1 ? "entry" : "entries"}`}
+          {canContinue
+            ? `Continue with ${selected.size} ${selected.size === 1 ? "entry" : "entries"}`
+            : "Pick an entry to continue"}
         </button>
       </div>
     </div>
