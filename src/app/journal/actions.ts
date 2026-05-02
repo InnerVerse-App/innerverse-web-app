@@ -11,9 +11,24 @@ import {
 import { supabaseForUser } from "@/lib/supabase";
 
 import {
+  exceedsCap,
   MAX_ENTRY_CONTENT_CHARS,
   MAX_ENTRY_TITLE_CHARS,
 } from "./limits";
+
+class OverCapError extends Error {
+  constructor(field: string, maxLength: number) {
+    super(`${field} exceeds the ${maxLength}-character cap.`);
+    this.name = "OverCapError";
+  }
+}
+
+class MissingFieldError extends Error {
+  constructor(field: string) {
+    super(`Missing or invalid ${field}.`);
+    this.name = "MissingFieldError";
+  }
+}
 
 async function gateAndContext() {
   const session = await auth();
@@ -28,17 +43,32 @@ async function gateAndContext() {
   return ctx;
 }
 
+// Reads a required entry id from the form. Throws when the field
+// is missing — surfaces both crafted requests AND our own
+// form-wiring bugs (Next.js + Sentry will capture the throw)
+// instead of silently redirecting and masking either.
 function readId(formData: FormData): string {
   const raw = formData.get("id");
-  return typeof raw === "string" ? raw : "";
+  if (typeof raw !== "string" || raw.length === 0) {
+    throw new MissingFieldError("entry id");
+  }
+  return raw;
 }
 
+// Trim + reject-over-cap. Returns null for empty/missing input; the
+// caller decides whether that's a reason to redirect (create) or
+// no-op (update). Throws OverCapError for over-cap input — the
+// textarea has maxLength so this only fires on dev-tools / scripted
+// submits that bypass the UI.
 function parseTitle(formData: FormData): string | null {
   const raw = formData.get("title");
   if (typeof raw !== "string") return null;
   const trimmed = raw.trim();
   if (trimmed.length === 0) return null;
-  return trimmed.slice(0, MAX_ENTRY_TITLE_CHARS);
+  if (exceedsCap(trimmed, MAX_ENTRY_TITLE_CHARS)) {
+    throw new OverCapError("title", MAX_ENTRY_TITLE_CHARS);
+  }
+  return trimmed;
 }
 
 function parseContent(formData: FormData): string {
@@ -46,7 +76,10 @@ function parseContent(formData: FormData): string {
   if (typeof raw !== "string") return "";
   const trimmed = raw.trim();
   if (trimmed.length === 0) return "";
-  return trimmed.slice(0, MAX_ENTRY_CONTENT_CHARS);
+  if (exceedsCap(trimmed, MAX_ENTRY_CONTENT_CHARS)) {
+    throw new OverCapError("content", MAX_ENTRY_CONTENT_CHARS);
+  }
+  return trimmed;
 }
 
 function parseBoolean(formData: FormData, key: string): boolean {
@@ -82,7 +115,6 @@ export async function updateEntry(formData: FormData): Promise<void> {
   const ctx = await gateAndContext();
 
   const id = readId(formData);
-  if (!id) redirect("/journal");
 
   const title = parseTitle(formData);
   const content = parseContent(formData);
@@ -108,7 +140,6 @@ export async function toggleFlag(formData: FormData): Promise<void> {
   const ctx = await gateAndContext();
 
   const id = readId(formData);
-  if (!id) redirect("/journal");
 
   const target = parseBoolean(formData, "flagged");
 
@@ -129,7 +160,6 @@ export async function deleteEntry(formData: FormData): Promise<void> {
   const ctx = await gateAndContext();
 
   const id = readId(formData);
-  if (!id) redirect("/journal");
 
   const { error } = await ctx.client
     .from("journal_entries")

@@ -136,12 +136,26 @@ export function useAudioRecorder({ transcribe }: Options) {
       releaseResources();
       resolver?.(blob);
     };
-    recorder.onerror = () => {
+    recorder.onerror = (event) => {
+      const eventErr = (event as unknown as { error?: Error }).error;
       const resolver = stopResolverRef.current;
       stopResolverRef.current = null;
       releaseResources();
       resolver?.(null);
-      setErrorMessage("Recording error.");
+      // Map known DOMException names to friendlier copy. Anything
+      // else falls through to the raw message so future-debug doesn't
+      // lose context.
+      let msg = "Recording error.";
+      if (eventErr?.name === "NotAllowedError") {
+        msg = "Microphone permission denied. Allow it in your browser settings to record voice entries.";
+      } else if (eventErr?.name === "NotFoundError") {
+        msg = "No microphone detected. Plug one in or check your device settings.";
+      } else if (eventErr?.name === "NotReadableError") {
+        msg = "Couldn't read from the microphone. Another app may be using it.";
+      } else if (eventErr?.message) {
+        msg = eventErr.message;
+      }
+      setErrorMessage(msg);
       setPhase("error");
     };
 

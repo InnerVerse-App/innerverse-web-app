@@ -69,6 +69,12 @@ export async function POST(
       { status: 400 },
     );
   }
+  if (file.type && !file.type.startsWith("audio/")) {
+    return NextResponse.json(
+      { error: "expected_audio_file" },
+      { status: 400 },
+    );
+  }
 
   let text: string;
   try {

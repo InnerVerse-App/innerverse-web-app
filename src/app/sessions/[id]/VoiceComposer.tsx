@@ -142,8 +142,10 @@ export function VoiceComposer({
           preSpeechPadMs: 250,
           // Wait this long after speech-end probability drops before
           // firing onSpeechEnd. Coaching needs longer pauses than
-          // chat — set generously.
-          redemptionMs: 800,
+          // chat — a user pausing mid-thought should not be cut off
+          // by the coach. Tunable; revisit if testers report either
+          // sluggishness (too long) or being interrupted (too short).
+          redemptionMs: 2000,
           onSpeechStart: () => {
             const prev = phaseRef.current;
             if (prev === "listening") {

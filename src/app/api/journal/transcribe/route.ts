@@ -39,6 +39,15 @@ export async function POST(req: Request): Promise<Response> {
       { status: 400 },
     );
   }
+  // Defense-in-depth: reject non-audio uploads up front. OpenAI
+  // would reject them too, but its error message would surface
+  // through to the client. Cleaner to fail fast.
+  if (file.type && !file.type.startsWith("audio/")) {
+    return NextResponse.json(
+      { error: "expected_audio_file" },
+      { status: 400 },
+    );
+  }
 
   let text: string;
   try {

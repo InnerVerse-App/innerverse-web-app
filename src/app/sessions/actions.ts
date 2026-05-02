@@ -212,27 +212,16 @@ export async function startSession(formData?: FormData): Promise<void> {
     ai_response_id: responseId,
   });
 
-  // Flag-clear is non-fatal: the session is created and the user
-  // sees the opener regardless. Worst case if this throws is the
-  // entry stays flagged and gets re-pre-selected at the next
-  // share-step (user can toggle off then).
+  // Flag-clear runs inside resolveSharedJournalEntries above (the
+  // user's act of submitting the share-step IS the signal). Just
+  // bust the client router caches so the cleared flags reflect on
+  // /home, /goals, /journal, /sessions when the user navigates back
+  // from the live chat.
   if (sharedJournalEntries.length > 0) {
-    try {
-      await clearFlagsOnEntries(
-        ctx,
-        sharedJournalEntries.map((e) => e.id),
-      );
-      // Bust client router caches that render journal entries with
-      // their flagged state — /home, /goals, /journal, /sessions —
-      // so the cleared flags are reflected when the user navigates
-      // back from the live chat.
-      revalidatePath("/home");
-      revalidatePath("/goals");
-      revalidatePath("/journal");
-      revalidatePath("/sessions");
-    } catch (err) {
-      captureSessionError(err, "journal_flag_clear", sessionRow.id);
-    }
+    revalidatePath("/home");
+    revalidatePath("/goals");
+    revalidatePath("/journal");
+    revalidatePath("/sessions");
   }
 
   // focus_mode (text|voice) chosen on the home/goal pickers — append
@@ -402,6 +391,16 @@ export async function submitSessionResponse(
 // share-step submit and now, or never owned by the caller). Returns
 // [] for any state where the form is missing the field, has no
 // values, or no IDs resolve.
+//
+// Side effect: clears flagged_for_session on every resolved entry —
+// the user's act of submitting the share-step IS the signal that
+// they wanted to bring this entry forward, regardless of whether
+// the OpenAI call later succeeds. This replaces the prior
+// post-session flag-clear, which was non-fatal but could fail
+// silently and leave entries pre-selected forever (audit F3).
+// Pre-resolve cleanup is self-healing: if a previous session's
+// post-clear failed and an entry stayed flagged, sharing it again
+// here clears it.
 async function resolveSharedJournalEntries(
   ctx: UserSupabase,
   formData: FormData | undefined,
@@ -415,7 +414,21 @@ async function resolveSharedJournalEntries(
     }
   }
   if (ids.length === 0) return [];
-  return getEntriesByIds(ctx, ids);
+  const entries = await getEntriesByIds(ctx, ids);
+  const flaggedIds = entries
+    .filter((e) => e.flagged_for_session)
+    .map((e) => e.id);
+  if (flaggedIds.length > 0) {
+    try {
+      await clearFlagsOnEntries(ctx, flaggedIds);
+    } catch (err) {
+      // Best-effort. If this throws (RLS blip, network), the entries
+      // stay flagged and will be re-pre-selected next time — the
+      // same self-healing path catches them. Never block the session.
+      captureSessionError(err, "journal_flag_clear");
+    }
+  }
+  return entries;
 }
 
 // Validates the focus form fields against the caller's own rows so a

@@ -9,13 +9,18 @@ import {
   ttsVoiceForCoach,
 } from "@/lib/openai";
 
-// Maximum audio file size we'll accept on the transcribe endpoint.
-// 25 MB matches OpenAI's Whisper API limit. A typical 30-second
-// coaching utterance at 16 kHz mono is well under 1 MB, so this is
-// generous headroom — if a request exceeds it the user is doing
-// something pathological (a 30-minute monologue) and we want to
-// reject before hitting the upstream API.
-export const MAX_AUDIO_BYTES = 25 * 1024 * 1024;
+// Maximum audio file size accepted by Whisper itself. Kept here as
+// a documented upper bound; the route-level cap below is what we
+// actually enforce.
+export const WHISPER_MAX_AUDIO_BYTES = 25 * 1024 * 1024;
+
+// App-level cap: 5 MB. Real audio sizes for our use cases are far
+// below this — a 2-minute journal recording at standard browser
+// voice quality is ~1 MB; coaching-session utterances are typically
+// 30 seconds or less and weigh tens of kilobytes. 5 MB gives 5×
+// headroom over realistic max usage and bounds the per-call Whisper
+// cost an attacker (or a runaway client bug) can drive.
+export const MAX_AUDIO_BYTES = 5 * 1024 * 1024;
 
 // Cap the text length we'll synthesize per request. OpenAI TTS
 // supports up to 4096 chars; coaching responses are usually 100-500
