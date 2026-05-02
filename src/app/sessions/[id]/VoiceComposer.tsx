@@ -288,17 +288,199 @@ export function VoiceComposer({
     // rejection — leaving the queue stalled with no telemetry. Catch
     // it, capture to Sentry, and skip to the next chunk so a single
     // bad audio doesn't lock the queue forever.
-    next.play().catch((err) => {
+    next.play()
+      .then(() => {
+        Sentry.captureMessage("voice_tts_play_resolved", {
+          level: "info",
+          tags: { stage: "voice_tts_play", session_id: sessionId },
+          extra: snapshotAudio(next),
+        });
+        window.setTimeout(() => {
+          if (currentAudioRef.current === next) {
+            Sentry.captureMessage("voice_tts_play_500ms", {
+              level: "info",
+              tags: { stage: "voice_tts_play", session_id: sessionId },
+              extra: snapshotAudio(next),
+            });
+          }
+        }, 500);
+      })
+      .catch((err) => {
+        Sentry.captureException(err, {
+          level: "warning",
+          tags: { stage: "voice_tts_play", session_id: sessionId },
+          extra: {
+            errorName: err?.name ?? "unknown",
+            ...snapshotAudio(next),
+          },
+        });
+        // Move on rather than stalling. The chunk is lost (text already
+        // landed in the transcript), but subsequent chunks still play.
+        currentAudioRef.current = null;
+        playNextInQueue();
+      });
+  }
+
+  // Helper for diagnostic Sentry payloads. Pulls the audio element
+  // state we care about for "did it actually play?" debugging.
+  function snapshotAudio(a: HTMLAudioElement) {
+    return {
+      duration: a.duration,
+      currentTime: a.currentTime,
+      paused: a.paused,
+      muted: a.muted,
+      volume: a.volume,
+      readyState: a.readyState,
+      networkState: a.networkState,
+      ended: a.ended,
+      error: a.error
+        ? { code: a.error.code, message: a.error.message }
+        : null,
+    };
+  }
+
+  // Diagnostic: play a short test phrase via the SAME HTML5 <audio>
+  // primitive the live flow uses. If this is silent on the user's
+  // device, the bug is in the audio primitive itself, not the
+  // streaming/queue logic. Removable once the TTS dropout is fixed.
+  async function testPlayHtml5(): Promise<void> {
+    Sentry.addBreadcrumb({
+      category: "voice_test",
+      message: "html5_start",
+    });
+    try {
+      const res = await fetch(`/api/sessions/${sessionId}/speak`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: "Test one two three." }),
+      });
+      Sentry.addBreadcrumb({
+        category: "voice_test",
+        message: `html5_fetch ${res.status}`,
+      });
+      if (!res.ok) return;
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const audio = new Audio(url);
+      audio.onended = () => {
+        Sentry.captureMessage("voice_test_html5_ended", {
+          level: "info",
+          tags: { stage: "voice_test_html5", session_id: sessionId },
+          extra: snapshotAudio(audio),
+        });
+        URL.revokeObjectURL(url);
+      };
+      audio.onerror = () => {
+        Sentry.captureMessage("voice_test_html5_error", {
+          level: "warning",
+          tags: { stage: "voice_test_html5", session_id: sessionId },
+          extra: snapshotAudio(audio),
+        });
+        URL.revokeObjectURL(url);
+      };
+      try {
+        await audio.play();
+        Sentry.captureMessage("voice_test_html5_play_resolved", {
+          level: "info",
+          tags: { stage: "voice_test_html5", session_id: sessionId },
+          extra: snapshotAudio(audio),
+        });
+        window.setTimeout(() => {
+          Sentry.captureMessage("voice_test_html5_500ms", {
+            level: "info",
+            tags: { stage: "voice_test_html5", session_id: sessionId },
+            extra: snapshotAudio(audio),
+          });
+        }, 500);
+      } catch (err) {
+        Sentry.captureException(err, {
+          level: "warning",
+          tags: { stage: "voice_test_html5_play", session_id: sessionId },
+          extra: {
+            errorName: (err as Error)?.name ?? "unknown",
+            ...snapshotAudio(audio),
+          },
+        });
+      }
+    } catch (err) {
       Sentry.captureException(err, {
         level: "warning",
-        tags: { stage: "voice_tts_play", session_id: sessionId },
-        extra: { errorName: err?.name ?? "unknown" },
+        tags: { stage: "voice_test_html5_fetch", session_id: sessionId },
       });
-      // Move on rather than stalling. The chunk is lost (text already
-      // landed in the transcript), but subsequent chunks still play.
-      currentAudioRef.current = null;
-      playNextInQueue();
+    }
+  }
+
+  // Diagnostic: play the same test phrase via Web Audio API. iOS
+  // routes Web Audio through a different audio session category that
+  // bypasses the silent switch. If this plays when the HTML5 path
+  // doesn't, it confirms iOS-audio-session is the culprit and the
+  // streaming queue should switch to Web Audio. Removable once fixed.
+  async function testPlayWebAudio(): Promise<void> {
+    Sentry.addBreadcrumb({
+      category: "voice_test",
+      message: "webaudio_start",
     });
+    try {
+      const res = await fetch(`/api/sessions/${sessionId}/speak`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: "Test one two three." }),
+      });
+      Sentry.addBreadcrumb({
+        category: "voice_test",
+        message: `webaudio_fetch ${res.status}`,
+      });
+      if (!res.ok) return;
+      const bytes = await res.arrayBuffer();
+      const Ctor =
+        window.AudioContext ??
+        (window as unknown as { webkitAudioContext?: typeof AudioContext })
+          .webkitAudioContext;
+      if (!Ctor) {
+        Sentry.captureMessage("voice_test_webaudio_no_ctor", {
+          level: "warning",
+          tags: { stage: "voice_test_webaudio", session_id: sessionId },
+        });
+        return;
+      }
+      const ctx = new Ctor();
+      if (ctx.state === "suspended") {
+        await ctx.resume();
+      }
+      Sentry.addBreadcrumb({
+        category: "voice_test",
+        message: `webaudio_ctx ${ctx.state}`,
+      });
+      const audioBuffer = await ctx.decodeAudioData(bytes.slice(0));
+      const source = ctx.createBufferSource();
+      source.buffer = audioBuffer;
+      source.connect(ctx.destination);
+      source.onended = () => {
+        Sentry.captureMessage("voice_test_webaudio_ended", {
+          level: "info",
+          tags: { stage: "voice_test_webaudio", session_id: sessionId },
+          extra: { duration: audioBuffer.duration, ctxState: ctx.state },
+        });
+      };
+      source.start();
+      Sentry.captureMessage("voice_test_webaudio_started", {
+        level: "info",
+        tags: { stage: "voice_test_webaudio", session_id: sessionId },
+        extra: {
+          duration: audioBuffer.duration,
+          sampleRate: audioBuffer.sampleRate,
+          ctxState: ctx.state,
+          ctxSampleRate: ctx.sampleRate,
+          ctxBaseLatency:
+            "baseLatency" in ctx ? (ctx as AudioContext).baseLatency : null,
+        },
+      });
+    } catch (err) {
+      Sentry.captureException(err, {
+        level: "warning",
+        tags: { stage: "voice_test_webaudio", session_id: sessionId },
+      });
+    }
   }
 
   // Synthesize a single chunk and enqueue the resulting audio. If
@@ -338,6 +520,11 @@ export function VoiceComposer({
         body: JSON.stringify({ text }),
       });
       if (!res.ok) {
+        Sentry.captureMessage("voice_welcome_speak_non200", {
+          level: "warning",
+          tags: { stage: "voice_welcome", session_id: sessionId },
+          extra: { status: res.status },
+        });
         finishToListening();
         return;
       }
@@ -346,10 +533,49 @@ export function VoiceComposer({
       audioUrlsRef.current.push(url);
       const audio = new Audio(url);
       currentAudioRef.current = audio;
-      audio.onended = finishToListening;
-      audio.onerror = finishToListening;
-      await audio.play();
-    } catch {
+      audio.onended = () => {
+        Sentry.captureMessage("voice_welcome_audio_ended", {
+          level: "info",
+          tags: { stage: "voice_welcome", session_id: sessionId },
+          extra: snapshotAudio(audio),
+        });
+        finishToListening();
+      };
+      audio.onerror = () => {
+        Sentry.captureMessage("voice_welcome_audio_error", {
+          level: "warning",
+          tags: { stage: "voice_welcome", session_id: sessionId },
+          extra: snapshotAudio(audio),
+        });
+        finishToListening();
+      };
+      try {
+        await audio.play();
+        Sentry.captureMessage("voice_welcome_play_resolved", {
+          level: "info",
+          tags: { stage: "voice_welcome", session_id: sessionId },
+          extra: snapshotAudio(audio),
+        });
+        window.setTimeout(() => {
+          Sentry.captureMessage("voice_welcome_play_500ms", {
+            level: "info",
+            tags: { stage: "voice_welcome", session_id: sessionId },
+            extra: snapshotAudio(audio),
+          });
+        }, 500);
+      } catch (err) {
+        Sentry.captureException(err, {
+          level: "warning",
+          tags: { stage: "voice_welcome_play", session_id: sessionId },
+          extra: { errorName: (err as Error)?.name ?? "unknown" },
+        });
+        finishToListening();
+      }
+    } catch (err) {
+      Sentry.captureException(err, {
+        level: "warning",
+        tags: { stage: "voice_welcome_fetch", session_id: sessionId },
+      });
       finishToListening();
     }
   }
@@ -602,6 +828,30 @@ export function VoiceComposer({
           Dismiss
         </button>
       ) : null}
+      <div className="mt-4 flex flex-col items-center gap-2 rounded-md border border-amber-500/30 bg-amber-500/5 px-4 py-3">
+        <p className="text-[11px] uppercase tracking-wide text-amber-200/80">
+          Diagnostic — TTS test buttons
+        </p>
+        <div className="flex flex-wrap items-center justify-center gap-2">
+          <button
+            type="button"
+            onClick={testPlayHtml5}
+            className="rounded-full border border-amber-400/40 bg-amber-400/10 px-3 py-1 text-xs text-amber-100 hover:bg-amber-400/20"
+          >
+            Test HTML5 audio
+          </button>
+          <button
+            type="button"
+            onClick={testPlayWebAudio}
+            className="rounded-full border border-emerald-400/40 bg-emerald-400/10 px-3 py-1 text-xs text-emerald-100 hover:bg-emerald-400/20"
+          >
+            Test Web Audio
+          </button>
+        </div>
+        <p className="text-center text-[11px] text-neutral-400">
+          Tap each. Tell me which one you hear.
+        </p>
+      </div>
     </div>
   );
 }
