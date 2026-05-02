@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 
 import { supabaseForUser } from "@/lib/supabase";
-import { transcribeAudio } from "@/lib/voice";
+import { transcribeAudio, tryConsumeTranscriptionQuota } from "@/lib/voice";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -73,6 +73,19 @@ export async function POST(
     return NextResponse.json(
       { error: "expected_audio_file" },
       { status: 400 },
+    );
+  }
+
+  const quota = await tryConsumeTranscriptionQuota(ctx);
+  if (!quota.ok) {
+    return NextResponse.json(
+      {
+        error: "rate_limited",
+        message: `You've reached today's voice limit (${quota.cap}/day). Try again tomorrow or type instead.`,
+        count: quota.count,
+        cap: quota.cap,
+      },
+      { status: 429 },
     );
   }
 

@@ -72,7 +72,21 @@ async function uploadForTranscription(blob: Blob): Promise<string> {
       body: fd,
       signal: controller.signal,
     });
-    if (!res.ok) throw new Error("Transcription request failed");
+    if (!res.ok) {
+      // Surface the server's message for rate-limit cases so the
+      // user knows why they're seeing an error rather than a
+      // generic failure.
+      if (res.status === 429) {
+        const data = (await res.json().catch(() => null)) as
+          | { message?: string }
+          | null;
+        throw new Error(
+          data?.message ??
+            "You've reached today's voice limit. Try again tomorrow or type instead.",
+        );
+      }
+      throw new Error("Transcription request failed");
+    }
     const data = (await res.json()) as { text?: string };
     return (data.text ?? "").trim();
   } catch (err) {

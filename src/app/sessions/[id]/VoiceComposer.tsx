@@ -380,7 +380,18 @@ export function VoiceComposer({
         method: "POST",
         body: fd,
       });
-      if (!res.ok) throw new Error(`Transcription failed (${res.status})`);
+      if (!res.ok) {
+        if (res.status === 429) {
+          const body = (await res.json().catch(() => null)) as
+            | { message?: string }
+            | null;
+          throw new Error(
+            body?.message ??
+              "You've reached today's voice limit. Try again tomorrow or type instead.",
+          );
+        }
+        throw new Error(`Transcription failed (${res.status})`);
+      }
       const data = (await res.json()) as { text?: string };
       transcribed = (data.text ?? "").trim();
     } catch (err) {
