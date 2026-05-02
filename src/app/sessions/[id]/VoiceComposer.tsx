@@ -144,9 +144,11 @@ export function VoiceComposer({
           // Wait this long after speech-end probability drops before
           // firing onSpeechEnd. Coaching needs longer pauses than
           // chat — a user pausing mid-thought should not be cut off
-          // by the coach. Tunable; revisit if testers report either
-          // sluggishness (too long) or being interrupted (too short).
-          redemptionMs: 2000,
+          // by the coach. 4s is on the high end (you'll feel a beat
+          // of "is it listening?" before the coach takes over) but
+          // operator preferred this over interruption risk. Tunable;
+          // revisit if testers report sluggishness vs being cut off.
+          redemptionMs: 4000,
           onSpeechStart: () => {
             const prev = phaseRef.current;
             if (prev === "listening") {
