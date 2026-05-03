@@ -47,9 +47,9 @@ export const MODEL_TTS = "gpt-4o-mini-tts";
 //
 // Speed is 0.9 for Maya (calm, grounded) and 0.95 for the rest —
 // voice itself carries most of the personality, so speed is a small
-// accent rather than a big knob. Dante used to be 0.9 too but
-// testers found him too slow; bumped to 1.0 so the wise/measured
-// quality comes from the onyx voice itself, not from drag.
+// accent rather than a big knob. Dante used to be 0.9 then 1.0 but
+// still felt slow on testing — now 1.15. The onyx voice carries the
+// wise/measured quality on its own; speed doesn't need to drag.
 //
 // Fallback: any unknown coach_name (legacy data, future drift) falls
 // back to nova @ 0.95 — the original single-voice default.
@@ -64,7 +64,7 @@ const COACH_VOICE_MAP: Record<string, string> = {
 };
 
 const COACH_SPEED_MAP: Record<string, number> = {
-  dante: 1.0,
+  dante: 1.15,
   maya: 0.9,
 };
 
