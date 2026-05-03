@@ -45,9 +45,11 @@ export const MODEL_TTS = "gpt-4o-mini-tts";
 //   pierre  → fable   — British-accented male, fits "sophisticated"
 //   sigmund → echo    — smooth, even male, fits "analytical and deep"
 //
-// Speed is 0.9 for the deliberately contemplative archetypes (Maya,
-// Dante) and 0.95 for the rest — voice itself carries most of the
-// personality, so speed is a small accent rather than a big knob.
+// Speed is 0.9 for Maya (calm, grounded) and 0.95 for the rest —
+// voice itself carries most of the personality, so speed is a small
+// accent rather than a big knob. Dante used to be 0.9 too but
+// testers found him too slow; bumped to 1.0 so the wise/measured
+// quality comes from the onyx voice itself, not from drag.
 //
 // Fallback: any unknown coach_name (legacy data, future drift) falls
 // back to nova @ 0.95 — the original single-voice default.
@@ -62,7 +64,7 @@ const COACH_VOICE_MAP: Record<string, string> = {
 };
 
 const COACH_SPEED_MAP: Record<string, number> = {
-  dante: 0.9,
+  dante: 1.0,
   maya: 0.9,
 };
 
