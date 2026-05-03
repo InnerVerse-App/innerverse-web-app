@@ -14,7 +14,6 @@ export function Step5Coach({ initialCoach }: { initialCoach: string | null }) {
       step={5}
       title="Choose your coach"
       subtitle="Give your coach a name that resonates with you. Each name comes with its own personality style."
-      continueLabel="Complete Setup"
       canContinue={selected !== null}
       onContinue={() => saveStep5(selected ?? "")}
     >

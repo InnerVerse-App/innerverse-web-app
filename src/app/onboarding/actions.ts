@@ -85,8 +85,16 @@ export async function saveStep5(coach: string): Promise<ActionResult> {
   if (!COACH_VALUES.has(coach)) {
     return { ok: false, error: "Pick a coach name to continue." };
   }
+  await saveOnboardingStep({ coach_name: coach });
+  return { ok: true };
+}
+
+// Step 6 is the disclaimer acknowledgement. Tapping "I understand"
+// stamps completed_at — the existing isOnboardingComplete gate then
+// lets the user reach /home. No separate column tracks the
+// acknowledgement; finishing onboarding IS the acknowledgement.
+export async function saveStep6(): Promise<ActionResult> {
   await saveOnboardingStep({
-    coach_name: coach,
     completed_at: new Date().toISOString(),
   });
   revalidatePath("/");
