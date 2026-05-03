@@ -1,14 +1,12 @@
 "use server";
 
-import { redirect } from "next/navigation";
 import { auth, clerkClient } from "@clerk/nextjs/server";
 
 import { supabaseAdmin } from "@/lib/supabase";
 
-// Self-serve account deletion. Two things have to happen, in order:
-// (1) Clerk deletes the user record — invalidates their session
-//     immediately and stops them from signing back in. This is the
-//     authoritative "user is gone" event.
+// Self-serve account deletion. Two things happen server-side:
+// (1) Clerk deletes the user record — stops them from ever signing
+//     back in. This is the authoritative "user is gone" event.
 // (2) The public.users row is deleted, which cascades through every
 //     user-owned table (sessions, messages, breakthroughs, insights,
 //     goals, etc.) via ON DELETE CASCADE.
@@ -19,9 +17,27 @@ import { supabaseAdmin } from "@/lib/supabase";
 // "whenever the webhook eventually fires." If the inline delete
 // fails for any reason, the webhook is the authoritative cleanup
 // path — so the inline failure is logged but not thrown.
-export async function deleteAccount(formData: FormData): Promise<void> {
+//
+// Note: we deliberately DO NOT redirect or sign out here. Clerk's
+// session JWT is signed and cached client-side; deleting the user
+// on Clerk's side does NOT invalidate the JWT cookie immediately.
+// If we redirect to "/" right now, auth() still resolves to the
+// (now-deleted) userId for ~60s and bounces the user into
+// /onboarding because their row is gone. The client-side caller
+// needs to call useClerk().signOut() to clear the cookie before
+// navigating. This action returns void on success; the client
+// invokes signOut once it resolves.
+export type DeleteAccountResult =
+  | { ok: true }
+  | { ok: false; error: string };
+
+export async function deleteAccount(
+  formData: FormData,
+): Promise<DeleteAccountResult> {
   const session = await auth();
-  if (!session?.userId) redirect("/sign-in");
+  if (!session?.userId) {
+    return { ok: false, error: "You're not signed in." };
+  }
 
   // The form input is a "type DELETE to confirm" gate. The client
   // disables the submit button until it matches; we re-check
@@ -29,7 +45,7 @@ export async function deleteAccount(formData: FormData): Promise<void> {
   const raw = formData.get("confirmation");
   const confirmation = typeof raw === "string" ? raw.trim() : "";
   if (confirmation !== "DELETE") {
-    redirect("/settings");
+    return { ok: false, error: "Type DELETE to confirm." };
   }
 
   const userId = session.userId;
@@ -42,7 +58,10 @@ export async function deleteAccount(formData: FormData): Promise<void> {
       userId,
       error: err instanceof Error ? err.message : String(err),
     });
-    throw err;
+    return {
+      ok: false,
+      error: "Couldn't delete your account. Please try again.",
+    };
   }
 
   try {
@@ -63,7 +82,5 @@ export async function deleteAccount(formData: FormData): Promise<void> {
     );
   }
 
-  // Clerk has already invalidated the session. Splash is public so
-  // the redirect lands cleanly even with a now-stale cookie.
-  redirect("/");
+  return { ok: true };
 }

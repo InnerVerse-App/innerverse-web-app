@@ -1,26 +1,37 @@
 "use client";
 
-import { useState } from "react";
-import { useFormStatus } from "react-dom";
+import { useState, useTransition } from "react";
+import { useClerk } from "@clerk/nextjs";
 
 import { deleteAccount } from "./actions";
-
-function SubmitButton({ enabled }: { enabled: boolean }) {
-  const { pending } = useFormStatus();
-  return (
-    <button
-      type="submit"
-      disabled={!enabled || pending}
-      className="rounded-md bg-red-500 px-4 py-2 text-sm font-medium text-white transition hover:bg-red-600 disabled:cursor-not-allowed disabled:opacity-40"
-    >
-      {pending ? "Deleting…" : "Delete my account permanently"}
-    </button>
-  );
-}
 
 export function DeleteAccountSection() {
   const [expanded, setExpanded] = useState(false);
   const [confirmation, setConfirmation] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [pending, startTransition] = useTransition();
+  const { signOut } = useClerk();
+
+  function handleSubmit() {
+    if (confirmation !== "DELETE" || pending) return;
+    setError(null);
+    startTransition(async () => {
+      const fd = new FormData();
+      fd.set("confirmation", confirmation);
+      const result = await deleteAccount(fd);
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
+      // Clerk JWT cookies are still valid client-side until they
+      // expire; without an explicit signOut the next request to /
+      // would still resolve to the (now-deleted) userId, then bounce
+      // into /onboarding because the public.users row is gone. Hand
+      // the redirect to Clerk so it clears every session cookie
+      // before navigating.
+      await signOut({ redirectUrl: "/" });
+    });
+  }
 
   return (
     <section className="mt-6 rounded-xl border border-red-500/20 bg-red-500/[0.03] p-5">
@@ -39,7 +50,7 @@ export function DeleteAccountSection() {
           Delete my account
         </button>
       ) : (
-        <form action={deleteAccount} className="mt-4 space-y-3">
+        <div className="mt-4 space-y-3">
           <p className="text-sm text-neutral-300">
             Type <span className="font-mono text-white">DELETE</span> to
             confirm:
@@ -54,20 +65,34 @@ export function DeleteAccountSection() {
             autoComplete="off"
             spellCheck={false}
           />
+          {error ? (
+            <p className="text-sm text-red-400" role="alert">
+              {error}
+            </p>
+          ) : null}
           <div className="flex gap-3">
             <button
               type="button"
               onClick={() => {
                 setExpanded(false);
                 setConfirmation("");
+                setError(null);
               }}
-              className="rounded-md border border-white/10 px-4 py-2 text-sm text-neutral-300 transition hover:bg-white/5"
+              disabled={pending}
+              className="rounded-md border border-white/10 px-4 py-2 text-sm text-neutral-300 transition hover:bg-white/5 disabled:opacity-50"
             >
               Cancel
             </button>
-            <SubmitButton enabled={confirmation === "DELETE"} />
+            <button
+              type="button"
+              onClick={handleSubmit}
+              disabled={confirmation !== "DELETE" || pending}
+              className="rounded-md bg-red-500 px-4 py-2 text-sm font-medium text-white transition hover:bg-red-600 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              {pending ? "Deleting…" : "Delete my account permanently"}
+            </button>
           </div>
-        </form>
+        </div>
       )}
     </section>
   );
