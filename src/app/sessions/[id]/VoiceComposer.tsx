@@ -59,6 +59,11 @@ type Props = {
   // (network, /speak error, audio playback issue) we fall through
   // to listening — the message stays visible on screen.
   speakOnMount: string | null;
+  // Lets the voice composer hand control back to the text composer.
+  // Surfaced on the error UI so a user whose mic, network, or audio
+  // setup fails has an in-place recovery path instead of having to
+  // hunt for the global "Type instead" toggle.
+  onSwitchToText: () => void;
 };
 
 // CDN paths for the VAD model + ONNX runtime WASM. Avoids needing to
@@ -85,6 +90,7 @@ export function VoiceComposer({
   sendChat,
   abortChat,
   speakOnMount,
+  onSwitchToText,
 }: Props) {
   // Pin the speakOnMount value taken at mount in a ref so re-renders
   // (state updates, etc.) can't re-trigger the welcome playback.
@@ -391,171 +397,6 @@ export function VoiceComposer({
       });
       currentSourceRef.current = null;
       playNextInQueue();
-    }
-  }
-
-  // Helper for diagnostic Sentry payloads. Pulls the audio element
-  // state we care about for "did it actually play?" debugging. Only
-  // used by the HTML5 test button now that the live flow runs on
-  // Web Audio.
-  function snapshotAudio(a: HTMLAudioElement) {
-    return {
-      duration: a.duration,
-      currentTime: a.currentTime,
-      paused: a.paused,
-      muted: a.muted,
-      volume: a.volume,
-      readyState: a.readyState,
-      networkState: a.networkState,
-      ended: a.ended,
-      error: a.error
-        ? { code: a.error.code, message: a.error.message }
-        : null,
-    };
-  }
-
-  // Diagnostic: play a short test phrase via the SAME HTML5 <audio>
-  // primitive the live flow USED TO use. After the Web Audio refactor
-  // this lets us cross-check "is HTML5 audio working in this context"
-  // against the live Web Audio path. Removable once we're confident
-  // the dropout stays fixed.
-  async function testPlayHtml5(): Promise<void> {
-    Sentry.addBreadcrumb({
-      category: "voice_test",
-      message: "html5_start",
-    });
-    try {
-      const res = await fetch(`/api/sessions/${sessionId}/speak`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: "Test one two three." }),
-      });
-      Sentry.addBreadcrumb({
-        category: "voice_test",
-        message: `html5_fetch ${res.status}`,
-      });
-      if (!res.ok) return;
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const audio = new Audio(url);
-      audio.onended = () => {
-        Sentry.captureMessage("voice_test_html5_ended", {
-          level: "info",
-          tags: { stage: "voice_test_html5", session_id: sessionId },
-          extra: snapshotAudio(audio),
-        });
-        URL.revokeObjectURL(url);
-      };
-      audio.onerror = () => {
-        Sentry.captureMessage("voice_test_html5_error", {
-          level: "warning",
-          tags: { stage: "voice_test_html5", session_id: sessionId },
-          extra: snapshotAudio(audio),
-        });
-        URL.revokeObjectURL(url);
-      };
-      try {
-        await audio.play();
-        Sentry.captureMessage("voice_test_html5_play_resolved", {
-          level: "info",
-          tags: { stage: "voice_test_html5", session_id: sessionId },
-          extra: snapshotAudio(audio),
-        });
-        window.setTimeout(() => {
-          Sentry.captureMessage("voice_test_html5_500ms", {
-            level: "info",
-            tags: { stage: "voice_test_html5", session_id: sessionId },
-            extra: snapshotAudio(audio),
-          });
-        }, 500);
-      } catch (err) {
-        Sentry.captureException(err, {
-          level: "warning",
-          tags: { stage: "voice_test_html5_play", session_id: sessionId },
-          extra: {
-            errorName: (err as Error)?.name ?? "unknown",
-            ...snapshotAudio(audio),
-          },
-        });
-      }
-    } catch (err) {
-      Sentry.captureException(err, {
-        level: "warning",
-        tags: { stage: "voice_test_html5_fetch", session_id: sessionId },
-      });
-    }
-  }
-
-  // Diagnostic: play the same test phrase via Web Audio API. iOS
-  // routes Web Audio through a different audio session category that
-  // bypasses the silent switch. If this plays when the HTML5 path
-  // doesn't, it confirms iOS-audio-session is the culprit and the
-  // streaming queue should switch to Web Audio. Removable once fixed.
-  async function testPlayWebAudio(): Promise<void> {
-    Sentry.addBreadcrumb({
-      category: "voice_test",
-      message: "webaudio_start",
-    });
-    try {
-      const res = await fetch(`/api/sessions/${sessionId}/speak`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: "Test one two three." }),
-      });
-      Sentry.addBreadcrumb({
-        category: "voice_test",
-        message: `webaudio_fetch ${res.status}`,
-      });
-      if (!res.ok) return;
-      const bytes = await res.arrayBuffer();
-      const Ctor =
-        window.AudioContext ??
-        (window as unknown as { webkitAudioContext?: typeof AudioContext })
-          .webkitAudioContext;
-      if (!Ctor) {
-        Sentry.captureMessage("voice_test_webaudio_no_ctor", {
-          level: "warning",
-          tags: { stage: "voice_test_webaudio", session_id: sessionId },
-        });
-        return;
-      }
-      const ctx = new Ctor();
-      if (ctx.state === "suspended") {
-        await ctx.resume();
-      }
-      Sentry.addBreadcrumb({
-        category: "voice_test",
-        message: `webaudio_ctx ${ctx.state}`,
-      });
-      const audioBuffer = await ctx.decodeAudioData(bytes.slice(0));
-      const source = ctx.createBufferSource();
-      source.buffer = audioBuffer;
-      source.connect(ctx.destination);
-      source.onended = () => {
-        Sentry.captureMessage("voice_test_webaudio_ended", {
-          level: "info",
-          tags: { stage: "voice_test_webaudio", session_id: sessionId },
-          extra: { duration: audioBuffer.duration, ctxState: ctx.state },
-        });
-      };
-      source.start();
-      Sentry.captureMessage("voice_test_webaudio_started", {
-        level: "info",
-        tags: { stage: "voice_test_webaudio", session_id: sessionId },
-        extra: {
-          duration: audioBuffer.duration,
-          sampleRate: audioBuffer.sampleRate,
-          ctxState: ctx.state,
-          ctxSampleRate: ctx.sampleRate,
-          ctxBaseLatency:
-            "baseLatency" in ctx ? (ctx as AudioContext).baseLatency : null,
-        },
-      });
-    } catch (err) {
-      Sentry.captureException(err, {
-        level: "warning",
-        tags: { stage: "voice_test_webaudio", session_id: sessionId },
-      });
     }
   }
 
@@ -912,38 +753,23 @@ export function VoiceComposer({
       </button>
       <p className="text-center text-sm text-neutral-300">{statusText}</p>
       {phase === "error" ? (
-        <button
-          type="button"
-          onClick={dismissError}
-          className="text-xs text-neutral-400 underline-offset-4 hover:text-white hover:underline"
-        >
-          Dismiss
-        </button>
-      ) : null}
-      <div className="mt-4 flex flex-col items-center gap-2 rounded-md border border-amber-500/30 bg-amber-500/5 px-4 py-3">
-        <p className="text-[11px] uppercase tracking-wide text-amber-200/80">
-          Diagnostic — TTS test buttons
-        </p>
-        <div className="flex flex-wrap items-center justify-center gap-2">
+        <div className="flex flex-wrap items-center justify-center gap-3">
           <button
             type="button"
-            onClick={testPlayHtml5}
-            className="rounded-full border border-amber-400/40 bg-amber-400/10 px-3 py-1 text-xs text-amber-100 hover:bg-amber-400/20"
+            onClick={onSwitchToText}
+            className="rounded-full bg-brand-primary px-4 py-1.5 text-xs font-medium text-brand-primary-contrast transition hover:bg-brand-primary/90"
           >
-            Test HTML5 audio
+            Type instead
           </button>
           <button
             type="button"
-            onClick={testPlayWebAudio}
-            className="rounded-full border border-emerald-400/40 bg-emerald-400/10 px-3 py-1 text-xs text-emerald-100 hover:bg-emerald-400/20"
+            onClick={dismissError}
+            className="text-xs text-neutral-400 underline-offset-4 hover:text-white hover:underline"
           >
-            Test Web Audio
+            Try again
           </button>
         </div>
-        <p className="text-center text-[11px] text-neutral-400">
-          Tap each. Tell me which one you hear.
-        </p>
-      </div>
+      ) : null}
     </div>
   );
 }

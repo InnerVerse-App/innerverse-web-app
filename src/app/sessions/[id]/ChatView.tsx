@@ -363,6 +363,7 @@ export function ChatView({
                   ? messages[0].content
                   : null
               }
+              onSwitchToText={() => setVoiceMode(false)}
             />
           ) : (
             <form onSubmit={send}>
