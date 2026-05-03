@@ -285,6 +285,6 @@ export const COACHES: CoachOption[] = [
   { value: "sigmund", label: "Sigmund", description: "Analytical and deep, helps you understand yourself better" },
 ];
 
-export const TOTAL_STEPS = 5;
+export const TOTAL_STEPS = 6;
 export const COACH_NOTES_MAX = 500;
 export const TOP_GOALS_INPUT_MAX = 500;
