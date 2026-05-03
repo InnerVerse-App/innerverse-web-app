@@ -119,6 +119,14 @@ export function VoiceComposer({
   const audioBufferQueueRef = useRef<AudioBuffer[]>([]);
   const currentSourceRef = useRef<AudioBufferSourceNode | null>(null);
   const chatCompleteRef = useRef(false);
+  // Counts in-flight synthesizeAndQueue calls. Without this, the
+  // chat stream can finish before any /speak fetch completes — the
+  // queue is empty and currentSource is null, so the early-finish
+  // check in handleSpeechEnd transitions back to listening, and
+  // every synthesized chunk gets dropped by the late-arrival guard
+  // when its decode finally lands. We only transition once the
+  // counter is zero.
+  const pendingSynthRef = useRef(0);
   // Tracks the latest phase synchronously so VAD callbacks (which
   // close over an old setState reading) can dispatch on current
   // truth instead of stale state. React state alone is async-safe
@@ -315,17 +323,32 @@ export function VoiceComposer({
     audioBufferQueueRef.current = [];
   }
 
+  // Single chokepoint for "we're done speaking, go back to listening."
+  // Called from every path that could be the last one to fire:
+  // playNextInQueue when the queue empties, synthesizeAndQueue's
+  // finally block when the last in-flight decode lands, and
+  // handleSpeechEnd right after sendChat returns. All conditions must
+  // hold — chat is done, no synthesis still running, no audio playing
+  // or queued, and we're in a phase that should be transitioning back.
+  function maybeFinishToListening(): void {
+    if (!chatCompleteRef.current) return;
+    if (pendingSynthRef.current > 0) return;
+    if (currentSourceRef.current) return;
+    if (audioBufferQueueRef.current.length > 0) return;
+    const p = phaseRef.current;
+    if (p !== "thinking" && p !== "speaking") return;
+    vadRef.current?.start();
+    setPhaseSafe("listening");
+  }
+
   // Play the next decoded buffer in the queue. If the queue is
-  // empty, transition back to listening only when the chat stream
-  // is also done — otherwise wait for the next enqueue.
+  // empty, defer to maybeFinishToListening — it knows about pending
+  // synth calls that haven't decoded yet.
   function playNextInQueue(): void {
     const next = audioBufferQueueRef.current.shift();
     if (!next) {
       currentSourceRef.current = null;
-      if (chatCompleteRef.current) {
-        vadRef.current?.start();
-        setPhaseSafe("listening");
-      }
+      maybeFinishToListening();
       return;
     }
     const ctx = ensureAudioContext();
@@ -635,6 +658,7 @@ export function VoiceComposer({
   }
 
   async function synthesizeAndQueue(chunk: string): Promise<void> {
+    pendingSynthRef.current++;
     try {
       const res = await fetch(`/api/sessions/${sessionId}/speak`, {
         method: "POST",
@@ -688,6 +712,12 @@ export function VoiceComposer({
         level: "warning",
         tags: { stage: "voice_tts_fetch", session_id: sessionId },
       });
+    } finally {
+      pendingSynthRef.current--;
+      // If this was the last in-flight decode and chat already
+      // finished, the early-finish check in handleSpeechEnd was
+      // forced to wait on us — it's safe to transition now.
+      maybeFinishToListening();
     }
   }
 
@@ -764,20 +794,17 @@ export function VoiceComposer({
       return;
     }
 
-    // Chat stream is done. Mark the flag so the audio queue's
-    // last-item completion knows it's safe to transition back to
-    // listening. If no chunks ever queued (empty response, error
-    // partway through), transition immediately.
+    // Chat stream is done. Mark the flag so the audio-queue path
+    // and the synth-finished path know it's safe to transition back
+    // to listening once they've fully drained. maybeFinishToListening
+    // handles every condition (queue empty, no current source, no
+    // pending synth) so it's safe to call from any path.
     chatCompleteRef.current = true;
-    if (!currentSourceRef.current && audioBufferQueueRef.current.length === 0) {
-      vadRef.current?.start();
-      setPhaseSafe("listening");
-      return;
-    }
+    maybeFinishToListening();
 
     if (!responseText.trim()) {
-      // Defensive: chat returned empty. Already handled above by the
-      // queue check, but keep this for clarity.
+      // Defensive: chat returned empty. Drop any half-baked playback
+      // so we don't leave dangling audio when there's nothing to say.
       stopAndClearPlayback();
       vadRef.current?.start();
       setPhaseSafe("listening");
