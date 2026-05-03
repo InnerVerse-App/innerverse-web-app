@@ -191,18 +191,26 @@ export function VoiceComposer({
             const prev = phaseRef.current;
             if (prev === "listening") {
               setPhaseSafe("recording");
-            } else if (prev === "speaking" || prev === "thinking") {
-              // INTERRUPTION: user spoke over the coach. Abort any
-              // in-flight chat stream, dump the audio queue, and
-              // start capturing the new turn. Browser echo
-              // cancellation (configured via getUserMedia in the
-              // VAD library) handles the loopback case where the
-              // coach's playback would otherwise self-trigger VAD.
+            } else if (prev === "thinking") {
+              // INTERRUPTION during thinking: coach is still
+              // generating but no audio is playing yet, so VAD speech
+              // here is unambiguously the user. Abort the chat
+              // stream and start capturing the new turn.
+              //
+              // We DON'T interrupt during "speaking" anymore — VAD
+              // is paused while the coach is speaking (see the
+              // playback handlers below). Web Audio output bypasses
+              // iOS's getUserMedia echo cancellation, so a running
+              // VAD picks up the coach's own voice and false-fires
+              // an interruption. Pausing VAD during speaking is
+              // simpler and matches the operator's preference (no
+              // interruption mid-coach-response).
               interruptCoach();
               setPhaseSafe("recording");
             }
-            // transcribing / paused / loading / error / recording:
-            // ignore stray events.
+            // speaking / transcribing / paused / loading / error /
+            // recording: ignore stray events. (VAD shouldn't fire
+            // during speaking since we pause it, but guard anyway.)
           },
           onSpeechEnd: (audio) => {
             // Only process speech that ended while we were
@@ -665,6 +673,11 @@ export function VoiceComposer({
       if (!currentSourceRef.current) {
         if (phaseRef.current !== "speaking") {
           setPhaseSafe("speaking");
+          // Pause VAD before any audio plays. Web Audio output
+          // isn't filtered by getUserMedia's echo cancellation on
+          // iOS, so a running VAD would treat the coach's own voice
+          // as user speech and self-interrupt mid-response.
+          void vadRef.current?.pause();
         }
         playNextInQueue();
       }
