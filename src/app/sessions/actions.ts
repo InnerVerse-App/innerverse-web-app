@@ -19,6 +19,7 @@ import {
 import {
   appendMessage,
   createSessionRow,
+  discardOpenNonSubstantiveSessions,
   endSession as endSessionWrite,
   ensureCoachingState,
 } from "@/lib/sessions";
@@ -203,6 +204,15 @@ export async function startSession(formData?: FormData): Promise<void> {
     captureSessionError(err, "session_start_openai");
     throw err;
   }
+
+  // Tapping Start is an explicit fresh-start signal — at most one
+  // open non-substantive session per user. Discard the predecessor
+  // before creating the new row so the user doesn't end up with
+  // multiple "Open session" entries cluttering /sessions. Run after
+  // the OpenAI call succeeds so a transient network failure doesn't
+  // delete the old session AND fail to create a new one — the user
+  // can retry without data loss.
+  await discardOpenNonSubstantiveSessions(ctx);
 
   const sessionRow = await createSessionRow(ctx);
   await appendMessage(ctx, {

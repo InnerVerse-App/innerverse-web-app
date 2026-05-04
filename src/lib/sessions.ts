@@ -173,6 +173,46 @@ export async function deleteSession(
   if (sessRes.error) throw sessRes.error;
 }
 
+// Caps the user at one open non-substantive session at a time.
+// Tapping Start is an explicit "fresh start" — if the user wanted
+// to resume an in-flight conversation, they'd navigate to /sessions
+// instead. Any open sub-substantive session for this user gets
+// deleted before the new one is created. Substantive open sessions
+// (>= SUBSTANTIVE_MESSAGE_THRESHOLD) are NOT touched here — the
+// 5min-idle cron sweep closes those, so they don't accumulate.
+export async function discardOpenNonSubstantiveSessions(
+  ctx: UserSupabase,
+): Promise<void> {
+  const { data: open, error } = await ctx.client
+    .from("sessions")
+    .select("id")
+    .is("ended_at", null);
+  if (error) {
+    // Best-effort cleanup; don't block the new-session flow on a
+    // scan failure. Worst case: an extra sub-substantive open
+    // session lingers until the cron's 24h delete window.
+    console.error("discardOpenNonSubstantiveSessions: scan failed", {
+      error: error.message,
+    });
+    return;
+  }
+  if (!open || open.length === 0) return;
+
+  for (const session of open) {
+    const messageCount = await countMessages(ctx, session.id);
+    if (messageCount >= SUBSTANTIVE_MESSAGE_THRESHOLD) continue;
+    try {
+      await deleteSession(ctx, session.id);
+    } catch (err) {
+      // Same posture: best-effort. Log + move on.
+      console.error("discardOpenNonSubstantiveSessions: delete failed", {
+        sessionId: session.id,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+}
+
 // End a session. Two outcomes depending on engagement:
 //   * Sub-substantive (empty OR < SUBSTANTIVE_MESSAGE_THRESHOLD
 //     messages) → DELETE the row + its messages. No analysis is
