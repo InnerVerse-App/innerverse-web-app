@@ -40,7 +40,8 @@ export type SessionErrorStage =
   | "voice_transcribe_input"
   | "voice_speak_openai"
   | "voice_speak_input"
-  | "journal_flag_clear";
+  | "journal_flag_clear"
+  | "session_rename";
 
 export function captureSessionError(
   err: unknown,

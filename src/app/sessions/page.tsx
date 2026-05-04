@@ -25,6 +25,7 @@ import {
   DEMO_SESSIONS_LIST,
   snippetFor,
 } from "../progress/demo-data";
+import { SessionTitleEditor } from "./SessionTitleEditor";
 
 export const dynamic = "force-dynamic";
 
@@ -34,6 +35,7 @@ type SessionListRow = {
   ended_at: string | null;
   summary: string | null;
   progress_summary_short: string | null;
+  user_title: string | null;
 };
 
 type ShiftBadge = { id: string; content: string };
@@ -71,7 +73,9 @@ async function loadSessionHistory(): Promise<SessionHistory> {
   const [sessionsRes, shiftsRes, breakthroughsRes, goalsRes] = await Promise.all([
     ctx.client
       .from("sessions")
-      .select("id, started_at, ended_at, summary, progress_summary_short")
+      .select(
+        "id, started_at, ended_at, summary, progress_summary_short, user_title",
+      )
       .order("started_at", { ascending: false }),
     ctx.client
       .from("insights")
@@ -224,8 +228,16 @@ export default async function SessionsListPage({
               const duration = s.ended_at
                 ? formatDuration(s.started_at, s.ended_at)
                 : null;
+              // Title fallback chain: user override -> LLM short ->
+              // longer LLM summary -> generic placeholder. The summary
+              // fallback covers the edge case where the analysis ran
+              // but the LLM omitted progress_summary_short — without
+              // it the UI shows "Summary pending" forever even though
+              // the analysis succeeded.
               const briefTitle =
+                s.user_title ??
                 s.progress_summary_short ??
+                s.summary ??
                 (s.ended_at
                   ? "Summary pending — analysis may still be running."
                   : "Open session — tap to continue.");
@@ -262,9 +274,13 @@ export default async function SessionsListPage({
                             {s.ended_at ? "Completed" : "In progress"}
                           </span>
                         </div>
-                        <p className="mt-2 line-clamp-2 text-base font-semibold leading-snug text-white">
-                          {briefTitle}
-                        </p>
+                        <div className="mt-2">
+                          <SessionTitleEditor
+                            sessionId={s.id}
+                            displayedTitle={briefTitle}
+                            initialUserTitle={s.user_title}
+                          />
+                        </div>
                         {s.ended_at ? (
                           <ProgressBar
                             percent={progressForSession(s.ended_at)}

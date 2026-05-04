@@ -62,6 +62,7 @@ type GrowthRow = {
   ended_at: string | null;
   progress_percent: number | null;
   progress_summary_short: string | null;
+  user_title: string | null;
   breakthroughs: Array<{ content: string | null; note: string | null }>;
 };
 
@@ -77,7 +78,11 @@ function buildGrowthItems(rows: GrowthRow[]): RecentGrowthItem[] {
     .filter((r): r is GrowthRow & { ended_at: string } => !!r.ended_at)
     .map((r) => {
       const firstBreakthrough = r.breakthroughs[0];
+      // user_title overrides everything; only fall through to the
+      // breakthrough headline / LLM short / generic placeholder when
+      // the user hasn't set their own title.
       const title =
+        r.user_title?.trim() ||
         firstBreakthrough?.content?.trim() ||
         r.progress_summary_short?.trim() ||
         "Growth session";
@@ -125,7 +130,7 @@ async function loadHomeData(): Promise<HomeData> {
     ctx.client
       .from("sessions")
       .select(
-        "id, ended_at, summary, progress_summary_short, coach_message",
+        "id, ended_at, summary, progress_summary_short, user_title, coach_message",
       )
       .not("ended_at", "is", null)
       .order("ended_at", { ascending: false })
@@ -145,7 +150,7 @@ async function loadHomeData(): Promise<HomeData> {
     ctx.client
       .from("sessions")
       .select(
-        "id, ended_at, progress_percent, progress_summary_short, breakthroughs(content, note)",
+        "id, ended_at, progress_percent, progress_summary_short, user_title, breakthroughs(content, note)",
       )
       .not("ended_at", "is", null)
       .not("progress_percent", "is", null)
