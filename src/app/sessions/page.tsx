@@ -231,13 +231,17 @@ export default async function SessionsListPage({
               // Title fallback chain: user override -> LLM short ->
               // longer LLM summary -> generic placeholder. The summary
               // fallback covers the edge case where the analysis ran
-              // but the LLM omitted progress_summary_short — without
-              // it the UI shows "Summary pending" forever even though
-              // the analysis succeeded.
+              // but the LLM omitted progress_summary_short. The
+              // "(too short for analysis)" sentinel is what
+              // sweep-stale-sessions backfilled onto sub-substantive
+              // ended sessions to stop the retry loop; we render it
+              // as a friendlier "Brief session" in the list.
               const briefTitle =
                 s.user_title ??
                 s.progress_summary_short ??
-                s.summary ??
+                (s.summary === "(too short for analysis)"
+                  ? "Brief session"
+                  : s.summary) ??
                 (s.ended_at
                   ? "Summary pending — analysis may still be running."
                   : "Open session — tap to continue.");

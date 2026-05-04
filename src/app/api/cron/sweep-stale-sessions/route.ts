@@ -114,15 +114,18 @@ async function findStaleSessions(): Promise<CandidateSession[]> {
 // `(ended_at set, summary null)` and no retry path. This sweep picks
 // them up and re-runs the RPC.
 //
-// Note: we deliberately do NOT filter on is_substantive=true here.
-// In testing we hit a bug where a 40-exchange session was tagged
-// is_substantive=false (root cause TBD — likely countMessages
-// returning a wrong count under some race), and the cron silently
-// skipped it. Filtering caused real conversations to never recover.
-// runSessionEndAnalysis itself short-circuits gracefully on empty
-// transcripts, so the worst case for a truly-short session is one
-// extra OpenAI call that produces a tiny analysis — vastly better
-// than silent skipping of real ones.
+// Filters on is_substantive = true. The original implementation did
+// NOT filter this, out of paranoia about a then-untraced bug where a
+// 40-exchange session got wrongly tagged false and the cron silently
+// skipped it. The cost of that paranoia was much larger: every
+// abandoned 1-9-message test session got retried daily, every retry
+// failed (the model can't produce a valid v7 session_end JSON for a
+// transcript that small), and the cron's "failed" counter climbed
+// to 44/45 in real prod data. With substantive=true we re-establish
+// the right invariant: the retry path only handles sessions that
+// SHOULD have produced an analysis but didn't. Short-session
+// abandons stay in the "(too short for analysis)" bucket — surfaced
+// in the UI as a brief-session label, not a stuck "Summary pending."
 async function findEndedUnanalyzedSessions(): Promise<RetrySession[]> {
   const admin = supabaseAdmin();
   const { data, error } = await admin
@@ -130,6 +133,7 @@ async function findEndedUnanalyzedSessions(): Promise<RetrySession[]> {
     .select("id, user_id")
     .not("ended_at", "is", null)
     .is("summary", null)
+    .eq("is_substantive", true)
     .limit(SWEEP_BATCH_LIMIT);
   if (error) throw error;
   return data ?? [];
