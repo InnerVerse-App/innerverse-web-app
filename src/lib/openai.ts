@@ -81,13 +81,14 @@ export function ttsSpeedForCoach(coachName: string | null): number {
   return COACH_SPEED_MAP[coachName.toLowerCase()] ?? DEFAULT_TTS_SPEED;
 }
 
-// Bumped from 2000 (v5) to 4000 (v6) to 6000 (v7) as the prompts
-// have grown. v7 adds per-theme rationales + per-sub-score
-// rationales, which roughly doubled the typical output size on the
-// pre-launch fixtures. 6000 covers every fixture so far. Bumping is
-// free: OpenAI charges per actual output token, not per cap-ceiling.
-// Session-start / Call 2 use far less anyway.
-export const MAX_OUTPUT_TOKENS = 6000;
+// Bumped from 2000 (v5) to 4000 (v6) to 6000 (v7) to 12000 as
+// real-user sessions started landing 100-369 messages long (testers
+// holding multi-hour conversations). 6000 truncated the analysis
+// silently for those, leaving the session stuck on "Summary pending"
+// in the UI. Bumping is free: OpenAI charges per actual output
+// token, not per cap-ceiling. Session-start / Call 2 use far less
+// anyway.
+export const MAX_OUTPUT_TOKENS = 12000;
 
 // OpenAI client timeout. Bumped 60_000 → 180_000 after v7 sessions
 // were timing out on substantive transcripts. v7's output is
