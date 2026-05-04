@@ -41,6 +41,18 @@ export const maxDuration = 60;
 // pile up but long enough that a user briefly switching tabs and
 // returning doesn't get their session closed.
 const STALE_IDLE_MINUTES = 5;
+// Resume window for non-substantive sessions. Most testers don't
+// click End — they just close the app. If a user has an in-flight
+// session under the substantive threshold (a real conversation
+// they got distracted from), we want them to come back and pick
+// it up rather than seeing it auto-closed and a fresh session
+// greeting them. Sub-substantive sessions stay OPEN until they
+// pass this idle window, then get deleted entirely (no value in
+// keeping a row around for an analysis that won't happen).
+// Substantive sessions still close + analyze at
+// STALE_IDLE_MINUTES — they have content worth surfacing now.
+const RESUME_WINDOW_HOURS = 24;
+const RESUME_WINDOW_MS = RESUME_WINDOW_HOURS * 60 * 60 * 1000;
 const SWEEP_BATCH_LIMIT = 50;
 
 type CandidateSession = {
@@ -48,6 +60,11 @@ type CandidateSession = {
   user_id: string;
   message_count: number;
   user_message_count: number;
+  // Newest message timestamp — used to compute idle duration so
+  // we can decide between "leave open for resume" and "past resume
+  // window, delete." Falls back to started_at for sessions with no
+  // messages at all (which the empty branch deletes anyway).
+  newest_at: string;
 };
 
 type RetrySession = { id: string; user_id: string };
@@ -101,6 +118,7 @@ async function findStaleSessions(): Promise<CandidateSession[]> {
       user_id: s.user_id,
       message_count: count ?? 0,
       user_message_count: userCount ?? 0,
+      newest_at: newestAt,
     });
   }
   return out;
@@ -190,13 +208,48 @@ export async function GET(req: Request): Promise<Response> {
 
     const isSubstantive = s.message_count >= SUBSTANTIVE_MESSAGE_THRESHOLD;
 
-    // Close the session under service_role. Same guard as the user
+    if (!isSubstantive) {
+      // Sub-substantive: leave open if the user might still come
+      // back, otherwise delete. The 24h window gives a tester who
+      // closed the app mid-conversation a chance to resume rather
+      // than losing their thread. Past 24h with no activity, the
+      // session is effectively abandoned and there's no analysis
+      // worth running on a sub-substantive transcript anyway.
+      const idleMs = Date.now() - new Date(s.newest_at).getTime();
+      if (idleMs < RESUME_WINDOW_MS) {
+        // Skip — keep the session open for resume.
+        continue;
+      }
+      // Past resume window — delete entirely.
+      const msgRes = await admin
+        .from("messages")
+        .delete()
+        .eq("session_id", s.id);
+      if (msgRes.error) {
+        results.failed += 1;
+        captureSessionError(msgRes.error, "cron_sweep_close", s.id);
+        continue;
+      }
+      const sessRes = await admin
+        .from("sessions")
+        .delete()
+        .eq("id", s.id);
+      if (sessRes.error) {
+        results.failed += 1;
+        captureSessionError(sessRes.error, "cron_sweep_close", s.id);
+        continue;
+      }
+      results.deleted += 1;
+      continue;
+    }
+
+    // Substantive: close + analyze. Same guard as the user
     // endSession path: no-op if already ended.
     const { error: closeErr } = await admin
       .from("sessions")
       .update({
         ended_at: new Date().toISOString(),
-        is_substantive: isSubstantive,
+        is_substantive: true,
       })
       .eq("id", s.id)
       .is("ended_at", null);
@@ -206,8 +259,6 @@ export async function GET(req: Request): Promise<Response> {
       continue;
     }
     results.closed += 1;
-
-    if (!isSubstantive) continue;
 
     try {
       // Reuse the user-facing analysis helper; it invokes the RPC,

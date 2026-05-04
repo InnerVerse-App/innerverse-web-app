@@ -18,6 +18,7 @@ import {
   LastSessionCard,
   type LastSession,
 } from "./LastSessionCard";
+import { OpenSessionCard } from "./OpenSessionCard";
 import type { StartSessionGoal } from "./StartSessionMenu";
 import { MessageFromCoachCard } from "./MessageFromCoachCard";
 import {
@@ -47,7 +48,13 @@ const GROWTH_PROGRESS_LIMIT = 3;
 // 2). Full history lives on the Progress tab.
 const BREAKTHROUGHS_LIMIT = 3;
 
+type OpenSession = {
+  id: string;
+  started_at: string;
+};
+
 type HomeData = {
+  openSession: OpenSession | null;
   lastSession: LastSession | null;
   sessionCount: number;
   endedTimestamps: string[];
@@ -104,6 +111,7 @@ async function loadHomeData(): Promise<HomeData> {
   const ctx = await supabaseForUser();
   if (!ctx) {
     return {
+      openSession: null,
       lastSession: null,
       sessionCount: 0,
       endedTimestamps: [],
@@ -119,6 +127,7 @@ async function loadHomeData(): Promise<HomeData> {
   ).toISOString();
 
   const [
+    openRes,
     lastRes,
     countRes,
     tsRes,
@@ -127,6 +136,17 @@ async function loadHomeData(): Promise<HomeData> {
     activeGoals,
     journalEntries,
   ] = await Promise.all([
+    // Latest OPEN session for resume CTA. With the at-most-one-open
+    // invariant this is either zero or one row, but we order +
+    // limit(1) defensively so a transient duplicate (e.g. mid-startup
+    // race) doesn't crash the page.
+    ctx.client
+      .from("sessions")
+      .select("id, started_at")
+      .is("ended_at", null)
+      .order("started_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
     ctx.client
       .from("sessions")
       .select(
@@ -170,6 +190,7 @@ async function loadHomeData(): Promise<HomeData> {
     listEntries(ctx),
   ]);
 
+  if (openRes.error) throw openRes.error;
   if (lastRes.error) throw lastRes.error;
   if (countRes.error) throw countRes.error;
   if (tsRes.error) throw tsRes.error;
@@ -183,6 +204,7 @@ async function loadHomeData(): Promise<HomeData> {
   const breakthroughRows = (breakthroughsRes.data ?? []) as BreakthroughRow[];
 
   return {
+    openSession: (openRes.data as OpenSession | null) ?? null,
     lastSession: (lastRes.data as LastSession | null) ?? null,
     sessionCount: countRes.count ?? 0,
     endedTimestamps: timestampRows
@@ -217,6 +239,7 @@ export default async function HomePage({
   const isDemo = params.demo === "1";
 
   let coach = "your coach";
+  let openSession: OpenSession | null = null;
   let lastSession: LastSession | null = null;
   let sessionCount = 0;
   let endedTimestamps: string[] = [];
@@ -233,6 +256,7 @@ export default async function HomePage({
       ended_at: latest.ended_at,
       summary: latest.summary,
       progress_summary_short: latest.progress_summary_short,
+      user_title: null,
       coach_message:
         "You're not waiting for permission anymore — you're choosing fit. Keep noticing the felt difference; that's the muscle.",
     };
@@ -305,6 +329,7 @@ export default async function HomePage({
 
     coach = coachLabel(state?.coach_name);
     const homeData = await loadHomeData();
+    openSession = homeData.openSession;
     lastSession = homeData.lastSession;
     sessionCount = homeData.sessionCount;
     endedTimestamps = homeData.endedTimestamps;
@@ -360,7 +385,13 @@ export default async function HomePage({
         ) : null}
       </p>
 
-      {lastSession ? (
+      {openSession ? (
+        <OpenSessionCard
+          session={openSession}
+          goals={menuGoals}
+          journalEntries={journalEntries}
+        />
+      ) : lastSession ? (
         <LastSessionCard
           session={lastSession}
           goals={menuGoals}

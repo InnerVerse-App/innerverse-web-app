@@ -10,6 +10,7 @@ export type LastSession = {
   ended_at: string;
   summary: string | null;
   progress_summary_short: string | null;
+  user_title: string | null;
   coach_message: string | null;
 };
 
@@ -70,9 +71,15 @@ export function LastSessionCard({
   goals: StartSessionGoal[];
   journalEntries: JournalEntry[];
 }) {
+  // The "(too short for analysis)" sentinel is the cron's marker for
+  // sub-substantive ended sessions — render a friendlier label
+  // rather than the raw DB string. user_title takes priority for
+  // anything the user explicitly renamed.
   const summaryText =
-    session.summary ??
-    session.progress_summary_short ??
+    session.user_title ??
+    (session.summary === "(too short for analysis)"
+      ? "This session was too short to analyze."
+      : (session.summary ?? session.progress_summary_short)) ??
     "Your previous session is still being analyzed — check back in a few minutes.";
 
   return (

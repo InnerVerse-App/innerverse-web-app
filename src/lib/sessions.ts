@@ -173,15 +173,61 @@ export async function deleteSession(
   if (sessRes.error) throw sessRes.error;
 }
 
-// End a session. Three outcomes depending on engagement:
-//   * Empty session (user never typed) → DELETE the row + its
-//     messages. Session never made it past the opening; no value
-//     in keeping it cluttering the Sessions tab. Returns null.
-//   * Has user messages but below the substantive threshold →
-//     mark ended, is_substantive=false. Returns the row.
+// Caps the user at one open non-substantive session at a time.
+// Tapping Start is an explicit "fresh start" — if the user wanted
+// to resume an in-flight conversation, they'd navigate to /sessions
+// instead. Any open sub-substantive session for this user gets
+// deleted before the new one is created. Substantive open sessions
+// (>= SUBSTANTIVE_MESSAGE_THRESHOLD) are NOT touched here — the
+// 5min-idle cron sweep closes those, so they don't accumulate.
+export async function discardOpenNonSubstantiveSessions(
+  ctx: UserSupabase,
+): Promise<void> {
+  const { data: open, error } = await ctx.client
+    .from("sessions")
+    .select("id")
+    .is("ended_at", null);
+  if (error) {
+    // Best-effort cleanup; don't block the new-session flow on a
+    // scan failure. Worst case: an extra sub-substantive open
+    // session lingers until the cron's 24h delete window.
+    console.error("discardOpenNonSubstantiveSessions: scan failed", {
+      error: error.message,
+    });
+    return;
+  }
+  if (!open || open.length === 0) return;
+
+  for (const session of open) {
+    const messageCount = await countMessages(ctx, session.id);
+    if (messageCount >= SUBSTANTIVE_MESSAGE_THRESHOLD) continue;
+    try {
+      await deleteSession(ctx, session.id);
+    } catch (err) {
+      // Same posture: best-effort. Log + move on.
+      console.error("discardOpenNonSubstantiveSessions: delete failed", {
+        sessionId: session.id,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+}
+
+// End a session. Two outcomes depending on engagement:
+//   * Sub-substantive (empty OR < SUBSTANTIVE_MESSAGE_THRESHOLD
+//     messages) → DELETE the row + its messages. No analysis is
+//     worth running on a transcript this small (the v7 session_end
+//     prompt routinely refuses or returns near-empty output for
+//     them), so keeping the row would just be a "Brief session"
+//     entry the user can do nothing useful with. Returns null.
 //   * Substantive (≥ SUBSTANTIVE_MESSAGE_THRESHOLD) → mark ended,
 //     is_substantive=true. Returns the row. The caller (session-end
 //     analyzer) layers the gpt-5 RPC write on top.
+//
+// This matches the cron-sweep behavior — the only thing the user
+// clicking End buys them over walking away is they don't have to
+// wait through the resume window. The substantive vs sub-
+// substantive split is identical either way.
 //
 // Idempotency: callers race in two cases — user double-tap of End,
 // the pagehide beacon firing during the End-button submit, the cron
@@ -192,14 +238,17 @@ export async function endSession(
   ctx: UserSupabase,
   sessionId: string,
 ): Promise<SessionRow | null> {
-  const userTyped = await hasUserMessages(ctx, sessionId);
-  if (!userTyped) {
-    console.log("endSession delete (empty session)", { sessionId });
+  const messageCount = await countMessages(ctx, sessionId);
+  const isSubstantive = messageCount >= SUBSTANTIVE_MESSAGE_THRESHOLD;
+  if (!isSubstantive) {
+    console.log("endSession delete (sub-substantive)", {
+      sessionId,
+      messageCount,
+      threshold: SUBSTANTIVE_MESSAGE_THRESHOLD,
+    });
     await deleteSession(ctx, sessionId);
     return null;
   }
-  const messageCount = await countMessages(ctx, sessionId);
-  const isSubstantive = messageCount >= SUBSTANTIVE_MESSAGE_THRESHOLD;
   console.log("endSession close", {
     sessionId,
     messageCount,
@@ -210,7 +259,7 @@ export async function endSession(
     .from("sessions")
     .update({
       ended_at: new Date().toISOString(),
-      is_substantive: isSubstantive,
+      is_substantive: true,
     })
     .eq("id", sessionId)
     .is("ended_at", null)
