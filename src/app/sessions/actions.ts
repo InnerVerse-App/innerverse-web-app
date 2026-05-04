@@ -283,6 +283,48 @@ export async function endSession(sessionId: string): Promise<void> {
   redirect("/home");
 }
 
+// Renames a session by writing user_title. Pass an empty string to
+// clear and revert to the auto-generated title. The DB CHECK rejects
+// whitespace-only or >200-char input; we trim + validate here too so
+// we can return a clean error to the client.
+export type RenameSessionResult =
+  | { ok: true }
+  | { ok: false; error: string };
+
+const SESSION_TITLE_MAX_CHARS = 200;
+
+export async function renameSession(
+  sessionId: string,
+  rawTitle: string,
+): Promise<RenameSessionResult> {
+  const ctx = await supabaseForUser();
+  if (!ctx) return { ok: false, error: "Sign in to rename sessions." };
+
+  const trimmed = rawTitle.trim();
+  if (trimmed.length > SESSION_TITLE_MAX_CHARS) {
+    return {
+      ok: false,
+      error: `Title must be ${SESSION_TITLE_MAX_CHARS} characters or fewer.`,
+    };
+  }
+
+  const next = trimmed.length === 0 ? null : trimmed;
+  const { error } = await ctx.client
+    .from("sessions")
+    .update({ user_title: next })
+    .eq("id", sessionId);
+  if (error) {
+    captureSessionError(error, "session_rename", sessionId);
+    return { ok: false, error: "Couldn't save the new title. Try again." };
+  }
+
+  // /sessions, /home, /progress all surface the title.
+  revalidatePath("/sessions");
+  revalidatePath("/home");
+  revalidatePath("/progress");
+  return { ok: true };
+}
+
 // Writes the post-session wrap-up form: free-text narrative response
 // (feeds Call 2's disagreement parser), 3-slider feedback (aligned/
 // helpful/tone — feeds the calibration aggregator), and a private
