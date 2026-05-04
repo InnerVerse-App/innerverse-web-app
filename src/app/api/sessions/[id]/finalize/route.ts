@@ -56,11 +56,20 @@ export async function POST(
       return new NextResponse(null, { status: 204 });
     }
     const messageCount = await countMessages(ctx, id);
+    if (messageCount < SUBSTANTIVE_MESSAGE_THRESHOLD) {
+      // Sub-substantive session: leave it OPEN so the user can
+      // resume from /sessions if they come back within the cron
+      // sweep's 24h resume window. Closing the tab isn't the same
+      // signal as clicking End. The cron will eventually clean up
+      // (or, if the user resumes and pushes past threshold, the
+      // next end path will analyze it).
+      return new NextResponse(null, { status: 204 });
+    }
     const { error } = await ctx.client
       .from("sessions")
       .update({
         ended_at: new Date().toISOString(),
-        is_substantive: messageCount >= SUBSTANTIVE_MESSAGE_THRESHOLD,
+        is_substantive: true,
       })
       .eq("id", id)
       .eq("user_id", ctx.userId)

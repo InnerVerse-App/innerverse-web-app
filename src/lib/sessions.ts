@@ -173,15 +173,21 @@ export async function deleteSession(
   if (sessRes.error) throw sessRes.error;
 }
 
-// End a session. Three outcomes depending on engagement:
-//   * Empty session (user never typed) → DELETE the row + its
-//     messages. Session never made it past the opening; no value
-//     in keeping it cluttering the Sessions tab. Returns null.
-//   * Has user messages but below the substantive threshold →
-//     mark ended, is_substantive=false. Returns the row.
+// End a session. Two outcomes depending on engagement:
+//   * Sub-substantive (empty OR < SUBSTANTIVE_MESSAGE_THRESHOLD
+//     messages) → DELETE the row + its messages. No analysis is
+//     worth running on a transcript this small (the v7 session_end
+//     prompt routinely refuses or returns near-empty output for
+//     them), so keeping the row would just be a "Brief session"
+//     entry the user can do nothing useful with. Returns null.
 //   * Substantive (≥ SUBSTANTIVE_MESSAGE_THRESHOLD) → mark ended,
 //     is_substantive=true. Returns the row. The caller (session-end
 //     analyzer) layers the gpt-5 RPC write on top.
+//
+// This matches the cron-sweep behavior — the only thing the user
+// clicking End buys them over walking away is they don't have to
+// wait through the resume window. The substantive vs sub-
+// substantive split is identical either way.
 //
 // Idempotency: callers race in two cases — user double-tap of End,
 // the pagehide beacon firing during the End-button submit, the cron
@@ -192,14 +198,17 @@ export async function endSession(
   ctx: UserSupabase,
   sessionId: string,
 ): Promise<SessionRow | null> {
-  const userTyped = await hasUserMessages(ctx, sessionId);
-  if (!userTyped) {
-    console.log("endSession delete (empty session)", { sessionId });
+  const messageCount = await countMessages(ctx, sessionId);
+  const isSubstantive = messageCount >= SUBSTANTIVE_MESSAGE_THRESHOLD;
+  if (!isSubstantive) {
+    console.log("endSession delete (sub-substantive)", {
+      sessionId,
+      messageCount,
+      threshold: SUBSTANTIVE_MESSAGE_THRESHOLD,
+    });
     await deleteSession(ctx, sessionId);
     return null;
   }
-  const messageCount = await countMessages(ctx, sessionId);
-  const isSubstantive = messageCount >= SUBSTANTIVE_MESSAGE_THRESHOLD;
   console.log("endSession close", {
     sessionId,
     messageCount,
@@ -210,7 +219,7 @@ export async function endSession(
     .from("sessions")
     .update({
       ended_at: new Date().toISOString(),
-      is_substantive: isSubstantive,
+      is_substantive: true,
     })
     .eq("id", sessionId)
     .is("ended_at", null)
