@@ -51,7 +51,13 @@ const STALE_IDLE_MINUTES = 5;
 // keeping a row around for an analysis that won't happen).
 // Substantive sessions still close + analyze at
 // STALE_IDLE_MINUTES — they have content worth surfacing now.
-const RESUME_WINDOW_HOURS = 24;
+//
+// 72h matches non-daily usage patterns common in wellness apps —
+// a tester who started something Friday and is busy through the
+// weekend can still pick it up Monday without losing their thread.
+// Storage cost is negligible and the auto-discard on Start-new
+// handles any accumulation regardless of window length.
+const RESUME_WINDOW_HOURS = 72;
 const RESUME_WINDOW_MS = RESUME_WINDOW_HOURS * 60 * 60 * 1000;
 const SWEEP_BATCH_LIMIT = 50;
 
